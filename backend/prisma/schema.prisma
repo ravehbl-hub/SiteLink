@@ -11,6 +11,12 @@
 
 generator client {
   provider = "prisma-client-js"
+  // Prisma 7 + pg driver adapter (see ../prisma.config.ts + ../src/db/client.ts):
+  // the runtime PrismaClient is constructed with @prisma/adapter-pg on DATABASE_URL.
+  // (driverAdapters is GA in Prisma 7 — no previewFeatures flag needed.)
+  // Generated client output — imported via the `@sitelink/backend` generated path
+  // (Prisma 7 requires an explicit output; this keeps it inside the workspace).
+  output = "../src/generated/prisma"
 }
 
 datasource db {

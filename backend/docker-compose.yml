@@ -1,0 +1,31 @@
+# SiteLink — local Postgres for development & verification.
+#
+# `docker compose up -d` gives a local Postgres 16 that stands in for Supabase's
+# managed Postgres. The app is identical against either — only the connection
+# URLs change (DATABASE_URL / DIRECT_URL). Locally both point at this container;
+# a `?pgbouncer=true` query flag is harmless (no PgBouncer here).
+#
+# Credentials below are LOCAL-ONLY throwaway values (not secrets, never used in
+# any deployed environment). Real Supabase URLs live in per-env secrets, never
+# in the repo (Architecture §8).
+services:
+  postgres:
+    image: postgres:16
+    container_name: sitelink-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sitelink
+      POSTGRES_PASSWORD: sitelink_local_dev
+      POSTGRES_DB: sitelink
+    ports:
+      - '5432:5432'
+    volumes:
+      - sitelink_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sitelink -d sitelink']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  sitelink_pgdata:

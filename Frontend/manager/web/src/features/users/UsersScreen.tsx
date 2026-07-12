@@ -1,0 +1,213 @@
+/** Users Manager (FR-MGR-USER): list + Add User (role/name/site/email/optional
+ *  password), Edit, Lockout (reversible), Remove. */
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import { Role, type CreateUserInput, type User } from '@sitelink/shared';
+import { usersApi } from '../../lib/api/endpoints';
+import { qk } from '../../lib/api/queryKeys';
+import { useSitesList } from '../../lib/api/hooks';
+import { DataState, Modal, Field, Chip } from '../../components/ui';
+
+const ROLE_OPTIONS = [Role.FOREMAN, Role.WORKER, Role.PARTNER, Role.ADMIN, Role.MANAGER];
+
+export function UsersScreen() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const params = { page: 1, pageSize: 100 };
+  const list = useQuery({ queryKey: qk.users(params), queryFn: () => usersApi.list(params) });
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<User | null>(null);
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['users'] });
+  const lockMut = useMutation({
+    mutationFn: (v: { id: string; locked: boolean }) => usersApi.lockout(v.id, v.locked),
+    onSuccess: invalidate,
+  });
+  const removeMut = useMutation({
+    mutationFn: (id: string) => usersApi.remove(id),
+    onSuccess: invalidate,
+  });
+
+  return (
+    <div>
+      <div className="page-header">
+        <h1 className="section-title" style={{ margin: 0 }}>
+          {t('users.title')}
+        </h1>
+        <div className="header-spacer" />
+        <button className="btn btn-primary" onClick={() => setCreating(true)}>
+          {t('users.newUser')}
+        </button>
+      </div>
+
+      <div className="card">
+        <DataState
+          isLoading={list.isLoading}
+          error={list.error}
+          isEmpty={list.data?.items.length === 0}
+        >
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>{t('users.fullName')}</th>
+                  <th>{t('auth.email')}</th>
+                  <th>{t('users.role')}</th>
+                  <th>{t('common.status')}</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {list.data?.items.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.fullName}</td>
+                    <td>{u.email}</td>
+                    <td>{t(`roles.${u.role}`)}</td>
+                    <td>
+                      {u.isLockedOut ? (
+                        <Chip tone="danger">{t('users.lockedOut')}</Chip>
+                      ) : (
+                        <Chip tone="success">{t('workers.active')}</Chip>
+                      )}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn btn-sm" onClick={() => setEditing(u)}>
+                          {t('common.edit')}
+                        </button>
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => lockMut.mutate({ id: u.id, locked: !u.isLockedOut })}
+                        >
+                          {u.isLockedOut ? t('users.unlock') : t('users.lockout')}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => {
+                            if (confirm(t('users.confirmDelete'))) removeMut.mutate(u.id);
+                          }}
+                        >
+                          {t('common.remove')}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DataState>
+      </div>
+
+      {creating ? <UserForm onClose={() => setCreating(false)} /> : null}
+      {editing ? <UserForm user={editing} onClose={() => setEditing(null)} /> : null}
+    </div>
+  );
+}
+
+function UserForm({ user, onClose }: { user?: User; onClose: () => void }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const sites = useSitesList();
+  const [role, setRole] = useState<Role>(user?.role ?? Role.FOREMAN);
+  const [fullName, setFullName] = useState(user?.fullName ?? '');
+  const [email, setEmail] = useState(user?.email ?? '');
+  const [primarySiteId, setPrimarySiteId] = useState(user?.primarySiteId ?? '');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (user) {
+        return usersApi.update(user.id, {
+          fullName,
+          email,
+          role,
+          primarySiteId: primarySiteId || null,
+        });
+      }
+      const body: CreateUserInput = {
+        role,
+        fullName,
+        email,
+        primarySiteId: primarySiteId || null,
+        ...(password ? { password } : {}),
+      };
+      return usersApi.create(body);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      onClose();
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : String(e)),
+  });
+
+  return (
+    <Modal
+      title={user ? t('common.edit') : t('users.newUser')}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            {t('common.cancel')}
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={!fullName || !email || mut.isPending}
+            onClick={() => mut.mutate()}
+          >
+            {t('common.save')}
+          </button>
+        </>
+      }
+    >
+      {error ? <div className="banner banner-danger">{error}</div> : null}
+      <Field label={t('users.role')}>
+        <select className="select" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+          {ROLE_OPTIONS.map((r) => (
+            <option key={r} value={r}>
+              {t(`roles.${r}`)}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label={t('users.fullName')}>
+        <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+      </Field>
+      <Field label={t('auth.email')}>
+        <input
+          className="input"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </Field>
+      <Field label={t('users.primarySite')}>
+        <select
+          className="select"
+          value={primarySiteId ?? ''}
+          onChange={(e) => setPrimarySiteId(e.target.value)}
+        >
+          <option value="">{t('common.none')}</option>
+          {sites.data?.items.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {!user ? (
+        <Field label={`${t('users.password')} (${t('common.optional')})`}>
+          <input
+            className="input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <span className="muted">{t('users.passwordHint')}</span>
+        </Field>
+      ) : null}
+    </Modal>
+  );
+}

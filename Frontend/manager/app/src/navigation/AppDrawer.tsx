@@ -1,0 +1,76 @@
+/**
+ * Primary navigation: a DRAWER (hamburger) navigator — the Manager app menu
+ * (Architecture §2: Manager app = hamburger). Each domain is a drawer item.
+ */
+import React from 'react';
+import { createDrawerNavigator } from '@react-navigation/drawer';
+import { useTranslation } from 'react-i18next';
+import type { DrawerParamList } from './types';
+import { useTheme } from '../theme/ThemeProvider';
+import { DashboardScreen } from '../screens/DashboardScreen';
+import { AttendanceScreen } from '../screens/AttendanceScreen';
+import { FinanceScreen } from '../screens/FinanceScreen';
+import { PaymentScreen } from '../screens/PaymentScreen';
+import { SalaryScreen } from '../screens/SalaryScreen';
+import { SitesScreen } from '../screens/SitesScreen';
+import { UsersScreen } from '../screens/UsersScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
+import { WorkersStack } from './WorkersStack';
+
+const Drawer = createDrawerNavigator<DrawerParamList>();
+
+export function AppDrawer() {
+  const { t } = useTranslation();
+  const { theme } = useTheme();
+
+  return (
+    <Drawer.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: theme.colors.surface },
+        headerTintColor: theme.colors.textPrimary,
+        drawerStyle: { backgroundColor: theme.colors.surface },
+        drawerActiveTintColor: theme.colors.accent,
+        drawerInactiveTintColor: theme.colors.textSecondary,
+        drawerActiveBackgroundColor: theme.colors.accentSubtle,
+      }}
+    >
+      <Drawer.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{ title: t('nav.dashboard') }}
+      />
+      <Drawer.Screen
+        name="Workers"
+        component={WorkersStack}
+        options={{ title: t('nav.workers') }}
+      />
+      <Drawer.Screen
+        name="Attendance"
+        component={AttendanceScreen}
+        options={{ title: t('nav.attendance') }}
+      />
+      <Drawer.Screen
+        name="Finance"
+        component={FinanceScreen}
+        options={{ title: t('nav.finance') }}
+      />
+      <Drawer.Screen
+        name="Payment"
+        component={PaymentScreen}
+        options={{ title: t('nav.payment') }}
+      />
+      <Drawer.Screen
+        name="Salary"
+        component={SalaryScreen}
+        options={{ title: t('nav.salary') }}
+      />
+      <Drawer.Screen name="Sites" component={SitesScreen} options={{ title: t('nav.sites') }} />
+      <Drawer.Screen name="Users" component={UsersScreen} options={{ title: t('nav.users') }} />
+      <Drawer.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ title: t('nav.settings') }}
+      />
+    </Drawer.Navigator>
+  );
+}

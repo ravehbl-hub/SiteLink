@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "SiteLink Manager",
+    "slug": "sitelink-manager-app",
+    "scheme": "sitelink-manager",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sitelink.manager",
+      "infoPlist": {
+        "NSCameraUsageDescription": "SiteLink uses the camera to capture worker profile photos and documents.",
+        "NSPhotoLibraryUsageDescription": "SiteLink accesses your photos to attach worker images and documents."
+      }
+    },
+    "android": {
+      "package": "com.sitelink.manager",
+      "permissions": ["CAMERA", "READ_MEDIA_IMAGES"]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "SiteLink uses the camera to capture worker profile photos and documents."
+        }
+      ],
+      "expo-secure-store"
+    ]
+  }
+}

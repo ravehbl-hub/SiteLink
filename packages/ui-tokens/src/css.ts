@@ -44,10 +44,17 @@ const elevationVars = (
   "--sl-elevation-lg": e.lg.web,
 });
 
+/**
+ * Sanitize a token key for use in a CSS custom-property name. Dots are legal in
+ * custom-property identifiers per spec, but some CSS minifiers (esbuild/vite)
+ * misparse `--sl-space-0.5`, so fractional keys like `0.5`/`1.5` become `0-5`/`1-5`.
+ */
+const cssKey = (k: string): string => k.replace(/\./g, "-");
+
 /** Mode-agnostic vars (spacing/radii/type). Emitted once on :root. */
 const staticVars = (): Record<string, string> => {
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(spacing)) out[`--sl-space-${k}`] = `${v}px`;
+  for (const [k, v] of Object.entries(spacing)) out[`--sl-space-${cssKey(k)}`] = `${v}px`;
   for (const [k, v] of Object.entries(radii))
     out[`--sl-radius-${k}`] = typeof v === "number" ? `${v}px` : v;
   for (const [k, v] of Object.entries(borderWidth)) out[`--sl-border-${k}`] = `${v}px`;

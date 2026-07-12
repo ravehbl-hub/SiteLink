@@ -26,9 +26,11 @@ import { paginate } from '../../lib/pagination.js';
 import { SupabaseService } from '../../lib/supabase.js';
 import type {
   confirmDocSchema,
+  confirmImageSchema,
   createWorkerSchema,
   listWorkersQuery,
   requestDocUploadSchema,
+  requestImageUploadSchema,
   salaryDataSchema,
   updateWorkerSchema,
 } from './schemas.js';
@@ -39,6 +41,8 @@ type ListQuery = z.infer<typeof listWorkersQuery>;
 type SalaryInput = z.infer<typeof salaryDataSchema>;
 type DocUploadInput = z.infer<typeof requestDocUploadSchema>;
 type DocConfirmInput = z.infer<typeof confirmDocSchema>;
+type ImageUploadInput = z.infer<typeof requestImageUploadSchema>;
+type ImageConfirmInput = z.infer<typeof confirmImageSchema>;
 
 /** Map an allowed MIME to a file extension for the server-chosen storage key. */
 function extFor(mimeType: string): string {
@@ -290,6 +294,76 @@ export class WorkersService {
       .removeObject({ kind: 'doc', storageKey: doc.storageKey })
       .catch(() => undefined);
     await prisma.workerDoc.delete({ where: { id: docId } });
+  }
+
+  // ── Profile image (FR-MGR-EMP-2, Architecture §7a) ───────────────────────
+  // Symmetric to the docs flow but on the PRIVATE worker-images bucket. The
+  // Worker.image FileRef columns (imageStorageKey/imageFileName/imageMimeType/
+  // imageUploadedAt) already exist — no new schema.
+
+  /**
+   * Step 1: authorize + validate intent (image/* allow-list), then mint a
+   * short-lived signed upload URL scoped to a SERVER-chosen key on worker-images.
+   */
+  async requestImageUpload(
+    workerId: string,
+    input: ImageUploadInput,
+  ): Promise<SignedUploadResponse> {
+    await this.ensureExists(workerId);
+    this.supabase.assertAllowedMime(input.mimeType);
+    const storageKey = `${workerId}/image/${randomUUID()}.${extFor(input.mimeType)}`;
+    const signed = await this.supabase.createSignedUpload({ kind: 'image', storageKey });
+    return {
+      storageKey: signed.storageKey,
+      uploadUrl: signed.uploadUrl,
+      token: signed.token,
+      bucket: signed.bucket,
+    };
+  }
+
+  /**
+   * Step 2: persist the FileRef onto Worker.image after the client confirms a
+   * completed upload. Re-checks the key belongs to this worker (traversal guard).
+   * If an image already existed, purge the old object to avoid orphaned bytes.
+   */
+  async confirmImage(workerId: string, input: ImageConfirmInput): Promise<Worker> {
+    const worker = await prisma.worker.findUnique({ where: { id: workerId } });
+    if (!worker) throw AppError.notFound('Worker not found');
+    this.supabase.assertAllowedMime(input.mimeType);
+    if (!input.storageKey.startsWith(`${workerId}/`)) {
+      throw AppError.validation('storageKey does not belong to this worker');
+    }
+    // Purge a superseded image object (best-effort) so storage stays in sync.
+    if (worker.imageStorageKey && worker.imageStorageKey !== input.storageKey) {
+      await this.supabase
+        .removeObject({ kind: 'image', storageKey: worker.imageStorageKey })
+        .catch(() => undefined);
+    }
+    const row = await prisma.worker.update({
+      where: { id: workerId },
+      data: {
+        imageStorageKey: input.storageKey,
+        imageFileName: input.fileName,
+        imageMimeType: input.mimeType,
+        imageUploadedAt: new Date(),
+      },
+    });
+    return mapWorker(row);
+  }
+
+  /** Mint a short-lived signed READ URL for the worker's profile image. */
+  async getImageReadUrl(workerId: string): Promise<SignedReadResponse> {
+    const worker = await prisma.worker.findUnique({
+      where: { id: workerId },
+      select: { imageStorageKey: true },
+    });
+    if (!worker) throw AppError.notFound('Worker not found');
+    if (!worker.imageStorageKey) throw AppError.notFound('Worker has no profile image');
+    const signed = await this.supabase.createSignedRead({
+      kind: 'image',
+      storageKey: worker.imageStorageKey,
+    });
+    return { url: signed.url, expiresInSeconds: signed.expiresInSeconds };
   }
 
   // ── internals ────────────────────────────────────────────────────────────

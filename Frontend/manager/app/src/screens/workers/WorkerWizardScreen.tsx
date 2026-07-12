@@ -19,7 +19,7 @@ import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
 import { captureFromCamera, pickFromLibrary, type PickedFile } from '../../lib/camera';
 import { professionOptions, levelOptions } from '../../lib/enumOptions';
-import { ApiError } from '../../lib/api';
+import { ApiError, uploadToSignedUrl } from '../../lib/api';
 import type { WorkersStackParamList } from '../../navigation/types';
 import {
   Body,
@@ -69,8 +69,31 @@ export function WorkerWizardScreen({ navigation }: Props) {
           currency: 'ILS',
         });
       }
-      // Profile image would upload via the signed-URL flow here once the back end
-      // exposes a worker-image upload endpoint (docs flow is wired in details).
+      // Profile image upload via the signed-URL flow (symmetric to docs):
+      // request upload-url -> PUT bytes to Supabase -> confirm. Needs the new
+      // worker id for the server-chosen storage key. A failed image upload must
+      // not fail worker creation, so it is best-effort with a soft warning.
+      if (image) {
+        try {
+          const signed = await endpoints.requestImageUpload(worker.id, {
+            fileName: image.fileName,
+            mimeType: image.mimeType,
+            sizeBytes: image.sizeBytes,
+          });
+          await uploadToSignedUrl(signed.uploadUrl, image.uri, image.mimeType);
+          await endpoints.confirmImage(worker.id, {
+            storageKey: signed.storageKey,
+            fileName: image.fileName,
+            mimeType: image.mimeType,
+            sizeBytes: image.sizeBytes,
+          });
+        } catch (e) {
+          Alert.alert(
+            t('common.error'),
+            e instanceof ApiError ? e.message : String(e),
+          );
+        }
+      }
       return worker;
     },
     onSuccess: async () => {

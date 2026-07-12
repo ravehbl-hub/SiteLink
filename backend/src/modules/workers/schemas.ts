@@ -64,5 +64,21 @@ export const confirmDocSchema = z.object({
   expiresAt: z.string().datetime().nullish(),
 });
 
+/** Request a signed upload URL for the worker profile image (server chooses key). */
+export const requestImageUploadSchema = z.object({
+  fileName: z.string().min(1),
+  // Profile image is image/* only (no PDF) — a stricter allow-list than docs.
+  mimeType: z.string().regex(/^image\//, 'Profile image must be an image/* type'),
+  sizeBytes: z.number().int().positive().optional(),
+});
+
+/** Confirm a completed image upload → persist the FileRef onto Worker.image. */
+export const confirmImageSchema = z.object({
+  storageKey: z.string().min(1),
+  fileName: z.string().min(1),
+  mimeType: z.string().regex(/^image\//, 'Profile image must be an image/* type'),
+  sizeBytes: z.number().int().positive().optional(),
+});
+
 export const idParam = z.object({ id: z.string().min(1) });
 export const docParam = z.object({ id: z.string().min(1), docId: z.string().min(1) });

@@ -12,17 +12,22 @@
  *   POST   /workers/:id/docs            confirm upload → persist FileRef
  *   GET    /workers/:id/docs/:docId/url mint signed read URL
  *   DELETE /workers/:id/docs/:docId     remove doc (+ storage object)
+ *   POST   /workers/:id/image/upload-url mint signed image upload URL
+ *   POST   /workers/:id/image           confirm image upload → Worker.image FileRef
+ *   GET    /workers/:id/image/url        mint signed image read URL
  */
 import type { FastifyInstance } from 'fastify';
 import { MANAGER_ROLES } from '../../plugins/auth.js';
 import { WorkersService } from './service.js';
 import {
   confirmDocSchema,
+  confirmImageSchema,
   createWorkerSchema,
   docParam,
   idParam,
   listWorkersQuery,
   requestDocUploadSchema,
+  requestImageUploadSchema,
   salaryDataSchema,
   updateWorkerSchema,
 } from './schemas.js';
@@ -98,5 +103,23 @@ export async function workerRoutes(app: FastifyInstance): Promise<void> {
     const { id, docId } = docParam.parse(req.params);
     await service.removeDoc(id, docId);
     return reply.status(204).send();
+  });
+
+  // ── Profile image (symmetric to docs) ───────────────────────────────────
+  app.post('/workers/:id/image/upload-url', guard, async (req) => {
+    const { id } = idParam.parse(req.params);
+    const body = requestImageUploadSchema.parse(req.body);
+    return service.requestImageUpload(id, body);
+  });
+
+  app.post('/workers/:id/image', guard, async (req) => {
+    const { id } = idParam.parse(req.params);
+    const body = confirmImageSchema.parse(req.body);
+    return service.confirmImage(id, body);
+  });
+
+  app.get('/workers/:id/image/url', guard, async (req) => {
+    const { id } = idParam.parse(req.params);
+    return service.getImageReadUrl(id);
   });
 }

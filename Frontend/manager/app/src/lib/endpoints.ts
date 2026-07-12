@@ -68,6 +68,19 @@ export interface DocUploadRequest {
   sizeBytes?: number;
 }
 
+export interface ImageUploadRequest {
+  fileName: string;
+  mimeType: string;
+  sizeBytes?: number;
+}
+
+export interface ConfirmImageRequest {
+  storageKey: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes?: number;
+}
+
 export interface ConfirmDocRequest {
   type: WorkerDocType;
   storageKey: string;
@@ -121,6 +134,14 @@ export const endpoints = {
   getDocReadUrl: (id: string, docId: string) =>
     api.get<SignedReadResponse>(`/workers/${id}/docs/${docId}/url`),
   removeDoc: (id: string, docId: string) => api.del<void>(`/workers/${id}/docs/${docId}`),
+
+  // Worker profile image (signed-URL flow, symmetric to docs)
+  requestImageUpload: (id: string, body: ImageUploadRequest) =>
+    api.post<SignedUploadResponse>(`/workers/${id}/image/upload-url`, body),
+  confirmImage: (id: string, body: ConfirmImageRequest) =>
+    api.post<Worker>(`/workers/${id}/image`, body),
+  getImageReadUrl: (id: string) =>
+    api.get<SignedReadResponse>(`/workers/${id}/image/url`),
 
   // Attendance + working hours
   listAttendance: (params: { siteId?: string; workerId?: string; from?: string; to?: string }) =>

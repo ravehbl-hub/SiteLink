@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.next/
+.expo/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+.turbo/
+*.tsbuildinfo

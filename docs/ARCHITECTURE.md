@@ -12,9 +12,9 @@
 - TypeScript everywhere.
 - Web = React; Native = React Native; both share a `shared-types` package.
 - Single Node back end behind all front ends.
-- PostgreSQL + one ORM.
+- PostgreSQL (managed by **Supabase**) + one ORM.
 - Salary via swappable `SalaryRuleEngine` (Strategy).
-- Hosting: Vercel (front ends) + Railway (back end + Postgres).
+- Hosting: Vercel (front ends) + Railway (back end) + **Supabase (managed Postgres)**.
 - v1 scope: Manager surfaces + back end only.
 
 ---
@@ -27,7 +27,8 @@
 | Web front end | **Vite + React (SPA)** for Manager web | Manager web is an authenticated internal dashboard, not a public SEO/marketing site. Vite gives the fastest dev loop and simplest static-build deploy to Vercel. Next.js would add SSR/routing weight we don't need and would blur the "single back end" boundary (we explicitly do NOT want API routes here — see back end). If public marketing/SEO surfaces appear later, add a separate Next.js app; do not retrofit. |
 | Native front end | **Expo (React Native)** | Managed workflow → OTA updates, EAS build, no native toolchain babysitting. Shares TS + business logic with web via workspace packages. |
 | Back end | **Standalone Fastify service** (Node, TypeScript) | Chosen over Next.js API routes: we need ONE back end serving 5 heterogeneous clients (2 web + 3 native), long-running concerns (PDF gen, cron-style payroll), and clean deploy to Railway independent of Vercel front-end deploys. Fastify over Express: native TS types, schema-based validation (JSON Schema / Typebox), faster, first-class plugin/encapsulation model that maps cleanly to our module boundaries. |
-| ORM | **Prisma** | Type-safe client generated from a single schema → feeds our `shared-types` philosophy; first-class migrations (`prisma migrate`); excellent Postgres support; readable schema is a strong onboarding + design artifact. Trade-off (raw-SQL ergonomics for complex payroll aggregation) mitigated by Prisma's `$queryRaw` escape hatch where the salary engine needs window functions. |
+| Database | **Supabase (managed PostgreSQL)** | Managed Postgres — schema, Prisma, and shared types are unchanged from vanilla Postgres. Supabase adds a hosted DB with connection pooling (PgBouncer), point-in-time backups, and a dashboard/SQL editor, removing the need to run our own DB plugin. We use it as a **Postgres database only** in v1 (Prisma owns the schema/migrations); Supabase Auth, Storage, and RLS are available but **not adopted** in v1 — our Fastify service + JWT/RBAC remain the source of truth. Connection uses the Supabase **pooler URL** (port 6543, `pgbouncer=true`) for the app runtime and the **direct URL** (port 5432) for Prisma Migrate. |
+| ORM | **Prisma** | Type-safe client generated from a single schema → feeds our `shared-types` philosophy; first-class migrations (`prisma migrate`); excellent Postgres support; readable schema is a strong onboarding + design artifact. Trade-off (raw-SQL ergonomics for complex payroll aggregation) mitigated by Prisma's `$queryRaw` escape hatch where the salary engine needs window functions. Requires `datasource.directUrl` for migrations when running through the Supabase pooler. |
 | Auth | **JWT access + refresh, RBAC** | Stateless access tokens fit multi-client (native + web); refresh rotation for session longevity. Details in §5. |
 | Validation | **Zod** (shared) + Typebox at Fastify edge | Zod schemas live in `shared-types` and are reused client + server for form + payload validation → single source of truth. |
 | i18n | **i18next** (react-i18next + expo-localization) | One library, one translation-key namespace shared across web + native. |
@@ -257,17 +258,17 @@ WORKER    |  -    |  self   | self   |  no  (initiate)   |  no
 
 ## 8. Non-Functional Design
 
-- **Env config:** each package reads a **Zod-validated** config at boot (fail-fast on missing vars). `.env.example` documents the full surface. Never commit secrets; Vercel/Railway project env vars hold real values.
-- **Migrations:** Prisma Migrate. `migrate dev` locally; `migrate deploy` in Railway release step (pre-start). One migration history; never edit applied migrations.
-- **Health:** `/health` (process/liveness) + `/health/db` (runs `SELECT 1`, returns latency) — unauthenticated, consumed by uptime checks and the future Back Office dashboard.
+- **Env config:** each package reads a **Zod-validated** config at boot (fail-fast on missing vars). `.env.example` documents the full surface. Never commit secrets; Vercel/Railway/Supabase project env vars hold real values. Back end reads `DATABASE_URL` (Supabase **pooler**, port 6543, `?pgbouncer=true`) for the runtime client and `DIRECT_URL` (Supabase **direct**, port 5432) for migrations.
+- **Migrations:** Prisma Migrate against Supabase. `migrate dev` locally; `migrate deploy` in the Railway release step (pre-start) using `DIRECT_URL`. One migration history; never edit applied migrations.
+- **Health:** `/health` (process/liveness) + `/health/db` (runs `SELECT 1` against Supabase, returns latency) — unauthenticated, consumed by uptime checks and the future Back Office dashboard.
 - **Logging:** Fastify + **pino** structured JSON logs with request-id correlation; error-handler plugin maps thrown errors → standard envelope + appropriate status; no PII in logs.
-- **Testing:** Vitest across packages; API integration tests against a disposable Postgres (Testcontainers or Railway preview DB).
+- **Testing:** Vitest across packages; API integration tests against a disposable Postgres (Testcontainers) or a dedicated Supabase test project/branch.
 
 ---
 
-## 9. Deploy Topology (Vercel + Railway)
+## 9. Deploy Topology (Vercel + Railway + Supabase)
 
-Clean CI/deploy boundary: **front ends → Vercel, back end + DB → Railway.** They never share a deploy unit; the contract between them is `@sitelink/shared` + the REST API + env-injected base URLs.
+Clean CI/deploy boundary: **front ends → Vercel, back end → Railway, managed Postgres → Supabase.** They never share a deploy unit; the contract between them is `@sitelink/shared` + the REST API + env-injected base URLs. The back end is the only thing that talks to the database.
 
 ```
                          ┌─────────────────────────────────────────┐
@@ -283,14 +284,23 @@ Clean CI/deploy boundary: **front ends → Vercel, back end + DB → Railway.** 
                          │                 RAILWAY                  │
                          │  @sitelink/backend (Fastify)             │
                          │   release: prisma migrate deploy         │
-                         │   env: DATABASE_URL, JWT_*, LOG_LEVEL    │
-                         │        ┌──────────────┐                  │
-                         │        │  PostgreSQL  │  (Railway plugin)│
-                         │        └──────────────┘                  │
+                         │   env: DATABASE_URL (pooler),            │
+                         │        DIRECT_URL (migrations),          │
+                         │        JWT_*, LOG_LEVEL                   │
+                         └──────────────────┬──────────────────────┘
+                                            │  Postgres wire (TLS)
+                                            ▼
+                         ┌─────────────────────────────────────────┐
+                         │                SUPABASE                  │
+                         │  managed PostgreSQL                      │
+                         │   • pooler (PgBouncer) :6543 → runtime   │
+                         │   • direct            :5432 → migrations │
+                         │   • PITR backups, SQL editor             │
+                         │  (Auth/Storage/RLS available, unused v1) │
                          └─────────────────────────────────────────┘
 ```
 
-- **Environment boundaries:** `local` (docker Postgres) → `preview` (per-PR Railway env + Vercel preview) → `production`. Secrets per-environment, never in repo.
+- **Environment boundaries:** `local` (docker Postgres) → `preview` (per-PR Railway env + Vercel preview + a Supabase preview branch or dedicated test project) → `production` (Supabase production project). Secrets per-environment, never in repo.
 - **CI:** Turborepo pipeline on PR — `typecheck`, `lint`, `test`, `build` (only affected packages). Merge to main triggers Railway backend deploy (with `migrate deploy`) and Vercel front-end deploys independently. Expo apps ship via EAS on tagged releases.
 
 ---
@@ -309,6 +319,6 @@ Clean CI/deploy boundary: **front ends → Vercel, back end + DB → Railway.** 
 10. **Manager Web (Vite)** — auth flow, providers (Query/Theme/i18n), Sites → Workers → Attendance → Salary → Requests features against the API.
 11. **Manager App (Expo)** — same features, sharing `@sitelink/shared`, i18n, tokens; native-specific screens.
 12. **i18n/RTL + theming pass** — he/en/tr, dark/light across both surfaces.
-13. **Deploy** — Railway backend + Postgres, Vercel manager-web, EAS manager-app; wire env boundaries + CI.
+13. **Deploy** — Supabase Postgres (provision project, set pooler/direct URLs), Railway backend, Vercel manager-web, EAS manager-app; wire env boundaries + CI.
 
 Foreman/Worker/Back Office surfaces slot into steps 5–12's existing module + feature structure when their phase begins — no architectural change required.

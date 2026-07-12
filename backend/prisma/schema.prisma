@@ -15,7 +15,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Managed by Supabase. DATABASE_URL = pooler (PgBouncer, :6543, ?pgbouncer=true)
+  // for the app runtime; directUrl = direct connection (:5432) for Prisma Migrate.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

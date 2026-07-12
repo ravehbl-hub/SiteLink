@@ -183,7 +183,7 @@ Surface locations: Web at `Frontend/manager/web` (tab menu); App at `Frontend/ma
 - **NFR-SEC-5** Sensitive PII SHALL not appear in logs.
 
 ### NFR-AVAIL — Reliability / Hosting
-- **NFR-AVAIL-1** Front ends SHALL deploy to **Vercel**; back end and PostgreSQL SHALL deploy to **Railway**.
+- **NFR-AVAIL-1** Front ends SHALL deploy to **Vercel**; the back end SHALL deploy to **Railway**; the PostgreSQL database SHALL be a **managed Supabase** Postgres instance.
 - **NFR-AVAIL-2** Configuration and secrets SHALL be environment-based, not committed to source.
 
 ### NFR-MAINT — Maintainability

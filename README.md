@@ -14,16 +14,16 @@ Built by the SiteLink agent fleet under Cortex orchestration, from the topology 
 | Worker | App (hamburger) | `Frontend/Worker/app` | Future |
 | Back Office | Web (vertical menu, LR/RL by language) | `Frontend/backoffice/web` | Future |
 
-All surfaces share one Node/TypeScript back end (`backend/`), one PostgreSQL database,
-and a common types package (`packages/shared`).
+All surfaces share one Node/TypeScript back end (`backend/`), one PostgreSQL database
+(managed by **Supabase**), and a common types package (`packages/shared`).
 
 ## Confirmed build defaults (v1)
 
 - **Stack:** TypeScript. React (web) + React Native (apps).
-- **Database:** PostgreSQL.
+- **Database:** PostgreSQL, managed by Supabase (Prisma owns schema/migrations; Supabase Auth/Storage/RLS unused in v1).
 - **First slice:** Manager (web + app) + back end.
 - **Salary rules:** swappable `SalaryRuleEngine` interface (Israeli-labor-law stub + flat).
-- **Hosting:** Vercel (front ends) + Railway (back end + Postgres).
+- **Hosting:** Vercel (front ends) + Railway (back end) + Supabase (managed Postgres).
 
 ## Cross-cutting
 

@@ -12,5 +12,6 @@ export * from './worker';
 export * from './attendance';
 export * from './salary';
 export * from './finance';
+export * from './dashboard';
 export * from './request';
 export * from './billing';

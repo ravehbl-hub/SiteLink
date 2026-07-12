@@ -77,9 +77,14 @@ The product spans web (React) and mobile (React Native) clients backed by a Type
 - **FR-X-THEME-1** The system SHALL offer dark and light themes, selectable in Settings.
 - **FR-X-THEME-2** Theme selection SHALL persist per user and apply on next load without flash of incorrect theme.
 
-### FR-X-RBAC — Role-Based Access Control
-- **FR-X-RBAC-1** Every API request SHALL be authenticated; unauthenticated requests SHALL be rejected (401).
-- **FR-X-RBAC-2** Authorization SHALL be enforced server-side by role (Admin/Manager/Partner/Foreman/Worker); client-side gating is presentation only and never the security boundary.
+### FR-X-AUTH — Authentication (Supabase Auth)
+- **FR-X-AUTH-1** User authentication (credentials, sessions, password reset, token refresh) SHALL be provided by **Supabase Auth**; SiteLink SHALL NOT store user passwords or issue its own auth tokens.
+- **FR-X-AUTH-2** Clients (web + app) SHALL authenticate via the Supabase client SDK and obtain a Supabase session (JWT); the back end SHALL verify that JWT on every request.
+- **FR-X-AUTH-3** Each application user record SHALL be linked to its Supabase identity by the Supabase auth user id; email SHALL remain unique per user.
+
+### FR-X-RBAC — Role-Based Access Control (application-owned)
+- **FR-X-RBAC-1** Every API request SHALL be authenticated (verified Supabase JWT); unauthenticated requests SHALL be rejected (401).
+- **FR-X-RBAC-2** Authorization SHALL be enforced server-side by the SiteLink back end using the app-level role (Admin/Manager/Partner/Foreman/Worker) resolved from the verified identity; Supabase RLS is NOT the authorization boundary in v1 (defense-in-depth only). Client-side gating is presentation only and never the security boundary.
 - **FR-X-RBAC-3** Resource access SHALL be scoped: a Manager SHALL only access sites and workers they are permitted to manage.
 - **FR-X-RBAC-4** Forbidden actions SHALL return 403 with no data leakage in the response body.
 
@@ -149,10 +154,10 @@ Surface locations: Web at `Frontend/manager/web` (tab menu); App at `Frontend/ma
 - **FR-MGR-SITE-4** A worker SHALL be assignable to one or more sites; site assignment drives per-site rollups.
 
 ### 5.9 Users Manager — `FR-MGR-USER`
-- **FR-MGR-USER-1** The Manager SHALL **Add a User** with: Role (Foreman/Worker/Partner/Admin), Full name (typed or selected from a list filtered by role), Construction site, Email, Password.
+- **FR-MGR-USER-1** The Manager SHALL **Add a User** with: Role (Foreman/Worker/Partner/Admin), Full name (typed or selected from a list filtered by role), Construction site, Email, and optionally an initial Password. Adding a user SHALL provision a Supabase Auth identity (invite or create) and the linked application user record in one operation; when no password is given, the user SHALL be invited to set their own via Supabase.
 - **FR-MGR-USER-2** The system SHALL list users with **Edit**, **Lockout**, and **Remove** actions.
 - **FR-MGR-USER-3** **Lockout** SHALL prevent the user from authenticating without deleting the account; it SHALL be reversible.
-- **FR-MGR-USER-4** Email SHALL be unique per user; passwords SHALL be stored only as salted hashes (see NFR-SEC).
+- **FR-MGR-USER-4** Email SHALL be unique per user; credentials SHALL be managed by Supabase Auth (SiteLink stores no passwords — see NFR-SEC).
 - **FR-MGR-USER-5** Role assigned here SHALL determine the user's server-enforced permissions (FR-X-RBAC).
 
 ### 5.10 Settings — `FR-MGR-SET`
@@ -176,10 +181,10 @@ Surface locations: Web at `Frontend/manager/web` (tab menu); App at `Frontend/ma
 - **NFR-PERF-2** List views SHALL paginate or virtualize beyond a reasonable page size to bound payloads.
 
 ### NFR-SEC — Security
-- **NFR-SEC-1** Passwords SHALL be stored as salted hashes (e.g., bcrypt/argon2 — algorithm chosen by Matrix); never in plaintext or reversible form.
+- **NFR-SEC-1** Passwords SHALL be managed by Supabase Auth; SiteLink SHALL store no user passwords (plaintext or hashed) of its own.
 - **NFR-SEC-2** All traffic SHALL be over TLS.
-- **NFR-SEC-3** Authorization SHALL be enforced server-side on every endpoint (FR-X-RBAC).
-- **NFR-SEC-4** Uploaded documents (IDs, passports, visas) SHALL be access-controlled; only authorized roles/scopes may retrieve them.
+- **NFR-SEC-3** Authorization SHALL be enforced server-side on every endpoint by the SiteLink back end (FR-X-RBAC), keyed off the verified Supabase identity.
+- **NFR-SEC-4** Worker documents and images SHALL be stored in **private Supabase Storage buckets**; retrieval SHALL be via short-lived signed URLs minted by the back end only after it authorizes the request. Buckets SHALL NOT be public.
 - **NFR-SEC-5** Sensitive PII SHALL not appear in logs.
 
 ### NFR-AVAIL — Reliability / Hosting
@@ -275,14 +280,14 @@ interface SalaryRuleEngine {
 ## 12. Data Domains Overview
 (Conceptual; Matrix owns schema and relationships.)
 
-- **Users & Auth** — user, role, credentials (hashed), lockout state, session.
+- **Users & Auth** — application user (role, site scope, lockout state) linked to a Supabase Auth identity; credentials and sessions owned by Supabase Auth.
 - **Sites** — construction site, status (active/archived), assignments.
 - **Workers** — profile, docs (passport/ID, visa, height permit, ATTAT), level, profession, residence, start date, archive flag.
 - **Compensation** — hourly wage by profession, per-worker wage, pay-rule mode, salary results.
 - **Time** — attendance/vacation/disease entries; derived working-hours aggregates (day/week/month).
 - **Financial ledgers** — loans, advance payments, P&L inputs (per site/date).
 - **Requests** (modeled, not surfaced in v1) — vacation/loan/advance requests with status.
-- **Documents/Media** — access-controlled file storage for worker docs and images.
+- **Documents/Media** — worker docs and images held in private Supabase Storage; the DB stores the storage path/key (not the bytes), served via back-end-signed URLs.
 - **Preferences** — per-user theme and language.
 
 ---
@@ -303,7 +308,7 @@ interface SalaryRuleEngine {
 - **A-3** Revenue inputs for P&L are available from site/finance data; exact source refined by Matrix.
 - **A-4** "Partner" is a reporting-weighted role; precise permission matrix finalized in Architecture.
 - **A-5** Legal correctness of Israeli labor-law pay is explicitly deferred to a later rule-engine implementation.
-- **A-6** Document storage provider and PDF library are Matrix decisions.
+- **A-6** Document storage is Supabase Storage (private buckets, back-end-signed URLs); the PDF library remains a Matrix decision.
 
 ## 15. Open Risks
 - **R-1** Israeli-labor-law rules are complex (overtime tiers, rest-day premiums, statutory deductions); the stub must not be mistaken for compliant pay. Mitigation: `engineVersion` stub marker + UI labeling (FR-MGR-SRE-4).

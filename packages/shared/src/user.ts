@@ -10,12 +10,15 @@ import { Language, Role, Theme } from './enums';
  * v1 authenticates Manager (+ Admin); Foreman/Worker/Partner are provisioned
  * by the Manager (FR-MGR-USER-1) but their apps are future.
  *
- * SECURITY: passwordHash is server-only and MUST NOT be serialized to clients
- * (NFR-SEC-1). It is intentionally omitted from the wire-facing `User` type;
- * see `UserRecord` for the persisted shape hint.
+ * AUTH SPLIT: authentication (credentials, sessions, password reset) is owned by
+ * Supabase Auth; this record owns AUTHORIZATION (role + site scope) as application
+ * data. `authUserId` is the Supabase auth user id (the identity FK). No password
+ * hash is stored here — Supabase holds credentials (NFR-SEC-1).
  */
 export interface User extends Timestamped {
   id: ID;
+  /** Supabase Auth user id — the identity this app-level record authorizes. */
+  authUserId: ID;
   role: Role;
   fullName: string;
   email: string;
@@ -35,12 +38,18 @@ export interface UserPreferences {
   theme: Theme;
 }
 
-/** Create-user payload (FR-MGR-USER-1). Password is plaintext in transit only (TLS), hashed at rest. */
+/**
+ * Create-user payload (FR-MGR-USER-1). The back end provisions the identity via the
+ * Supabase Admin API (invite or create) and dual-writes this app User row (role +
+ * site scope), keyed by the returned Supabase auth user id. `password` is optional:
+ * when omitted the user is invited and sets their own password via Supabase.
+ */
 export interface CreateUserInput {
   role: Role;
   fullName: string;
   email: string;
-  password: string;
+  /** Optional — omit to send a Supabase invite; the user sets their own password. */
+  password?: string;
   primarySiteId?: ID | null;
   language?: Language;
   theme?: Theme;
@@ -57,19 +66,33 @@ export interface UpdateUserInput {
   theme?: Theme;
 }
 
-/** Auth: login request/response (Architecture §5 — JWT access + refresh). */
+/**
+ * Auth (Architecture §5 — Supabase Auth). Sign-in is performed by the Supabase
+ * client SDK on web/native, which returns a Supabase session (access + refresh
+ * JWTs). The back end verifies that JWT and resolves the app-level User below.
+ * These types describe the client-facing shape; SiteLink no longer issues its own
+ * tokens.
+ */
 export interface LoginInput {
   email: string;
   password: string;
 }
 
+/** Supabase-issued session tokens (mirror of the SDK session, wire-facing subset). */
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
+  /** Seconds until the access token expires. */
   expiresIn: number;
 }
 
+/** Resolved session: the Supabase tokens plus this app's authorization record. */
 export interface AuthSession {
   user: User;
   tokens: AuthTokens;
+}
+
+/** Result of `GET /auth/me`: the app User for the verified Supabase identity. */
+export interface CurrentUser {
+  user: User;
 }

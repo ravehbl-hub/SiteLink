@@ -30,8 +30,12 @@ Matrix's **SCREAMING_SNAKE enum convention**.
   entities are modeled now to avoid migration churn (FR-REQ-3, FR-BO) but no surface consumes them
   in v1.
 - **DB-shape vs wire-shape:** Prisma types stay in the backend; the hand-authored DTOs in
-  `@sitelink/shared` are the wire contract (Architecture §2). `passwordHash` is server-only and
-  never serialized to clients.
+  `@sitelink/shared` are the wire contract (Architecture §2).
+- **Auth split (Supabase):** SiteLink stores **no passwords**. `User` links to its Supabase Auth
+  identity via `authUserId` (unique); Supabase owns credentials/sessions, this schema owns the
+  role + site scope used for authorization (Architecture §5).
+- **File storage (Supabase):** `FileRef` fields store the Supabase Storage **key/metadata**, not
+  the bytes. Buckets are private; the back end mints short-lived signed URLs (Architecture §7a).
 
 ---
 
@@ -58,10 +62,10 @@ erDiagram
 
   USER {
     string id PK
+    string authUserId UK
     Role role
     string fullName
     string email UK
-    string passwordHash
     bool isLockedOut
     Language language
     Theme theme
@@ -199,10 +203,10 @@ Legend: **PK** primary key, **FK** foreign key, **UK** unique. Type column is th
 | Field | Type | Notes |
 |---|---|---|
 | id | ID (PK) | cuid |
+| authUserId | ID (UK) | Supabase Auth user id — identity FK (Architecture §5); no password stored here |
 | role | Role | server-enforced permissions (FR-MGR-USER-5) |
 | fullName | string | |
 | email | string (UK) | unique per user (FR-MGR-USER-4) |
-| passwordHash | string | **server-only**, salted hash (NFR-SEC-1); never on wire |
 | isLockedOut | boolean | reversible lockout (FR-MGR-USER-3) |
 | primarySiteId | ID? (FK→Site) | construction site captured at creation (FR-MGR-USER-1) |
 | language | Language | persisted preference (FR-X-I18N-3) |
@@ -269,7 +273,7 @@ Unique on `(siteId, workerId)`. Drives per-site rollups (FR-MGR-SITE-4, FR-MGR-D
 | type | WorkerDocType | PASSPORT_ID / VISA / HEIGHT_PERMIT / ATTAT |
 | reference | string? | document number |
 | expiresAt | ISODate? | e.g. visa/permit expiry |
-| file (FileRef) | storageKey, fileName, mimeType, sizeBytes?, uploadedAt | retains file type + upload timestamp (FR-MGR-EMP-3); access-controlled (NFR-SEC-4) |
+| file (FileRef) | storageKey, fileName, mimeType, sizeBytes?, uploadedAt | Supabase Storage key + metadata (not bytes); retains file type + upload timestamp (FR-MGR-EMP-3); private bucket, back-end-signed URLs (NFR-SEC-4) |
 | createdAt / updatedAt | ISODate | |
 
 ### 3.6 WorkerSalaryData — `[v1]` (Worker Salary; FR-MGR-EMP-4)

@@ -15,10 +15,9 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // Managed by Supabase. DATABASE_URL = pooler (PgBouncer, :6543, ?pgbouncer=true)
-  // for the app runtime; directUrl = direct connection (:5432) for Prisma Migrate.
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  // Managed by Supabase. Connection URLs live in ../prisma.config.ts (Prisma 7+):
+  //   runtime  → DATABASE_URL = Supabase pooler (PgBouncer, :6543, ?pgbouncer=true)
+  //   migrate  → DIRECT_URL   = Supabase direct connection (:5432)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,10 +115,13 @@ enum BillingStatus {
 
 model User {
   id            String    @id @default(cuid())
+  // Supabase Auth user id (identity FK). Credentials/sessions/password reset are
+  // owned by Supabase Auth; this row owns authorization (role + site scope).
+  // No password hash is stored here (NFR-SEC-1) — Supabase holds credentials.
+  authUserId    String    @unique
   role          Role
   fullName      String
   email         String    @unique
-  passwordHash  String // salted hash only (NFR-SEC-1)
   isLockedOut   Boolean   @default(false) // reversible lockout (FR-MGR-USER-3)
   language      Language  @default(HE)
   theme         Theme     @default(LIGHT)
@@ -134,6 +136,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([authUserId])
   @@index([role])
   @@index([primarySiteId])
 }

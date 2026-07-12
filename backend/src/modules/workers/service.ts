@@ -1,0 +1,317 @@
+/**
+ * SiteLink back end — workers service (FR-MGR-EMP).
+ *
+ * Worker Wizard create (Details + optional Salary data + site assignments), details
+ * CRUD, docs (signed upload/read URLs on private Storage — the DB stores only the
+ * key), salary-data, and Add/Modify/Remove/Archive.
+ *
+ * Storage keys are ALWAYS server-generated (never client-supplied) to prevent path
+ * traversal/overwrite (Architecture §7a). Signed URLs are minted only after the
+ * back end authorizes the request.
+ */
+import { randomUUID } from 'node:crypto';
+import type { z } from 'zod';
+import type {
+  Paginated,
+  Worker,
+  WorkerDoc,
+  WorkerSalaryData,
+  WorkerWithDetails,
+} from '@sitelink/shared';
+import type { SignedReadResponse, SignedUploadResponse } from './dto.js';
+import { prisma } from '../../db/client.js';
+import { AppError } from '../../lib/errors.js';
+import { mapSalaryData, mapWorker, mapWorkerDoc } from '../../lib/mappers.js';
+import { paginate } from '../../lib/pagination.js';
+import { SupabaseService } from '../../lib/supabase.js';
+import type {
+  confirmDocSchema,
+  createWorkerSchema,
+  listWorkersQuery,
+  requestDocUploadSchema,
+  salaryDataSchema,
+  updateWorkerSchema,
+} from './schemas.js';
+
+type CreateInput = z.infer<typeof createWorkerSchema>;
+type UpdateInput = z.infer<typeof updateWorkerSchema>;
+type ListQuery = z.infer<typeof listWorkersQuery>;
+type SalaryInput = z.infer<typeof salaryDataSchema>;
+type DocUploadInput = z.infer<typeof requestDocUploadSchema>;
+type DocConfirmInput = z.infer<typeof confirmDocSchema>;
+
+/** Map an allowed MIME to a file extension for the server-chosen storage key. */
+function extFor(mimeType: string): string {
+  const map: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/heic': 'heic',
+    'application/pdf': 'pdf',
+  };
+  return map[mimeType] ?? 'bin';
+}
+
+export class WorkersService {
+  constructor(private readonly supabase: SupabaseService) {}
+
+  async list(query: ListQuery): Promise<Paginated<Worker>> {
+    const where = {
+      ...(query.includeArchived ? {} : { isArchived: false }),
+      ...(query.siteId ? { assignments: { some: { siteId: query.siteId } } } : {}),
+    };
+    const skip = (query.page - 1) * query.pageSize;
+    const [rows, total] = await Promise.all([
+      prisma.worker.findMany({
+        where,
+        skip,
+        take: query.pageSize,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.worker.count({ where }),
+    ]);
+    return paginate(rows.map(mapWorker), total, {
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+  }
+
+  async getWithDetails(id: string): Promise<WorkerWithDetails> {
+    const row = await prisma.worker.findUnique({
+      where: { id },
+      include: { docs: true, salaryData: true, assignments: true },
+    });
+    if (!row) throw AppError.notFound('Worker not found');
+    return {
+      ...mapWorker(row),
+      docs: row.docs.map(mapWorkerDoc),
+      salaryData: row.salaryData ? mapSalaryData(row.salaryData) : null,
+      siteIds: row.assignments.map((a) => a.siteId),
+    };
+  }
+
+  /** Worker Wizard create (FR-MGR-EMP-1): Details + Salary + site assignments. */
+  async create(input: CreateInput): Promise<WorkerWithDetails> {
+    const created = await prisma.worker.create({
+      data: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        profession: input.profession,
+        level: input.level,
+        country: input.country ?? null,
+        address: input.address ?? null,
+        qualityOfWorks: input.qualityOfWorks ?? null,
+        phone: input.phone ?? null,
+        email: input.email ?? null,
+        personnelCompany: input.personnelCompany ?? null,
+        residence: input.residence ?? null,
+        startDate: input.startDate ? new Date(input.startDate) : null,
+        ...(input.siteIds && input.siteIds.length > 0
+          ? {
+              assignments: {
+                create: input.siteIds.map((siteId) => ({ siteId })),
+              },
+            }
+          : {}),
+        ...(input.salaryData
+          ? {
+              salaryData: {
+                create: {
+                  hourlyWage: input.salaryData.hourlyWage,
+                  rateType: input.salaryData.rateType,
+                  workingConditions: input.salaryData.workingConditions ?? null,
+                  currency: input.salaryData.currency,
+                },
+              },
+            }
+          : {}),
+      },
+    });
+    return this.getWithDetails(created.id);
+  }
+
+  async update(id: string, input: UpdateInput): Promise<WorkerWithDetails> {
+    await this.ensureExists(id);
+    await prisma.worker.update({
+      where: { id },
+      data: {
+        ...(input.firstName !== undefined ? { firstName: input.firstName } : {}),
+        ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
+        ...(input.profession !== undefined ? { profession: input.profession } : {}),
+        ...(input.level !== undefined ? { level: input.level } : {}),
+        ...(input.country !== undefined ? { country: input.country } : {}),
+        ...(input.address !== undefined ? { address: input.address } : {}),
+        ...(input.qualityOfWorks !== undefined
+          ? { qualityOfWorks: input.qualityOfWorks }
+          : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.email !== undefined ? { email: input.email } : {}),
+        ...(input.personnelCompany !== undefined
+          ? { personnelCompany: input.personnelCompany }
+          : {}),
+        ...(input.residence !== undefined ? { residence: input.residence } : {}),
+        ...(input.startDate !== undefined
+          ? { startDate: input.startDate ? new Date(input.startDate) : null }
+          : {}),
+      },
+    });
+
+    if (input.siteIds) {
+      await this.setAssignments(id, input.siteIds);
+    }
+    return this.getWithDetails(id);
+  }
+
+  /** Archive (move-to-archives, FR-MGR-EMP-5/6). Excluded from active rosters. */
+  async archive(id: string): Promise<Worker> {
+    await this.ensureExists(id);
+    const row = await prisma.worker.update({
+      where: { id },
+      data: { isArchived: true, archivedAt: new Date() },
+    });
+    return mapWorker(row);
+  }
+
+  /** Hard delete (FR-MGR-EMP-5). Also purge stored objects to stay in sync. */
+  async remove(id: string): Promise<void> {
+    const worker = await prisma.worker.findUnique({
+      where: { id },
+      include: { docs: true },
+    });
+    if (!worker) throw AppError.notFound('Worker not found');
+    for (const doc of worker.docs) {
+      await this.supabase
+        .removeObject({ kind: 'doc', storageKey: doc.storageKey })
+        .catch(() => undefined);
+    }
+    if (worker.imageStorageKey) {
+      await this.supabase
+        .removeObject({ kind: 'image', storageKey: worker.imageStorageKey })
+        .catch(() => undefined);
+    }
+    await prisma.worker.delete({ where: { id } });
+  }
+
+  // ── Salary data (FR-MGR-EMP-4) ───────────────────────────────────────────
+
+  async upsertSalaryData(workerId: string, input: SalaryInput): Promise<WorkerSalaryData> {
+    await this.ensureExists(workerId);
+    const row = await prisma.workerSalaryData.upsert({
+      where: { workerId },
+      create: {
+        workerId,
+        hourlyWage: input.hourlyWage,
+        rateType: input.rateType,
+        workingConditions: input.workingConditions ?? null,
+        currency: input.currency,
+      },
+      update: {
+        hourlyWage: input.hourlyWage,
+        rateType: input.rateType,
+        workingConditions: input.workingConditions ?? null,
+        currency: input.currency,
+      },
+    });
+    return mapSalaryData(row);
+  }
+
+  // ── Docs (FR-MGR-EMP-3, Architecture §7a) ────────────────────────────────
+
+  async listDocs(workerId: string): Promise<WorkerDoc[]> {
+    await this.ensureExists(workerId);
+    const rows = await prisma.workerDoc.findMany({
+      where: { workerId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(mapWorkerDoc);
+  }
+
+  /**
+   * Step 1 of upload: authorize + validate intent (MIME allow-list), then mint a
+   * short-lived signed upload URL scoped to a SERVER-chosen key.
+   */
+  async requestDocUpload(
+    workerId: string,
+    input: DocUploadInput,
+  ): Promise<SignedUploadResponse> {
+    await this.ensureExists(workerId);
+    this.supabase.assertAllowedMime(input.mimeType);
+    const storageKey = `${workerId}/${input.type}/${randomUUID()}.${extFor(input.mimeType)}`;
+    const signed = await this.supabase.createSignedUpload({ kind: 'doc', storageKey });
+    return {
+      storageKey: signed.storageKey,
+      uploadUrl: signed.uploadUrl,
+      token: signed.token,
+      bucket: signed.bucket,
+    };
+  }
+
+  /**
+   * Step 2 of upload: persist the FileRef row after the client confirms a completed
+   * upload. Only accepts a key that matches the server-chosen prefix for this
+   * worker (defense against a client claiming an arbitrary key).
+   */
+  async confirmDoc(workerId: string, input: DocConfirmInput): Promise<WorkerDoc> {
+    await this.ensureExists(workerId);
+    this.supabase.assertAllowedMime(input.mimeType);
+    if (!input.storageKey.startsWith(`${workerId}/`)) {
+      throw AppError.validation('storageKey does not belong to this worker');
+    }
+    const row = await prisma.workerDoc.create({
+      data: {
+        workerId,
+        type: input.type,
+        storageKey: input.storageKey,
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes ?? null,
+        reference: input.reference ?? null,
+        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+      },
+    });
+    return mapWorkerDoc(row);
+  }
+
+  /** Mint a short-lived signed READ URL for a stored doc. */
+  async getDocReadUrl(workerId: string, docId: string): Promise<SignedReadResponse> {
+    const doc = await prisma.workerDoc.findFirst({ where: { id: docId, workerId } });
+    if (!doc) throw AppError.notFound('Document not found');
+    const signed = await this.supabase.createSignedRead({
+      kind: 'doc',
+      storageKey: doc.storageKey,
+    });
+    return { url: signed.url, expiresInSeconds: signed.expiresInSeconds };
+  }
+
+  async removeDoc(workerId: string, docId: string): Promise<void> {
+    const doc = await prisma.workerDoc.findFirst({ where: { id: docId, workerId } });
+    if (!doc) throw AppError.notFound('Document not found');
+    await this.supabase
+      .removeObject({ kind: 'doc', storageKey: doc.storageKey })
+      .catch(() => undefined);
+    await prisma.workerDoc.delete({ where: { id: docId } });
+  }
+
+  // ── internals ────────────────────────────────────────────────────────────
+
+  private async setAssignments(workerId: string, siteIds: string[]): Promise<void> {
+    const unique = [...new Set(siteIds)];
+    await prisma.$transaction([
+      prisma.siteAssignment.deleteMany({
+        where: { workerId, siteId: { notIn: unique.length ? unique : ['__none__'] } },
+      }),
+      ...unique.map((siteId) =>
+        prisma.siteAssignment.upsert({
+          where: { siteId_workerId: { siteId, workerId } },
+          create: { siteId, workerId },
+          update: {},
+        }),
+      ),
+    ]);
+  }
+
+  private async ensureExists(id: string): Promise<void> {
+    const exists = await prisma.worker.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) throw AppError.notFound('Worker not found');
+  }
+}

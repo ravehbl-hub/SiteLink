@@ -1,0 +1,68 @@
+/**
+ * SiteLink back end — workers module Zod schemas (FR-MGR-EMP).
+ */
+import { z } from 'zod';
+import { Profession, RateType, WorkerDocType, WorkerLevel } from '@sitelink/shared';
+
+export const createWorkerSchema = z.object({
+  firstName: z.string().min(1), // required (FR-MGR-EMP-7)
+  lastName: z.string().min(1), // required
+  profession: z.nativeEnum(Profession), // required (FR-MGR-EMP-8)
+  level: z.nativeEnum(WorkerLevel).default(WorkerLevel.MEDIUM),
+  country: z.string().nullish(),
+  address: z.string().nullish(),
+  qualityOfWorks: z.string().nullish(),
+  phone: z.string().nullish(),
+  email: z.string().email().nullish(),
+  personnelCompany: z.string().nullish(),
+  residence: z.string().nullish(),
+  startDate: z.string().datetime().nullish(),
+  siteIds: z.array(z.string()).optional(),
+  // Optional Worker Salary data captured in the wizard (FR-MGR-EMP-4).
+  salaryData: z
+    .object({
+      hourlyWage: z.number().nonnegative(),
+      rateType: z.nativeEnum(RateType).default(RateType.HOURLY),
+      workingConditions: z.string().nullish(),
+      currency: z.string().default('ILS'),
+    })
+    .optional(),
+});
+
+export const updateWorkerSchema = createWorkerSchema.partial();
+
+export const salaryDataSchema = z.object({
+  hourlyWage: z.number().nonnegative(),
+  rateType: z.nativeEnum(RateType).default(RateType.HOURLY),
+  workingConditions: z.string().nullish(),
+  currency: z.string().default('ILS'),
+});
+
+export const listWorkersQuery = z.object({
+  includeArchived: z.coerce.boolean().default(false),
+  siteId: z.string().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+/** Request a signed upload URL for a worker doc (server chooses the key). */
+export const requestDocUploadSchema = z.object({
+  type: z.nativeEnum(WorkerDocType),
+  fileName: z.string().min(1),
+  mimeType: z.string().min(1),
+  sizeBytes: z.number().int().positive().optional(),
+});
+
+/** Confirm a completed upload → persist the FileRef row. */
+export const confirmDocSchema = z.object({
+  type: z.nativeEnum(WorkerDocType),
+  storageKey: z.string().min(1),
+  fileName: z.string().min(1),
+  mimeType: z.string().min(1),
+  sizeBytes: z.number().int().positive().optional(),
+  reference: z.string().nullish(),
+  expiresAt: z.string().datetime().nullish(),
+});
+
+export const idParam = z.object({ id: z.string().min(1) });
+export const docParam = z.object({ id: z.string().min(1), docId: z.string().min(1) });

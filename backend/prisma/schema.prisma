@@ -1,0 +1,471 @@
+// SiteLink — Prisma schema (Phase 01 / CREATE)
+// Owner: Lattice (Schema). Authoritative data model for the Fastify back end.
+//
+// Conventions:
+//   - Enum members are SCREAMING_SNAKE_CASE and MUST match @sitelink/shared/src/enums.ts
+//     and docs/SCHEMA.md byte-for-byte.
+//   - Every persisted model has createdAt / updatedAt.
+//   - Soft-delete / archives use isArchived (+ archivedAt) per PRD FR-MGR-EMP-5/6, FR-MGR-SITE.
+//   - [v1] models power the Manager surface + back end. [future] models are modeled now
+//     to avoid migration churn (PRD FR-REQ-3, §10 FR-BO) but are unused by v1 surfaces.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums (mirror @sitelink/shared/src/enums.ts)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MANAGER
+  PARTNER
+  FOREMAN
+  WORKER
+}
+
+enum Profession {
+  IRONWORKER
+  MOLDER
+  CONCRETE_WORKER
+  GENERAL_LABORER
+  FOREMAN
+  MECHANIC
+  ELECTRICIAN
+  PLUMBER
+  OTHER
+}
+
+enum WorkerLevel {
+  WEAK
+  MEDIUM
+  GOOD
+  EXCELLENT
+}
+
+enum AttendanceType {
+  ATTENDANCE
+  VACATION
+  DISEASE
+}
+
+enum WorkerDocType {
+  PASSPORT_ID
+  VISA
+  HEIGHT_PERMIT
+  ATTAT
+}
+
+enum SalaryCalcMode {
+  ISRAELI_LABOR_LAW
+  FIXED
+}
+
+enum RateType {
+  HOURLY
+  MONTHLY
+}
+
+enum SiteStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum RequestType {
+  VACATION
+  LOAN
+  ADVANCE
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Language {
+  HE
+  EN
+  TR
+}
+
+enum Theme {
+  LIGHT
+  DARK
+}
+
+enum BillingStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Users & Auth  [v1]  (PRD FR-MGR-USER, FR-X-RBAC)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  role          Role
+  fullName      String
+  email         String    @unique
+  passwordHash  String // salted hash only (NFR-SEC-1)
+  isLockedOut   Boolean   @default(false) // reversible lockout (FR-MGR-USER-3)
+  language      Language  @default(HE)
+  theme         Theme     @default(LIGHT)
+  lastLoginAt   DateTime?
+
+  primarySite   Site?     @relation("UserPrimarySite", fields: [primarySiteId], references: [id])
+  primarySiteId String?
+
+  // Requests this user resolved as Admin/Manager (future workflow)
+  resolvedRequests WorkerRequest[] @relation("RequestResolvedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([primarySiteId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sites  [v1]  (PRD FR-MGR-SITE)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Site {
+  id         String     @id @default(cuid())
+  name       String
+  code       String?
+  status     SiteStatus @default(ACTIVE)
+  address    String?
+  startedAt  DateTime?
+  isArchived Boolean    @default(false)
+  archivedAt DateTime?
+
+  users       User[]           @relation("UserPrimarySite")
+  assignments SiteAssignment[]
+  attendance  AttendanceRecord[]
+  wageRates   ProfessionWageRate[]
+  profitLoss  ProfitLoss[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([isArchived])
+}
+
+// Worker ⇄ Site many-to-many (FR-MGR-SITE-4)
+model SiteAssignment {
+  id           String    @id @default(cuid())
+  site         Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  siteId       String
+  worker       Worker    @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId     String
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([siteId, workerId])
+  @@index([workerId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Workers, Docs, Salary data  [v1]  (PRD FR-MGR-EMP)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Worker {
+  id               String      @id @default(cuid())
+  firstName        String // required (FR-MGR-EMP-7)
+  lastName         String // required (FR-MGR-EMP-7)
+  country          String?
+  address          String?
+  profession       Profession // required (FR-MGR-EMP-7/8)
+  level            WorkerLevel @default(MEDIUM) // (FR-MGR-EMP-9)
+  qualityOfWorks   String?
+  phone            String?
+  email            String?
+  personnelCompany String?
+  residence        String?
+  startDate        DateTime?
+
+  // Profile image stored as an access-controlled file (FR-MGR-EMP-2)
+  imageStorageKey  String?
+  imageFileName    String?
+  imageMimeType    String?
+  imageUploadedAt  DateTime?
+
+  isArchived Boolean   @default(false) // move-to-archives (FR-MGR-EMP-5/6)
+  archivedAt DateTime?
+
+  docs        WorkerDoc[]
+  salaryData  WorkerSalaryData?
+  assignments SiteAssignment[]
+  attendance  AttendanceRecord[]
+  loans       Loan[]
+  advances    AdvancePayment[]
+  requests    WorkerRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profession])
+  @@index([level])
+  @@index([isArchived])
+}
+
+model WorkerDoc {
+  id          String        @id @default(cuid())
+  worker      Worker        @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId    String
+  type        WorkerDocType
+  reference   String?
+  expiresAt   DateTime?
+
+  // FileRef (retains file type + upload timestamp — FR-MGR-EMP-3)
+  storageKey  String
+  fileName    String
+  mimeType    String
+  sizeBytes   Int?
+  uploadedAt  DateTime      @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workerId])
+  @@index([type])
+}
+
+model WorkerSalaryData {
+  id                String   @id @default(cuid())
+  worker            Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId          String   @unique
+  hourlyWage        Decimal  @db.Decimal(12, 2)
+  rateType          RateType @default(HOURLY)
+  workingConditions String?
+  currency          String   @default("ILS")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attendance / Working Hours  [v1]  (PRD FR-MGR-ATT)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Exactly one record per worker/day (FR-MGR-ATT-4) — enforced by @@unique.
+// WorkingHours aggregates (day/week/month) are DERIVED from these rows at query time.
+model AttendanceRecord {
+  id       String         @id @default(cuid())
+  worker   Worker         @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId String
+  site     Site?          @relation(fields: [siteId], references: [id])
+  siteId   String?
+  date     DateTime       @db.Date
+  type     AttendanceType
+  hours    Decimal?       @db.Decimal(6, 2) // hours when type = ATTENDANCE
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workerId, date]) // exclusivity guard (FR-MGR-ATT-4)
+  @@index([siteId, date])
+  @@index([date])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Compensation: wage rules  [v1]  (PRD FR-MGR-PAY)
+// SalaryRuleEngine SalaryInput/SalaryResult are DTOs (@sitelink/shared/salary.ts),
+// not persisted models — results are computed on demand (FR-MGR-PAY-4).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ProfessionWageRate {
+  id         String         @id @default(cuid())
+  profession Profession
+  wage       Decimal        @db.Decimal(12, 2)
+  rateType   RateType       @default(HOURLY)
+  calcMode   SalaryCalcMode @default(FIXED)
+  currency   String         @default("ILS")
+  site       Site?          @relation(fields: [siteId], references: [id])
+  siteId     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([profession, siteId])
+  @@index([profession])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Financial ledgers  [v1]  (PRD FR-MGR-LOAN, FR-MGR-ADV, FR-MGR-PNL)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Loan {
+  id          String   @id @default(cuid())
+  worker      Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId    String
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("ILS")
+  date        DateTime @db.Date
+  notes       String?
+  outstanding Decimal  @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workerId])
+  @@index([date])
+}
+
+model AdvancePayment {
+  id          String   @id @default(cuid())
+  worker      Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId    String
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("ILS")
+  date        DateTime @db.Date
+  notes       String?
+  outstanding Decimal  @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workerId])
+  @@index([date])
+}
+
+// Site-level P&L snapshot (FR-MGR-PNL). May be computed on-demand or persisted.
+model ProfitLoss {
+  id           String   @id @default(cuid())
+  site         Site?    @relation(fields: [siteId], references: [id])
+  siteId       String?
+  periodStart  DateTime @db.Date
+  periodEnd    DateTime @db.Date
+  currency     String   @default("ILS")
+  revenue      Decimal  @db.Decimal(14, 2) @default(0)
+  salaryCost   Decimal  @db.Decimal(14, 2) @default(0)
+  loansCost    Decimal  @db.Decimal(14, 2) @default(0)
+  advancesCost Decimal  @db.Decimal(14, 2) @default(0)
+  otherCost    Decimal  @db.Decimal(14, 2) @default(0)
+  netProfit    Decimal  @db.Decimal(14, 2) @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([siteId, periodStart, periodEnd])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Request–Approval workflow  [future / modeled]  (PRD §10a FR-REQ)
+// Persisted now to avoid migration churn (FR-REQ-3); no Worker/Admin UI in v1.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model WorkerRequest {
+  id              String        @id @default(cuid())
+  worker          Worker        @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId        String
+  requestedById   String? // Worker user who submitted (v2)
+  type            RequestType
+  status          RequestStatus @default(PENDING)
+  amount          Decimal?      @db.Decimal(12, 2)
+  currency        String?
+  startDate       DateTime?     @db.Date
+  endDate         DateTime?     @db.Date
+  notes           String?
+  resolvedBy      User?         @relation("RequestResolvedBy", fields: [resolvedById], references: [id])
+  resolvedById    String?
+  resolvedAt      DateTime?
+  resolutionNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workerId])
+  @@index([status])
+  @@index([type])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SaaS business layer  [future / modeled]  (PRD §10 FR-BO)
+// No Back Office UI in v1; modeled to avoid future migration.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id           String    @id @default(cuid())
+  name         String
+  contactEmail String?
+  contactPhone String?
+  registeredAt DateTime  @default(now())
+  leftAt       DateTime?
+  isArchived   Boolean   @default(false)
+  archivedAt   DateTime?
+
+  billings Billing[]
+  usages   Usage[]
+  pnl      BusinessProfitLoss[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isArchived])
+}
+
+model Billing {
+  id          String        @id @default(cuid())
+  customer    Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId  String
+  status      BillingStatus @default(TRIALING)
+  plan        String
+  amount      Decimal       @db.Decimal(12, 2)
+  currency    String        @default("ILS")
+  periodStart DateTime      @db.Date
+  periodEnd   DateTime      @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model Usage {
+  id          String   @id @default(cuid())
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId  String
+  metric      String
+  value       Decimal  @db.Decimal(18, 4)
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId, metric])
+}
+
+model BusinessProfitLoss {
+  id          String    @id @default(cuid())
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  customerId  String?
+  periodStart DateTime  @db.Date
+  periodEnd   DateTime  @db.Date
+  currency    String    @default("ILS")
+  revenue     Decimal   @db.Decimal(14, 2) @default(0)
+  cost        Decimal   @db.Decimal(14, 2) @default(0)
+  netProfit   Decimal   @db.Decimal(14, 2) @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId, periodStart, periodEnd])
+}

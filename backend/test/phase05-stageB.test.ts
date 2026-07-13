@@ -470,6 +470,19 @@ describe('FR-WRK — Worker sees ONLY own hours/salary/payslip + own requests', 
     expect(res.rawPayload.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
+  it('GET /reports/working-hours.pdf streams the caller OWN hours PDF (self-forced)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      // Probe another worker via ?workerId — must be ignored (forced to self).
+      url: '/api/v1/reports/working-hours.pdf?from=2026-05-01T00:00:00.000Z&to=2026-05-31T00:00:00.000Z&grain=month&workerId=seed-worker-01&lang=en',
+      headers: auth(workerToken),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toMatch(/working-hours\.pdf/);
+    expect(res.rawPayload.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+
   it('Worker submits a request (self-initiated) and sees ONLY own requests', async () => {
     const create = await app.inject({
       method: 'POST',

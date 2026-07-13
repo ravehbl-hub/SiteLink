@@ -14,7 +14,7 @@ import {
   View,
   type DocumentProps,
 } from '@react-pdf/renderer';
-import type { ProfitLoss, SalaryResult } from '@sitelink/shared';
+import type { ProfitLoss, SalaryResult, WorkingHours } from '@sitelink/shared';
 
 const e = React.createElement;
 
@@ -114,6 +114,46 @@ export function ProfitLossDocument(props: {
       e(View, { key: 'net', style: styles.total }, [
         e(Text, { key: 'nl', style: styles.bold }, 'Net profit'),
         e(Text, { key: 'nv', style: styles.bold }, money(pnl.netProfit)),
+      ]),
+    ]),
+  );
+}
+
+/**
+ * Working Hours PDF for a single worker (FR-WRK-1). Rows are the derived
+ * `WorkingHours` buckets (day/week/month per `grain`) already aggregated by the
+ * attendance service — this template only lays them out (RTL/LTR via header()).
+ */
+export function WorkingHoursDocument(props: {
+  meta: ReportHeaderMeta;
+  workerName: string;
+  grain: WorkingHours['grain'];
+  rows: WorkingHours[];
+}): React.ReactElement<DocumentProps> {
+  const { meta, workerName, grain, rows } = props;
+  const sorted = [...rows].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
+  const totalHours = sorted.reduce((sum, r) => sum + r.totalHours, 0);
+  const body = sorted.map((r, i) =>
+    e(View, { key: `h${i}`, style: styles.row }, [
+      e(Text, { key: 'p' }, r.periodStart === r.periodEnd ? r.periodStart : `${r.periodStart} → ${r.periodEnd}`),
+      e(
+        Text,
+        { key: 'v' },
+        `H:${r.totalHours.toFixed(1)}  A:${r.attendanceDays}  V:${r.vacationDays}  D:${r.diseaseDays}`,
+      ),
+    ]),
+  );
+  return e(
+    Document,
+    {},
+    e(Page, { size: 'A4', style: styles.page }, [
+      header(meta),
+      e(Text, { key: 'w', style: styles.bold }, `Worker: ${workerName}`),
+      e(Text, { key: 'g', style: styles.meta }, `Grain: ${grain}`),
+      e(View, { key: 'body' }, body),
+      e(View, { key: 'total', style: styles.total }, [
+        e(Text, { key: 'tl', style: styles.bold }, 'Total hours'),
+        e(Text, { key: 'tv', style: styles.bold }, totalHours.toFixed(1)),
       ]),
     ]),
   );

@@ -1,8 +1,9 @@
 /**
  * SiteLink back end — reports routes (FR-X-PDF). Manager/Admin-gated. Streams PDF.
- *   GET /reports/payslip.pdf       (?workerId,from,to,?siteId,?lang)
- *   GET /reports/attendance.pdf    (?from,to,?siteId,?lang)
- *   GET /reports/profit-loss.pdf   (?from,to,?siteId,revenue,?currency,?lang)
+ *   GET /reports/payslip.pdf        (?workerId,from,to,?siteId,?lang)
+ *   GET /reports/working-hours.pdf  (?workerId,from,to,?grain,?lang)  [self-service]
+ *   GET /reports/attendance.pdf     (?from,to,?siteId,?lang)
+ *   GET /reports/profit-loss.pdf    (?from,to,?siteId,revenue,?currency,?lang)
  */
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
@@ -20,6 +21,19 @@ const payslipQuery = z.object({
   from: z.string().datetime(),
   to: z.string().datetime(),
   // Hebrew renders RTL; en/tr LTR (FR-X-PDF-2).
+  lang: z.enum(['he', 'en', 'tr']).default('en'),
+});
+
+// Working Hours PDF (FR-WRK-1). Self-service: a WORKER caller's workerId is
+// FORCED to their resolved Worker (client-supplied workerId ignored, mirroring
+// payslip.pdf). `grain` is lowercase per the client contract and mapped to the
+// attendance service's DAY|WEEK|MONTH enum.
+const GRAIN = { day: 'DAY', week: 'WEEK', month: 'MONTH' } as const;
+const workingHoursReportQuery = z.object({
+  workerId: z.string().min(1).optional(),
+  from: z.string().datetime(),
+  to: z.string().datetime(),
+  grain: z.enum(['day', 'week', 'month']).default('day'),
   lang: z.enum(['he', 'en', 'tr']).default('en'),
 });
 
@@ -77,6 +91,31 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', 'attachment; filename="payslip.pdf"')
+      .send(pdf);
+  });
+
+  // Self-service Working Hours PDF. Same role bundle + self-forcing as payslip.pdf:
+  // a WORKER is FORCED to their own resolved Worker (403 if unlinked) and any
+  // client ?workerId is ignored; ADMIN/MANAGER must supply an explicit workerId.
+  app.get('/reports/working-hours.pdf', payslipGuard, async (req, reply) => {
+    const q = workingHoursReportQuery.parse(req.query);
+    let workerId: string;
+    if (req.appUser!.role === Role.WORKER) {
+      workerId = await requireWorkerId(req.appUser!); // fail-closed 403 if unlinked
+    } else {
+      if (!q.workerId) throw AppError.validation('workerId is required');
+      workerId = q.workerId;
+    }
+    const pdf = await service.workingHoursPdf({
+      workerId,
+      from: q.from,
+      to: q.to,
+      grain: GRAIN[q.grain],
+      direction: dirFor(q.lang),
+    });
+    return reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', 'attachment; filename="working-hours.pdf"')
       .send(pdf);
   });
 

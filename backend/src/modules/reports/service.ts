@@ -7,12 +7,15 @@ import { AppError } from '../../lib/errors.js';
 import { toDateOnly } from '../../lib/dates.js';
 import { toNumber } from '../../lib/money.js';
 import { AttendanceType } from '@sitelink/shared';
+import type { WorkingHoursGrain } from '@sitelink/shared';
 import { SalaryService } from '../salary/service.js';
 import { FinanceService } from '../finance/service.js';
+import { AttendanceService } from '../attendance/service.js';
 import {
   AttendanceSummaryDocument,
   PayslipDocument,
   ProfitLossDocument,
+  WorkingHoursDocument,
   type AttendanceSummaryRow,
   type ReportHeaderMeta,
 } from './templates.js';
@@ -21,6 +24,7 @@ export class ReportsService {
   constructor(
     private readonly salary = new SalaryService(),
     private readonly finance = new FinanceService(),
+    private readonly attendance = new AttendanceService(),
   ) {}
 
   async payslipPdf(params: {
@@ -52,6 +56,45 @@ export class ReportsService {
       workerName: `${worker.firstName} ${worker.lastName}`,
       result,
       warnings: result.warnings,
+    });
+    return renderToBuffer(doc);
+  }
+
+  async workingHoursPdf(params: {
+    workerId: string;
+    siteId?: string;
+    from: string;
+    to: string;
+    grain: WorkingHoursGrain;
+    direction: 'ltr' | 'rtl';
+  }): Promise<Buffer> {
+    const worker = await prisma.worker.findUnique({ where: { id: params.workerId } });
+    if (!worker) throw AppError.notFound('Worker not found');
+
+    // Reuse the derived aggregate the /working-hours endpoint uses — do NOT
+    // duplicate bucketing here. `workerId` is ALREADY the route-forced id (WORKER
+    // self, or Manager-supplied), so we call caller-less: identity is settled and
+    // the query filter is trusted (no re-scoping needed).
+    const rows = await this.attendance.workingHours({
+      workerId: params.workerId,
+      siteId: params.siteId,
+      from: params.from,
+      to: params.to,
+      grain: params.grain,
+    });
+
+    const meta: ReportHeaderMeta = {
+      title: 'Working Hours',
+      from: toDateOnly(new Date(params.from)),
+      to: toDateOnly(new Date(params.to)),
+      direction: params.direction,
+    };
+
+    const doc = WorkingHoursDocument({
+      meta,
+      workerName: `${worker.firstName} ${worker.lastName}`,
+      grain: params.grain,
+      rows,
     });
     return renderToBuffer(doc);
   }

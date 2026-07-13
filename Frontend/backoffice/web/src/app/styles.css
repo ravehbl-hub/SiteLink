@@ -1,0 +1,478 @@
+/* @sitelink/backoffice-web global styles. All values read design tokens
+   (@sitelink/tokens css/tokens.css). Logical properties only for RTL (DESIGN). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--sl-font-body);
+  font-size: var(--sl-font-size-base);
+  color: var(--sl-color-text-primary);
+  background: var(--sl-color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--sl-font-display);
+  color: var(--sl-color-text-primary);
+  margin: 0;
+}
+
+a {
+  color: var(--sl-color-accent);
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: var(--sl-border-thick) solid var(--sl-color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── Layout shell ─────────────────────────────────────────────────────── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sl-space-4);
+  padding: var(--sl-space-3) var(--sl-space-6);
+  background: var(--sl-color-surface);
+  border-block-end: var(--sl-border-hairline) solid var(--sl-color-border);
+  box-shadow: var(--sl-elevation-sm);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sl-space-2);
+  font-family: var(--sl-font-display);
+  font-weight: var(--sl-font-weight-extrabold);
+  font-size: var(--sl-font-size-lg);
+  color: var(--sl-color-accent);
+}
+
+.brand-logo {
+  height: 52px;
+  width: auto;
+  display: block;
+  border-radius: var(--sl-radius-sm);
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sl-space-2);
+}
+
+/* ── Body = dir-driven grid: rail on inline-START, main after it ───────── */
+.app-body {
+  display: grid;
+  grid-template-columns: var(--sl-nav-width, 232px) 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Vertical navigation rail (Back Office = vertical menu) ────────────── */
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sl-space-1);
+  padding: var(--sl-space-4) var(--sl-space-3);
+  background: var(--sl-color-surface);
+  /* Divider sits between the rail and the content, on the rail's inline-END. */
+  border-inline-end: var(--sl-border-hairline) solid var(--sl-color-border);
+  position: sticky;
+  top: 61px;
+  align-self: start;
+  height: calc(100vh - 61px);
+  overflow-y: auto;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sl-space-2);
+  padding: var(--sl-space-3) var(--sl-space-3);
+  border-radius: var(--sl-radius-md);
+  /* Reserve the accent bar width on the inline-START edge so text never shifts. */
+  border-inline-start: var(--sl-border-thick) solid transparent;
+  color: var(--sl-color-text-secondary);
+  font-weight: var(--sl-font-weight-medium);
+  font-size: var(--sl-font-size-sm);
+}
+
+.nav-item:hover {
+  background: var(--sl-color-surface-alt);
+}
+
+.nav-item.active {
+  color: var(--sl-color-accent);
+  background: var(--sl-color-accent-subtle);
+  border-inline-start-color: var(--sl-color-accent);
+  font-weight: var(--sl-font-weight-semibold);
+}
+
+.nav-label {
+  flex: 1;
+}
+
+.nav-future {
+  font-size: var(--sl-font-size-xs);
+  color: var(--sl-color-text-muted);
+  background: var(--sl-color-surface-alt);
+  padding: 1px var(--sl-space-2);
+  border-radius: var(--sl-radius-pill);
+}
+
+.app-main {
+  padding: var(--sl-space-6);
+  max-width: 1200px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Collapse to a top rail on narrow screens (still logical order). */
+@media (max-width: 720px) {
+  .app-body {
+    grid-template-columns: 1fr;
+  }
+  .side-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+    height: auto;
+    border-inline-end: none;
+    border-block-end: var(--sl-border-hairline) solid var(--sl-color-border);
+  }
+  .nav-item {
+    border-inline-start: none;
+    border-block-end: var(--sl-border-thick) solid transparent;
+  }
+  .nav-item.active {
+    border-inline-start-color: transparent;
+    border-block-end-color: var(--sl-color-accent);
+  }
+}
+
+/* ── Cards ────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--sl-color-surface);
+  border: var(--sl-border-hairline) solid var(--sl-color-border);
+  border-radius: var(--sl-radius-lg);
+  box-shadow: var(--sl-elevation-sm);
+  padding: var(--sl-space-5);
+}
+
+.card + .card {
+  margin-block-start: var(--sl-space-4);
+}
+
+.grid {
+  display: grid;
+  gap: var(--sl-space-4);
+}
+
+.grid-kpi {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.kpi {
+  background: var(--sl-color-surface);
+  border: var(--sl-border-hairline) solid var(--sl-color-border);
+  border-radius: var(--sl-radius-lg);
+  padding: var(--sl-space-4);
+}
+
+.kpi-label {
+  font-size: var(--sl-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--sl-tracking-label);
+  color: var(--sl-color-text-muted);
+}
+
+html[dir='rtl'] .kpi-label {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.kpi-value {
+  font-family: var(--sl-font-display);
+  font-size: var(--sl-font-size-2xl);
+  font-weight: var(--sl-font-weight-bold);
+  margin-block-start: var(--sl-space-1);
+}
+
+.section-title {
+  font-size: var(--sl-font-size-xl);
+  margin-block-end: var(--sl-space-4);
+}
+
+.subsection-title {
+  font-size: var(--sl-font-size-md);
+  margin-block-end: var(--sl-space-3);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sl-space-3);
+  margin-block-end: var(--sl-space-5);
+  flex-wrap: wrap;
+}
+
+.page-header .header-spacer {
+  flex: 1;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sl-space-2);
+  height: var(--sl-size-controlMd);
+  padding: 0 var(--sl-space-4);
+  border-radius: var(--sl-radius-md);
+  border: var(--sl-border-hairline) solid var(--sl-color-border);
+  background: var(--sl-color-surface);
+  color: var(--sl-color-text-primary);
+  font-weight: var(--sl-font-weight-medium);
+  font-size: var(--sl-font-size-sm);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--sl-color-surface-alt);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--sl-color-accent);
+  border-color: var(--sl-color-accent);
+  color: var(--sl-color-on-accent);
+}
+
+.btn-primary:hover {
+  background: var(--sl-color-accent-hover);
+}
+
+.btn-danger {
+  color: var(--sl-color-danger);
+  border-color: var(--sl-color-danger);
+}
+
+.btn-sm {
+  height: var(--sl-size-controlSm);
+  padding: 0 var(--sl-space-3);
+  font-size: var(--sl-font-size-xs);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sl-space-1);
+  margin-block-end: var(--sl-space-3);
+}
+
+.field label {
+  font-size: var(--sl-font-size-sm);
+  color: var(--sl-color-text-secondary);
+  font-weight: var(--sl-font-weight-medium);
+}
+
+.input,
+.select {
+  height: var(--sl-size-controlMd);
+  padding: 0 var(--sl-space-3);
+  border-radius: var(--sl-radius-md);
+  border: var(--sl-border-hairline) solid var(--sl-color-border);
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text-primary);
+  font-size: var(--sl-font-size-sm);
+  width: 100%;
+}
+
+.form-row {
+  display: flex;
+  gap: var(--sl-space-3);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+/* ── Table ────────────────────────────────────────────────────────────── */
+.table-wrap {
+  overflow-x: auto;
+}
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--sl-font-size-sm);
+}
+
+table.data th,
+table.data td {
+  text-align: start;
+  padding: var(--sl-space-3);
+  border-block-end: var(--sl-border-hairline) solid var(--sl-color-border);
+}
+
+table.data th {
+  color: var(--sl-color-text-muted);
+  font-size: var(--sl-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--sl-tracking-label);
+  font-weight: var(--sl-font-weight-semibold);
+}
+
+html[dir='rtl'] table.data th {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+table.data tbody tr:hover {
+  background: var(--sl-color-surface-alt);
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  color: var(--sl-color-text-muted);
+}
+
+/* ── Chips / badges ───────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sl-space-1);
+  padding: 2px var(--sl-space-2);
+  border-radius: var(--sl-radius-pill);
+  font-size: var(--sl-font-size-xs);
+  font-weight: var(--sl-font-weight-medium);
+}
+
+.chip-success {
+  background: var(--sl-color-success-subtle);
+  color: var(--sl-color-success);
+}
+.chip-info {
+  background: var(--sl-color-info-subtle);
+  color: var(--sl-color-info);
+}
+.chip-warning {
+  background: var(--sl-color-warning-subtle);
+  color: var(--sl-color-warning);
+}
+.chip-danger {
+  background: var(--sl-color-danger-subtle);
+  color: var(--sl-color-danger);
+}
+.chip-neutral {
+  background: var(--sl-color-surface-alt);
+  color: var(--sl-color-text-secondary);
+}
+
+/* Status chips row (Dashboard system status). */
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sl-space-3);
+}
+
+/* ── States ───────────────────────────────────────────────────────────── */
+.empty-state,
+.loading-state {
+  padding: var(--sl-space-10);
+  text-align: center;
+  color: var(--sl-color-text-muted);
+}
+
+.banner {
+  padding: var(--sl-space-3) var(--sl-space-4);
+  border-radius: var(--sl-radius-md);
+  font-size: var(--sl-font-size-sm);
+  margin-block-end: var(--sl-space-4);
+}
+.banner-warning {
+  background: var(--sl-color-warning-subtle);
+  color: var(--sl-color-warning);
+}
+.banner-danger {
+  background: var(--sl-color-danger-subtle);
+  color: var(--sl-color-danger);
+}
+.banner-info {
+  background: var(--sl-color-info-subtle);
+  color: var(--sl-color-info);
+}
+
+/* ── Auth screen ──────────────────────────────────────────────────────── */
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--sl-space-4);
+}
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* ── Coming-soon (FUTURE stub) empty state ────────────────────────────── */
+.coming-soon {
+  display: grid;
+  place-items: center;
+  min-height: 60vh;
+}
+.coming-soon-card {
+  max-width: 440px;
+  text-align: center;
+}
+
+.muted {
+  color: var(--sl-color-text-muted);
+  font-size: var(--sl-font-size-sm);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sl-space-4);
+}
+.inline {
+  display: flex;
+  gap: var(--sl-space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}

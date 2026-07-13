@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SiteLink Back Office</title>
+    <script>
+      // Pre-hydration: apply saved theme + language/direction before first paint
+      // to avoid a flash of the wrong theme or layout direction (FR-X-THEME-2).
+      (function () {
+        try {
+          var t = localStorage.getItem('sitelink.theme');
+          if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', t);
+          var l = localStorage.getItem('sitelink.language');
+          if (l) {
+            document.documentElement.setAttribute('lang', l);
+            document.documentElement.setAttribute('dir', l === 'he' ? 'rtl' : 'ltr');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

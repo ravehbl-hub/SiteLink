@@ -14,3 +14,6 @@ build/
 coverage/
 .turbo/
 *.tsbuildinfo
+# Local Claude Code settings + agent worktrees (never commit)
+.claude/settings.local.json
+.claude/worktrees/

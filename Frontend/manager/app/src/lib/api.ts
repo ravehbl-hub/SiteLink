@@ -8,6 +8,11 @@
  *   into a thrown `ApiError`.
  * - 204 responses resolve to `undefined`.
  */
+// SDK 54's `expo-file-system` root exports the new File/Directory API; the
+// `uploadAsync` helper (native file read + raw binary PUT, no Blob) lives in the
+// legacy namespace. Importing it here avoids RN's broken fetch(uri)->blob path.
+import * as FileSystem from 'expo-file-system/legacy';
+
 import { config } from './config';
 import { supabase } from './supabase';
 
@@ -111,20 +116,31 @@ export const api = {
 /**
  * Upload bytes to a Supabase signed upload URL (Architecture §7a step 3).
  * The back end mints the URL; the client PUTs the object directly to Supabase.
+ *
+ * Uses `expo-file-system` `uploadAsync` (BINARY_CONTENT) so the native layer
+ * reads the local `file://`/`content://` URI and streams the raw bytes as the
+ * PUT body. RN's `fetch(uri) -> blob -> fetch(body: blob)` pattern is unreliable
+ * on Hermes/New-Arch and throws "Network request failed" before the request is
+ * sent, so we avoid Blob entirely.
  */
 export async function uploadToSignedUrl(
   uploadUrl: string,
   uri: string,
   mimeType: string,
 ): Promise<void> {
-  const fileRes = await fetch(uri);
-  const blob = await fileRes.blob();
-  const res = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': mimeType },
-    body: blob,
-  });
-  if (!res.ok) {
-    throw new ApiError(res.status, 'UPLOAD_FAILED', `Storage upload failed (${res.status})`);
+  let result: FileSystem.FileSystemUploadResult;
+  try {
+    result = await FileSystem.uploadAsync(uploadUrl, uri, {
+      httpMethod: 'PUT',
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      // Supabase signed upload URLs honour the object Content-Type.
+      headers: { 'Content-Type': mimeType },
+    });
+  } catch (e) {
+    throw new ApiError(0, 'UPLOAD_FAILED', e instanceof Error ? e.message : 'Storage upload failed');
+  }
+  // uploadAsync resolves (does not throw) on non-2xx HTTP status; inspect it.
+  if (result.status < 200 || result.status >= 300) {
+    throw new ApiError(result.status, 'UPLOAD_FAILED', `Storage upload failed (${result.status})`);
   }
 }

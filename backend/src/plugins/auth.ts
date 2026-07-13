@@ -139,12 +139,12 @@ export const READ_ROLES: Role[] = [Role.ADMIN, Role.MANAGER, Role.PARTNER];
  * when the caller's role is FOREMAN (see scopeForForeman below). requireRole is the
  * COARSE gate; it is NEVER the whole authorization story for these routes.
  *
- * WORKER_ROLES — self-scoped Worker surfaces. NOTE (SECURITY BLOCKER): there is no
- * schema link from a WORKER User to their Worker row (Worker has no userId/authUserId;
- * User has no worker relation; Worker.email is nullable and non-unique). Worker
- * self-data endpoints are therefore NOT wired in this stage — see
- * modules/self/README notes and the Servio report. This bundle exists so the routes
- * can be added the moment Savant introduces the link, without touching the gate.
+ * WORKER_ROLES — self-scoped Worker surfaces. Worker→Worker identity is the 1:1
+ * FK Worker.userId (migration 20260713200000; NEVER the nullable/non-unique
+ * Worker.email). Self-data endpoints (/working-hours, /salary/calculate,
+ * /reports/payslip.pdf, /requests) resolve the caller's own worker via
+ * lib/scope.resolveWorkerId / requireWorkerId (fail-closed: empty read / 403
+ * write when unlinked). A WORKER cannot approve/reject (MANAGER-gated).
  *
  * BACKOFFICE_ROLES — ADMIN only this phase (NOT partner).
  */

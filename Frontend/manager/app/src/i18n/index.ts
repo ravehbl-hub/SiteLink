@@ -42,6 +42,12 @@ export function isRtlLanguage(lang: Language): boolean {
 
 if (!i18n.isInitialized) {
   void i18n.use(initReactI18next).init({
+    // React Native (Hermes) ships an incomplete Intl without Intl.PluralRules,
+    // which i18next v23's default JSON v4 plural format requires — it warns and
+    // falls back at runtime. We use no ICU plurals, so pin the v3 format to keep
+    // pluralization deterministic and silence the "not Intl API compatible"
+    // warning without pulling in an Intl.PluralRules polyfill.
+    compatibilityJSON: 'v3',
     resources: {
       en: { translation: en },
       he: { translation: he },

@@ -19,6 +19,8 @@ import { isoWeekKey, monthKey, toDateOnly, toISORequired } from '../../lib/dates
 import { mapAttendance } from '../../lib/mappers.js';
 import { toNumber } from '../../lib/money.js';
 import { paginate } from '../../lib/pagination.js';
+import { assertWorkerInScope, isForeman } from '../../lib/scope.js';
+import type { AuthUser } from '../../plugins/types.js';
 import type {
   createAttendanceSchema,
   listAttendanceQuery,
@@ -31,9 +33,32 @@ type UpdateInput = z.infer<typeof updateAttendanceSchema>;
 type ListQuery = z.infer<typeof listAttendanceQuery>;
 type HoursQuery = z.infer<typeof workingHoursQuery>;
 
+/**
+ * Prisma `where` fragment that HARD-scopes attendance rows to a FOREMAN's site.
+ * ADMIN/MANAGER (or no caller) → `{}` (unscoped). A Foreman with no configured
+ * primarySite → an impossible predicate so they see nothing (fail-closed).
+ */
+function foremanAttendanceScope(caller?: AuthUser): Record<string, unknown> {
+  if (!caller || !isForeman(caller)) return {};
+  if (!caller.primarySiteId) return { id: '__no_site_for_foreman__' };
+  return {
+    worker: {
+      assignments: { some: { unassignedAt: null, siteId: caller.primarySiteId } },
+    },
+  };
+}
+
 export class AttendanceService {
-  async list(query: ListQuery): Promise<Paginated<AttendanceRecord>> {
+  /**
+   * List attendance. When `caller` is a FOREMAN the result is HARD-scoped to workers
+   * on their site(s) via a `worker.assignments` filter — regardless of any client
+   * ?workerId / ?siteId, which cannot widen the scope (a cross-site workerId simply
+   * matches nothing). ADMIN/MANAGER (or no caller) are unscoped.
+   */
+  async list(query: ListQuery, caller?: AuthUser): Promise<Paginated<AttendanceRecord>> {
+    const foremanScope = foremanAttendanceScope(caller);
     const where = {
+      ...foremanScope,
       ...(query.workerId ? { workerId: query.workerId } : {}),
       ...(query.siteId ? { siteId: query.siteId } : {}),
       ...(query.from || query.to
@@ -61,7 +86,11 @@ export class AttendanceService {
     });
   }
 
-  async create(input: CreateInput): Promise<AttendanceRecord> {
+  async create(input: CreateInput, caller?: AuthUser): Promise<AttendanceRecord> {
+    // SECURITY: a FOREMAN may only create attendance for a worker on their site(s).
+    if (caller && isForeman(caller)) {
+      await assertWorkerInScope(caller, input.workerId);
+    }
     // Enforce exclusivity: reject a second record for the same worker/day.
     const date = new Date(input.date);
     const existing = await prisma.attendanceRecord.findUnique({
@@ -83,9 +112,13 @@ export class AttendanceService {
     return mapAttendance(row);
   }
 
-  async update(id: string, input: UpdateInput): Promise<AttendanceRecord> {
+  async update(id: string, input: UpdateInput, caller?: AuthUser): Promise<AttendanceRecord> {
     const current = await prisma.attendanceRecord.findUnique({ where: { id } });
     if (!current) throw AppError.notFound('Attendance record not found');
+    // SECURITY: a FOREMAN may only edit records for workers on their site(s).
+    if (caller && isForeman(caller)) {
+      await assertWorkerInScope(caller, current.workerId);
+    }
     const row = await prisma.attendanceRecord.update({
       where: { id },
       data: {
@@ -99,19 +132,24 @@ export class AttendanceService {
     return mapAttendance(row);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, caller?: AuthUser): Promise<void> {
     const current = await prisma.attendanceRecord.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, workerId: true },
     });
     if (!current) throw AppError.notFound('Attendance record not found');
+    // SECURITY: a FOREMAN may only delete records for workers on their site(s).
+    if (caller && isForeman(caller)) {
+      await assertWorkerInScope(caller, current.workerId);
+    }
     await prisma.attendanceRecord.delete({ where: { id } });
   }
 
   /** Derived Working Hours aggregate, bucketed by day/week/month (FR-MGR-ATT-2). */
-  async workingHours(query: HoursQuery): Promise<WorkingHours[]> {
+  async workingHours(query: HoursQuery, caller?: AuthUser): Promise<WorkingHours[]> {
     const rows = await prisma.attendanceRecord.findMany({
       where: {
+        ...foremanAttendanceScope(caller),
         ...(query.workerId ? { workerId: query.workerId } : {}),
         ...(query.siteId ? { siteId: query.siteId } : {}),
         date: { gte: new Date(query.from), lte: new Date(query.to) },

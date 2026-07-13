@@ -27,7 +27,9 @@ export async function requestRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/requests', guard, async (req, reply) => {
     const body = createRequestSchema.parse(req.body);
-    return reply.status(201).send(await service.create(body));
+    // requestedById = the acting Manager/Admin (server-derived). A Worker-self
+    // submission path is NOT wired this phase — no Worker→User link (see report).
+    return reply.status(201).send(await service.create(body, req.appUser!.id));
   });
 
   app.patch('/requests/:id/approve', guard, async (req) => {

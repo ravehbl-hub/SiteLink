@@ -15,6 +15,7 @@ import type {
   User as PUser,
   Worker as PWorker,
   WorkerDoc as PWorkerDoc,
+  WorkerRating as PRating,
   WorkerRequest as PRequest,
   WorkerSalaryData as PSalaryData,
 } from '../generated/prisma/client.js';
@@ -41,6 +42,7 @@ import type {
   WorkerDoc,
   WorkerDocType,
   WorkerLevel,
+  WorkerRating,
   WorkerRequest,
   WorkerSalaryData,
 } from '@sitelink/shared';
@@ -215,6 +217,19 @@ export function mapRequest(r: PRequest): WorkerRequest {
     resolvedById: r.resolvedById ?? null,
     resolvedAt: toISO(r.resolvedAt),
     resolutionNotes: r.resolutionNotes ?? null,
+    createdAt: toISORequired(r.createdAt),
+    updatedAt: toISORequired(r.updatedAt),
+  };
+}
+
+export function mapRating(r: PRating): WorkerRating {
+  return {
+    id: r.id,
+    workerId: r.workerId,
+    foremanId: r.foremanId,
+    date: toISORequired(r.date),
+    score: r.score,
+    notes: r.notes ?? null,
     createdAt: toISORequired(r.createdAt),
     updatedAt: toISORequired(r.updatedAt),
   };

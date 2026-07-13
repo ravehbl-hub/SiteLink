@@ -129,3 +129,25 @@ export default fp(
  */
 export const MANAGER_ROLES: Role[] = [Role.ADMIN, Role.MANAGER];
 export const READ_ROLES: Role[] = [Role.ADMIN, Role.MANAGER, Role.PARTNER];
+
+/**
+ * Phase 05 Stage B role bundles.
+ *
+ * FOREMAN_ROLES — Foreman-facing surfaces (site-scoped dashboard, attendance for
+ * their site's workers, ratings). ADMIN/MANAGER are included so back-office staff
+ * can exercise the same routes; the SERVICE layer applies Foreman site-scoping only
+ * when the caller's role is FOREMAN (see scopeForForeman below). requireRole is the
+ * COARSE gate; it is NEVER the whole authorization story for these routes.
+ *
+ * WORKER_ROLES — self-scoped Worker surfaces. NOTE (SECURITY BLOCKER): there is no
+ * schema link from a WORKER User to their Worker row (Worker has no userId/authUserId;
+ * User has no worker relation; Worker.email is nullable and non-unique). Worker
+ * self-data endpoints are therefore NOT wired in this stage — see
+ * modules/self/README notes and the Servio report. This bundle exists so the routes
+ * can be added the moment Savant introduces the link, without touching the gate.
+ *
+ * BACKOFFICE_ROLES — ADMIN only this phase (NOT partner).
+ */
+export const FOREMAN_ROLES: Role[] = [Role.ADMIN, Role.MANAGER, Role.FOREMAN];
+export const WORKER_ROLES: Role[] = [Role.WORKER];
+export const BACKOFFICE_ROLES: Role[] = [Role.ADMIN];

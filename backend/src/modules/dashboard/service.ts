@@ -157,6 +157,28 @@ export class DashboardService {
     };
   }
 
+  /**
+   * Worker-count report: active headcount per site (FR-FOR worker-count). When
+   * `siteId` is given, just that site; otherwise every active site. The caller-scope
+   * (effective siteId) is resolved in the route, so a FOREMAN only ever passes their
+   * own site here.
+   */
+  async workerCount(siteId?: string): Promise<WorkersPerSite[]> {
+    const siteWhere = siteId ? { id: siteId } : { isArchived: false };
+    const sites = await prisma.site.findMany({
+      where: siteWhere,
+      select: { id: true, name: true },
+    });
+    const out: WorkersPerSite[] = [];
+    for (const s of sites) {
+      const workerCount = await prisma.worker.count({
+        where: { isArchived: false, assignments: { some: { siteId: s.id } } },
+      });
+      out.push({ siteId: s.id, siteName: s.name, workerCount });
+    }
+    return out;
+  }
+
   /** Distinct worker ids with attendance in the window (optionally site-scoped). */
   private async workersWithActivity(
     from: Date,

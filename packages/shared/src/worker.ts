@@ -28,6 +28,12 @@ export interface Worker extends Timestamped, Archivable {
   residence?: string | null;
   /** Date of starting work (FR-MGR-EMP-2). */
   startDate?: ISODate | null;
+  /**
+   * Optional 1:1 link to the User login for this worker (Phase 05 self-scoping).
+   * Present when the worker has a provisioned login; null/absent otherwise.
+   * Safe join key (never email).
+   */
+  userId?: ID | null;
 }
 
 /**

@@ -25,9 +25,18 @@ type ResolveInput = z.infer<typeof resolveRequestSchema>;
 type ListQuery = z.infer<typeof listRequestsQuery>;
 
 export class RequestsService {
-  async list(query: ListQuery): Promise<Paginated<WorkerRequest>> {
+  /**
+   * List requests. When `forcedWorkerId` is provided (a WORKER self-scoping) the
+   * result is HARD-filtered to that worker id, ignoring any client ?workerId — a
+   * WORKER can only ever see their OWN requests.
+   */
+  async list(query: ListQuery, forcedWorkerId?: string): Promise<Paginated<WorkerRequest>> {
     const where = {
-      ...(query.workerId ? { workerId: query.workerId } : {}),
+      ...(forcedWorkerId
+        ? { workerId: forcedWorkerId }
+        : query.workerId
+          ? { workerId: query.workerId }
+          : {}),
       ...(query.status ? { status: query.status } : {}),
     };
     const skip = (query.page - 1) * query.pageSize;
@@ -51,10 +60,18 @@ export class RequestsService {
    * derived at the route — the acting Manager, or in a future Worker-self flow the
    * Worker's own user). Status is always PENDING; it is only advanced via resolve().
    */
-  async create(input: CreateInput, requestedById?: string): Promise<WorkerRequest> {
+  async create(
+    input: CreateInput,
+    requestedById?: string,
+    forcedWorkerId?: string,
+  ): Promise<WorkerRequest> {
+    // WORKER self-submit forces workerId to the caller's own; the manager path uses
+    // the explicit body workerId (validated present at the route).
+    const workerId = forcedWorkerId ?? input.workerId;
+    if (!workerId) throw AppError.validation('workerId is required');
     const row = await prisma.workerRequest.create({
       data: {
-        workerId: input.workerId,
+        workerId,
         requestedById: requestedById ?? null,
         type: input.type,
         amount: input.amount ?? null,

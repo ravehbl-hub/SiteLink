@@ -34,6 +34,47 @@ export function isForeman(user: AuthUser): boolean {
   return user.role === Role.FOREMAN;
 }
 
+/** True when the caller is a WORKER (self-scoped surfaces). */
+export function isWorker(user: AuthUser): boolean {
+  return user.role === Role.WORKER;
+}
+
+/**
+ * WORKER → Worker resolution (Phase 05 Stage B SECURITY JOIN).
+ *
+ * Given a WORKER caller (`req.appUser`), resolve THEIR own Worker row id via the
+ * ONLY safe link — the 1:1 `Worker.userId` FK (Savant's `WorkerLogin` relation).
+ * We NEVER fall back to email (nullable + non-unique = spoofable). If the caller
+ * has no linked Worker row the result is fail-closed: the endpoint must treat the
+ * caller as having no worker data (403 for writes, empty for reads).
+ *
+ * Returns the resolved Worker id, or `null` when the caller (a WORKER) has no
+ * linked worker record. Callers that reach this with a non-WORKER role are
+ * mis-wired → 403 (this helper is only for the WORKER self surface).
+ */
+export async function resolveWorkerId(user: AuthUser): Promise<string | null> {
+  if (user.role !== Role.WORKER) {
+    // Only the WORKER self surface uses this join. Anyone else is mis-routed.
+    throw AppError.forbidden();
+  }
+  const worker = await prisma.worker.findUnique({
+    where: { userId: user.id },
+    select: { id: true },
+  });
+  return worker?.id ?? null;
+}
+
+/**
+ * Like `resolveWorkerId` but throws 403 when the WORKER has no linked Worker row —
+ * for WRITE paths where "no worker record" must be a hard denial, never a silent
+ * no-op. Reads that should return an empty set use `resolveWorkerId` and branch.
+ */
+export async function requireWorkerId(user: AuthUser): Promise<string> {
+  const workerId = await resolveWorkerId(user);
+  if (!workerId) throw AppError.forbidden();
+  return workerId;
+}
+
 /**
  * Resolve the caller's site scope. ADMIN/MANAGER → { all: true } (unscoped).
  * FOREMAN → { siteIds: [...] } derived from primarySiteId (empty if unset).

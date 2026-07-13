@@ -5,7 +5,9 @@ import { z } from 'zod';
 import { RequestStatus, RequestType } from '@sitelink/shared';
 
 export const createRequestSchema = z.object({
-  workerId: z.string().min(1),
+  // Optional: REQUIRED for ADMIN/MANAGER (enforced in-handler). For a WORKER caller
+  // it is IGNORED and forced to the caller's own resolved Worker id.
+  workerId: z.string().min(1).optional(),
   type: z.nativeEnum(RequestType),
   amount: z.number().positive().nullish(),
   currency: z.string().nullish(),

@@ -18,6 +18,7 @@ import type {
   WorkerSalaryData,
   WorkerWithDetails,
 } from '@sitelink/shared';
+import { Role } from '@sitelink/shared';
 import type { SignedReadResponse, SignedUploadResponse } from './dto.js';
 import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
@@ -131,7 +132,73 @@ export class WorkersService {
           : {}),
       },
     });
+
+    // OPTIONAL create-time WORKER LOGIN dual-write (Phase 05 Stage B). Gated purely
+    // on `input.login` being provided; when absent the Worker is created with no
+    // login (unchanged path). Mirrors the users-service provisioning:
+    //   Supabase identity → app User(role WORKER, authUserId) → link Worker.userId.
+    // The whole thing is one unit of work: if ANY step fails we roll back everything
+    // we created (Supabase identity, User row, and the Worker itself) so no orphaned
+    // Supabase identity, no half-linked login, and no login-less ghost worker survive.
+    if (input.login) {
+      await this.provisionAndLinkLogin(created.id, input);
+    }
+
     return this.getWithDetails(created.id);
+  }
+
+  /**
+   * Provision a Supabase identity + app User(role WORKER) and link it to the just-
+   * created Worker via Worker.userId. Compensating rollback on any failure: delete
+   * the User row (if written), the Supabase identity (if created), and the Worker
+   * (so a login-provisioning failure never leaves a partial Worker behind).
+   */
+  private async provisionAndLinkLogin(
+    workerId: string,
+    input: CreateInput,
+  ): Promise<void> {
+    const login = input.login;
+    if (!login) return;
+
+    // Guard the app-side unique constraint up front (User.email is unique).
+    const existing = await prisma.user.findUnique({ where: { email: login.email } });
+    if (existing) {
+      await prisma.worker.delete({ where: { id: workerId } }).catch(() => undefined);
+      throw AppError.conflict('A user with this login email already exists');
+    }
+
+    // Step 1 — provision the Supabase identity.
+    const { authUserId } = await this.supabase
+      .createAuthUser({ email: login.email, password: login.password })
+      .catch(async (err: unknown) => {
+        // No identity was created → only the Worker needs unwinding.
+        await prisma.worker.delete({ where: { id: workerId } }).catch(() => undefined);
+        throw err instanceof AppError
+          ? err
+          : AppError.conflict('Failed to provision worker login');
+      });
+
+    // Step 2 — app User row (role WORKER) + link Worker.userId, atomically.
+    try {
+      await prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            authUserId,
+            role: Role.WORKER,
+            fullName: login.fullName ?? `${input.firstName} ${input.lastName}`.trim(),
+            email: login.email,
+          },
+        });
+        await tx.worker.update({ where: { id: workerId }, data: { userId: user.id } });
+      });
+    } catch (err) {
+      // Compensate — unwind everything so nothing partial is left behind.
+      await this.supabase.deleteAuthUser(authUserId).catch(() => undefined);
+      await prisma.worker.delete({ where: { id: workerId } }).catch(() => undefined);
+      throw err instanceof AppError
+        ? err
+        : AppError.conflict('Failed to link worker login; provisioning rolled back');
+    }
   }
 
   async update(id: string, input: UpdateInput): Promise<WorkerWithDetails> {

@@ -7,6 +7,7 @@
  *   GET    /working-hours          derived aggregate (?grain=DAY|WEEK|MONTH)
  */
 import type { FastifyInstance } from 'fastify';
+import { Role } from '@sitelink/shared';
 import { FOREMAN_ROLES } from '../../plugins/auth.js';
 import { AttendanceService } from './service.js';
 import {
@@ -26,6 +27,12 @@ import {
 export async function attendanceRoutes(app: FastifyInstance): Promise<void> {
   const service = new AttendanceService();
   const guard = { preHandler: [app.authenticate, app.requireRole(...FOREMAN_ROLES)] };
+  // WORKER may read their OWN working-hours only. ADMIN/MANAGER/FOREMAN stay on the
+  // manager surface; the service self-scopes the WORKER caller to their resolved
+  // Worker row (ignoring any client ?workerId/?siteId) — see workingHours().
+  const selfHoursGuard = {
+    preHandler: [app.authenticate, app.requireRole(...FOREMAN_ROLES, Role.WORKER)],
+  };
 
   app.get('/attendance', guard, async (req) => {
     const query = listAttendanceQuery.parse(req.query);
@@ -50,7 +57,7 @@ export async function attendanceRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(204).send();
   });
 
-  app.get('/working-hours', guard, async (req) => {
+  app.get('/working-hours', selfHoursGuard, async (req) => {
     const query = workingHoursQuery.parse(req.query);
     return service.workingHours(query, req.appUser!);
   });

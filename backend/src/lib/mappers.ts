@@ -94,6 +94,7 @@ function workerImage(w: PWorker): FileRef | null {
 export function mapWorker(w: PWorker): Worker {
   return {
     id: w.id,
+    userId: w.userId ?? null,
     image: workerImage(w),
     firstName: w.firstName,
     lastName: w.lastName,

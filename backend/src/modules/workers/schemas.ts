@@ -18,6 +18,18 @@ export const createWorkerSchema = z.object({
   residence: z.string().nullish(),
   startDate: z.string().datetime().nullish(),
   siteIds: z.array(z.string()).optional(),
+  // OPTIONAL WORKER LOGIN provisioning (Phase 05 Stage B). When present, the create
+  // becomes a dual-write: a Supabase identity + app User(role WORKER) are provisioned
+  // and linked to the new Worker via Worker.userId. Omit it entirely to create a
+  // Worker with NO login (the default, unchanged behavior). `password` is optional —
+  // omit to send a Supabase invite (worker sets their own password).
+  login: z
+    .object({
+      email: z.string().email(),
+      password: z.string().min(8).optional(),
+      fullName: z.string().min(1).optional(),
+    })
+    .optional(),
   // Optional Worker Salary data captured in the wizard (FR-MGR-EMP-4).
   salaryData: z
     .object({

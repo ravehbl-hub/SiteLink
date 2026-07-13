@@ -19,7 +19,7 @@ import { isoWeekKey, monthKey, toDateOnly, toISORequired } from '../../lib/dates
 import { mapAttendance } from '../../lib/mappers.js';
 import { toNumber } from '../../lib/money.js';
 import { paginate } from '../../lib/pagination.js';
-import { assertWorkerInScope, isForeman } from '../../lib/scope.js';
+import { assertWorkerInScope, isForeman, isWorker, resolveWorkerId } from '../../lib/scope.js';
 import type { AuthUser } from '../../plugins/types.js';
 import type {
   createAttendanceSchema,
@@ -147,11 +147,25 @@ export class AttendanceService {
 
   /** Derived Working Hours aggregate, bucketed by day/week/month (FR-MGR-ATT-2). */
   async workingHours(query: HoursQuery, caller?: AuthUser): Promise<WorkingHours[]> {
+    // WORKER self-scope: FORCE the filter to the caller's OWN resolved Worker id,
+    // ignoring any client-supplied ?workerId/?siteId. No linked worker → empty set
+    // (fail-closed read). This branch never trusts the client for identity.
+    let selfWorkerId: string | undefined;
+    if (caller && isWorker(caller)) {
+      const resolved = await resolveWorkerId(caller);
+      if (!resolved) return [];
+      selfWorkerId = resolved;
+    }
+
     const rows = await prisma.attendanceRecord.findMany({
       where: {
         ...foremanAttendanceScope(caller),
-        ...(query.workerId ? { workerId: query.workerId } : {}),
-        ...(query.siteId ? { siteId: query.siteId } : {}),
+        ...(selfWorkerId
+          ? { workerId: selfWorkerId }
+          : query.workerId
+            ? { workerId: query.workerId }
+            : {}),
+        ...(selfWorkerId ? {} : query.siteId ? { siteId: query.siteId } : {}),
         date: { gte: new Date(query.from), lte: new Date(query.to) },
       },
       orderBy: { date: 'asc' },

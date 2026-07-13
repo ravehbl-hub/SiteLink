@@ -6,11 +6,16 @@
  */
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
+import { Role } from '@sitelink/shared';
 import { MANAGER_ROLES } from '../../plugins/auth.js';
+import { requireWorkerId } from '../../lib/scope.js';
+import { AppError } from '../../lib/errors.js';
 import { ReportsService } from './service.js';
 
 const payslipQuery = z.object({
-  workerId: z.string().min(1),
+  // Optional: REQUIRED for ADMIN/MANAGER (enforced in-handler); IGNORED for a WORKER
+  // caller, whose workerId is forced to their own resolved Worker id.
+  workerId: z.string().min(1).optional(),
   siteId: z.string().optional(),
   from: z.string().datetime(),
   to: z.string().datetime(),
@@ -43,12 +48,28 @@ function dirFor(lang: 'he' | 'en' | 'tr'): 'ltr' | 'rtl' {
 export async function reportRoutes(app: FastifyInstance): Promise<void> {
   const service = new ReportsService();
   const guard = { preHandler: [app.authenticate, app.requireRole(...MANAGER_ROLES)] };
+  // WORKER may pull their OWN payslip PDF only (workerId forced to their resolved
+  // Worker). ADMIN/MANAGER must supply an explicit workerId. Cross-worker probing
+  // (?workerId=<other>) by a WORKER is ignored.
+  const payslipGuard = {
+    preHandler: [app.authenticate, app.requireRole(...MANAGER_ROLES, Role.WORKER)],
+  };
 
-  app.get('/reports/payslip.pdf', guard, async (req, reply) => {
+  app.get('/reports/payslip.pdf', payslipGuard, async (req, reply) => {
     const q = payslipQuery.parse(req.query);
+    let workerId: string;
+    let siteId: string | undefined;
+    if (req.appUser!.role === Role.WORKER) {
+      workerId = await requireWorkerId(req.appUser!); // fail-closed 403 if unlinked
+      siteId = undefined; // never trust a WORKER-supplied siteId
+    } else {
+      if (!q.workerId) throw AppError.validation('workerId is required');
+      workerId = q.workerId;
+      siteId = q.siteId;
+    }
     const pdf = await service.payslipPdf({
-      workerId: q.workerId,
-      siteId: q.siteId,
+      workerId,
+      siteId,
       from: q.from,
       to: q.to,
       direction: dirFor(q.lang),

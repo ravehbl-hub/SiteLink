@@ -19,7 +19,13 @@ import { isoWeekKey, monthKey, toDateOnly, toISORequired } from '../../lib/dates
 import { mapAttendance } from '../../lib/mappers.js';
 import { toNumber } from '../../lib/money.js';
 import { paginate } from '../../lib/pagination.js';
-import { assertWorkerInScope, isForeman, isWorker, resolveWorkerId } from '../../lib/scope.js';
+import {
+  assertWorkerInScope,
+  effectiveSiteId,
+  isForeman,
+  isWorker,
+  resolveWorkerId,
+} from '../../lib/scope.js';
 import type { AuthUser } from '../../plugins/types.js';
 import type {
   createAttendanceSchema,
@@ -37,6 +43,17 @@ type HoursQuery = z.infer<typeof workingHoursQuery>;
  * Prisma `where` fragment that HARD-scopes attendance rows to a FOREMAN's site.
  * ADMIN/MANAGER (or no caller) → `{}` (unscoped). A Foreman with no configured
  * primarySite → an impossible predicate so they see nothing (fail-closed).
+ *
+ * HARDENING (nexo-back Stage B): two constraints are applied for a FOREMAN caller —
+ *   1. the WORKER must be assigned to the Foreman's site (worker.assignments), AND
+ *   2. the RECORD's own `siteId` must be the Foreman's site (or NULL).
+ * Constraint (2) closes the shared-worker cross-site leak: a worker assigned to both
+ * the Foreman's site AND another site would otherwise expose their OTHER-site
+ * attendance rows to the Foreman. We now only return rows LOGGED AT the Foreman's
+ * site. `AttendanceRecord.siteId` is nullable; a NULL siteId means legacy/unspecified
+ * and — since the worker is already confirmed on the Foreman's site by (1) — is
+ * INCLUDED (treated as the Foreman's own, not another site's). Only a record whose
+ * siteId is explicitly some OTHER site is excluded.
  */
 function foremanAttendanceScope(caller?: AuthUser): Record<string, unknown> {
   if (!caller || !isForeman(caller)) return {};
@@ -45,7 +62,20 @@ function foremanAttendanceScope(caller?: AuthUser): Record<string, unknown> {
     worker: {
       assignments: { some: { unassignedAt: null, siteId: caller.primarySiteId } },
     },
+    OR: [{ siteId: caller.primarySiteId }, { siteId: null }],
   };
+}
+
+/**
+ * Resolve the siteId a FOREMAN's attendance record must carry (data-integrity
+ * hardening, nexo-back Stage B). Delegates to the shared `effectiveSiteId` scope
+ * helper: a supplied siteId that is NOT the Foreman's own site → 403; a supplied
+ * siteId equal to their site → that site; no siteId supplied → defaults to their
+ * (single) site. A Foreman with no primarySite → 403 (fail-closed). This mirrors
+ * "a foreman acts on their own site" — they can never stamp another site's id.
+ */
+function forceForemanSite(caller: AuthUser, requestedSiteId: string | null | undefined): string {
+  return effectiveSiteId(caller, requestedSiteId ?? undefined) as string;
 }
 
 export class AttendanceService {
@@ -88,8 +118,13 @@ export class AttendanceService {
 
   async create(input: CreateInput, caller?: AuthUser): Promise<AttendanceRecord> {
     // SECURITY: a FOREMAN may only create attendance for a worker on their site(s).
+    // The record's siteId is then FORCED to the Foreman's own site (data-integrity
+    // hardening, nexo-back Stage B): passing the workerId scope check must not let a
+    // Foreman stamp the record with an ARBITRARY site.
+    let siteId = input.siteId ?? null;
     if (caller && isForeman(caller)) {
       await assertWorkerInScope(caller, input.workerId);
+      siteId = forceForemanSite(caller, input.siteId);
     }
     // Enforce exclusivity: reject a second record for the same worker/day.
     const date = new Date(input.date);
@@ -102,7 +137,7 @@ export class AttendanceService {
     const row = await prisma.attendanceRecord.create({
       data: {
         workerId: input.workerId,
-        siteId: input.siteId ?? null,
+        siteId,
         date,
         type: input.type,
         hours: input.hours ?? null,
@@ -115,14 +150,22 @@ export class AttendanceService {
   async update(id: string, input: UpdateInput, caller?: AuthUser): Promise<AttendanceRecord> {
     const current = await prisma.attendanceRecord.findUnique({ where: { id } });
     if (!current) throw AppError.notFound('Attendance record not found');
-    // SECURITY: a FOREMAN may only edit records for workers on their site(s).
+    // SECURITY: a FOREMAN may only edit records for workers on their site(s), and
+    // may only (re)stamp the record with THEIR OWN site — never an arbitrary one
+    // (data-integrity hardening, nexo-back Stage B).
+    let siteIdPatch: Record<string, unknown> =
+      input.siteId !== undefined ? { siteId: input.siteId } : {};
     if (caller && isForeman(caller)) {
       await assertWorkerInScope(caller, current.workerId);
+      // Force the record onto the Foreman's own site whenever siteId is supplied.
+      if (input.siteId !== undefined) {
+        siteIdPatch = { siteId: forceForemanSite(caller, input.siteId) };
+      }
     }
     const row = await prisma.attendanceRecord.update({
       where: { id },
       data: {
-        ...(input.siteId !== undefined ? { siteId: input.siteId } : {}),
+        ...siteIdPatch,
         ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
         ...(input.type !== undefined ? { type: input.type } : {}),
         ...(input.hours !== undefined ? { hours: input.hours } : {}),

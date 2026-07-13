@@ -76,13 +76,18 @@ export class SupabaseService {
         email_confirm: true,
       });
       if (error || !data.user) {
-        throw AppError.conflict(error?.message ?? 'Failed to create auth user');
+        // SECURITY: never surface the provider's raw error string to the client
+        // (it can leak Supabase-internal detail). Log server-side, return generic.
+        if (error) console.error('[supabase] createUser failed:', error.message);
+        throw AppError.conflict('Could not create user identity');
       }
       return { authUserId: data.user.id };
     }
     const { data, error } = await this.client.auth.admin.inviteUserByEmail(input.email);
     if (error || !data.user) {
-      throw AppError.conflict(error?.message ?? 'Failed to invite user');
+      // SECURITY: same as above — generic client-facing message, real error logged.
+      if (error) console.error('[supabase] inviteUserByEmail failed:', error.message);
+      throw AppError.conflict('Could not create user identity');
     }
     return { authUserId: data.user.id };
   }

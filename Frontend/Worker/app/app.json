@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "SiteLink Worker",
+    "slug": "sitelink-worker-app",
+    "scheme": "sitelink-worker",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sitelink.worker"
+    },
+    "android": {
+      "package": "com.sitelink.worker"
+    },
+    "plugins": ["expo-secure-store"]
+  }
+}

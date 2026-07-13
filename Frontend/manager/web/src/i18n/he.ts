@@ -80,6 +80,11 @@ export const he: Resources = {
     salaryCost: 'עלות שכר',
     otherCost: 'עלויות אחרות',
     computedAt: 'חושב בתאריך',
+    viewData: 'נתונים',
+    viewGraphics: 'גרפיקה',
+    financeChart: 'הכנסות מול עלויות',
+    workforceChart: 'פילוח נוכחות',
+    costs: 'עלויות',
   },
   workers: {
     title: 'עובדים',

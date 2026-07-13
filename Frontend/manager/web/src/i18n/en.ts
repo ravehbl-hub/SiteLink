@@ -78,6 +78,11 @@ export const en = {
     salaryCost: 'Salary cost',
     otherCost: 'Other cost',
     computedAt: 'Computed at',
+    viewData: 'Data',
+    viewGraphics: 'Graphics',
+    financeChart: 'Revenue vs costs',
+    workforceChart: 'Attendance breakdown',
+    costs: 'Costs',
   },
   workers: {
     title: 'Employees',

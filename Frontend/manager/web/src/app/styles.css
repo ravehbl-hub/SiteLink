@@ -404,6 +404,39 @@ table.data tbody tr:hover {
   border-radius: var(--sl-radius-pill);
 }
 
+/* ── Segmented toggle (Data / Graphics) ───────────────────────────────── */
+.segmented {
+  display: inline-flex;
+  gap: var(--sl-space-1);
+  padding: var(--sl-space-1);
+  border-radius: var(--sl-radius-md);
+  background: var(--sl-color-surface-alt);
+  border: var(--sl-border-hairline) solid var(--sl-color-border);
+}
+.segmented button {
+  appearance: none;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--sl-color-text-secondary);
+  padding: var(--sl-space-1) var(--sl-space-4);
+  border-radius: var(--sl-radius-sm);
+  font-size: var(--sl-font-size-sm);
+  line-height: 2;
+}
+.segmented button[aria-pressed='true'] {
+  background: var(--sl-color-accent);
+  color: var(--sl-color-on-accent);
+}
+
+/* ── Charts (dependency-free HTML/CSS bars) ───────────────────────────── */
+.chart-grid {
+  display: grid;
+  gap: var(--sl-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  margin-block-start: var(--sl-space-4);
+}
+
 /* ── States ───────────────────────────────────────────────────────────── */
 .empty-state,
 .loading-state {

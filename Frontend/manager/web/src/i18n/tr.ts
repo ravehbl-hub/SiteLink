@@ -80,6 +80,11 @@ export const tr: Resources = {
     salaryCost: 'Maaş maliyeti',
     otherCost: 'Diğer maliyet',
     computedAt: 'Hesaplama zamanı',
+    viewData: 'Veri',
+    viewGraphics: 'Grafik',
+    financeChart: 'Gelir vs maliyetler',
+    workforceChart: 'Devam dağılımı',
+    costs: 'Maliyetler',
   },
   workers: {
     title: 'Çalışanlar',

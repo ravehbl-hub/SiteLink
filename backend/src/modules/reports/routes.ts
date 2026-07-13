@@ -1,7 +1,8 @@
 /**
  * SiteLink back end — reports routes (FR-X-PDF). Manager/Admin-gated. Streams PDF.
- *   GET /reports/payslip.pdf     (?workerId,from,to,?siteId,?lang)
- *   GET /reports/attendance.pdf  (?from,to,?siteId,?lang)
+ *   GET /reports/payslip.pdf       (?workerId,from,to,?siteId,?lang)
+ *   GET /reports/attendance.pdf    (?from,to,?siteId,?lang)
+ *   GET /reports/profit-loss.pdf   (?from,to,?siteId,revenue,?currency,?lang)
  */
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
@@ -21,6 +22,17 @@ const attendanceQuery = z.object({
   siteId: z.string().optional(),
   from: z.string().datetime(),
   to: z.string().datetime(),
+  lang: z.enum(['he', 'en', 'tr']).default('en'),
+});
+
+// Mirrors finance `profitLossQuery` (revenue coerced from the URL string,
+// currency default 'ILS') plus the shared `lang` direction control.
+const profitLossReportQuery = z.object({
+  siteId: z.string().optional(),
+  from: z.string().datetime(),
+  to: z.string().datetime(),
+  revenue: z.coerce.number().nonnegative().default(0),
+  currency: z.string().default('ILS'),
   lang: z.enum(['he', 'en', 'tr']).default('en'),
 });
 
@@ -58,6 +70,22 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', 'attachment; filename="attendance.pdf"')
+      .send(pdf);
+  });
+
+  app.get('/reports/profit-loss.pdf', guard, async (req, reply) => {
+    const q = profitLossReportQuery.parse(req.query);
+    const pdf = await service.profitLossPdf({
+      siteId: q.siteId,
+      from: q.from,
+      to: q.to,
+      revenue: q.revenue,
+      currency: q.currency,
+      direction: dirFor(q.lang),
+    });
+    return reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', 'attachment; filename="profit-loss.pdf"')
       .send(pdf);
   });
 }

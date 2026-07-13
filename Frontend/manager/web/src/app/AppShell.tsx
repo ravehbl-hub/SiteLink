@@ -10,6 +10,7 @@ const TABS: { to: string; key: string }[] = [
   { to: '/workers', key: 'nav.workers' },
   { to: '/attendance', key: 'nav.attendance' },
   { to: '/finance', key: 'nav.finance' },
+  { to: '/pnl', key: 'nav.pnl' },
   { to: '/payment', key: 'nav.payment' },
   { to: '/salary', key: 'nav.salary' },
   { to: '/sites', key: 'nav.sites' },

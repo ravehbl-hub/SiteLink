@@ -14,7 +14,7 @@ import {
   View,
   type DocumentProps,
 } from '@react-pdf/renderer';
-import type { SalaryResult } from '@sitelink/shared';
+import type { ProfitLoss, SalaryResult } from '@sitelink/shared';
 
 const e = React.createElement;
 
@@ -81,6 +81,40 @@ export function PayslipDocument(props: {
         e(Text, { key: 'gv', style: styles.bold }, `${result.gross.toFixed(2)} ${result.currency}`),
       ]),
       ...warnings.map((w, i) => e(Text, { key: `warn${i}`, style: styles.warn }, `⚠ ${w}`)),
+    ]),
+  );
+}
+
+/** Profit & Loss PDF from a computed ProfitLoss (FR-MGR-PNL / SM-6). */
+export function ProfitLossDocument(props: {
+  meta: ReportHeaderMeta;
+  pnl: ProfitLoss;
+}): React.ReactElement<DocumentProps> {
+  const { meta, pnl } = props;
+  const money = (v: number): string => `${v.toFixed(2)} ${pnl.currency}`;
+  const lines: Array<[string, number]> = [
+    ['Revenue', pnl.revenue],
+    ['Salary cost', pnl.salaryCost],
+    ['Loans cost', pnl.loansCost],
+    ['Advances cost', pnl.advancesCost],
+    ['Other cost', pnl.otherCost],
+  ];
+  const body = lines.map(([label, amount], i) =>
+    e(View, { key: `p${i}`, style: styles.row }, [
+      e(Text, { key: 'lbl' }, label),
+      e(Text, { key: 'amt' }, money(amount)),
+    ]),
+  );
+  return e(
+    Document,
+    {},
+    e(Page, { size: 'A4', style: styles.page }, [
+      header(meta),
+      e(View, { key: 'body' }, body),
+      e(View, { key: 'net', style: styles.total }, [
+        e(Text, { key: 'nl', style: styles.bold }, 'Net profit'),
+        e(Text, { key: 'nv', style: styles.bold }, money(pnl.netProfit)),
+      ]),
     ]),
   );
 }

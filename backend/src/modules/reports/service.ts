@@ -8,15 +8,20 @@ import { toDateOnly } from '../../lib/dates.js';
 import { toNumber } from '../../lib/money.js';
 import { AttendanceType } from '@sitelink/shared';
 import { SalaryService } from '../salary/service.js';
+import { FinanceService } from '../finance/service.js';
 import {
   AttendanceSummaryDocument,
   PayslipDocument,
+  ProfitLossDocument,
   type AttendanceSummaryRow,
   type ReportHeaderMeta,
 } from './templates.js';
 
 export class ReportsService {
-  constructor(private readonly salary = new SalaryService()) {}
+  constructor(
+    private readonly salary = new SalaryService(),
+    private readonly finance = new FinanceService(),
+  ) {}
 
   async payslipPdf(params: {
     workerId: string;
@@ -109,6 +114,44 @@ export class ReportsService {
     };
 
     const doc = AttendanceSummaryDocument({ meta, rows: [...byWorker.values()] });
+    return renderToBuffer(doc);
+  }
+
+  async profitLossPdf(params: {
+    siteId?: string;
+    from: string;
+    to: string;
+    revenue: number;
+    currency: string;
+    direction: 'ltr' | 'rtl';
+  }): Promise<Buffer> {
+    // Reuse the existing on-demand P&L computation — do not duplicate it here.
+    const pnl = await this.finance.profitLoss({
+      siteId: params.siteId,
+      from: params.from,
+      to: params.to,
+      revenue: params.revenue,
+      currency: params.currency,
+    });
+
+    let siteName: string | undefined;
+    if (params.siteId) {
+      const site = await prisma.site.findUnique({
+        where: { id: params.siteId },
+        select: { name: true },
+      });
+      siteName = site?.name;
+    }
+
+    const meta: ReportHeaderMeta = {
+      title: 'Profit & Loss',
+      siteName,
+      from: toDateOnly(new Date(params.from)),
+      to: toDateOnly(new Date(params.to)),
+      direction: params.direction,
+    };
+
+    const doc = ProfitLossDocument({ meta, pnl });
     return renderToBuffer(doc);
   }
 }

@@ -3,8 +3,10 @@
  *
  * Authentication is owned by Supabase; this plugin is the single AUTHORIZATION
  * boundary:
- *   1. `authenticate` verifies the incoming Supabase JWT (HS256, SUPABASE_JWT_SECRET)
- *      — signature + exp; extracts `sub` (the Supabase auth user id).
+ *   1. `authenticate` verifies the incoming Supabase JWT — signature + exp; extracts
+ *      `sub` (the Supabase auth user id). Real Supabase sessions are signed ES256
+ *      (asymmetric signing keys) and verified against the project JWKS; forged/legacy
+ *      HS256 tokens are verified against SUPABASE_JWT_SECRET as a fallback.
  *   2. It resolves the app-level User row by `authUserId` to get role + site scope
  *      (NEVER trusts role claims from the token).
  *   3. Locked-out users are rejected (401) even with a valid token.
@@ -12,7 +14,7 @@
  *      forbidden action returns 403 with NO data leak (FR-X-RBAC-4).
  */
 import fp from 'fastify-plugin';
-import { jwtVerify } from 'jose';
+import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from 'jose';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Role } from '@sitelink/shared';
 import { prisma } from '../db/client.js';
@@ -31,20 +33,47 @@ export default fp(
   async (app) => {
     const secret = new TextEncoder().encode(app.config.SUPABASE_JWT_SECRET);
 
+    // Real Supabase sessions are ES256, signed with the project's rotating asymmetric
+    // keys published at the auth JWKS endpoint. Build the remote key set ONCE — `jose`
+    // caches fetched keys internally and refreshes on rotation, so this is not a
+    // per-request network call.
+    const issuer = `${app.config.SUPABASE_URL}/auth/v1`;
+    const jwks = createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`));
+
     /** Verify the Supabase JWT and resolve the app User. */
     async function authenticate(req: FastifyRequest, _reply: FastifyReply): Promise<void> {
       const token = extractBearer(req);
 
       let sub: string;
       try {
-        // Supabase signs access tokens with HS256 using the project JWT secret.
-        // `aud` is typically "authenticated"; we accept the default and rely on
-        // signature + expiry. We do NOT trust any role/claims here.
-        const { payload } = await jwtVerify(token, secret, {
-          algorithms: ['HS256'],
-        });
-        if (!payload.sub) throw new Error('no sub');
-        sub = payload.sub;
+        // Branch on the token's signing algorithm:
+        //   • ES256 → real Supabase access token → verify against the project JWKS
+        //     (pinning issuer + audience, which the asymmetric path lets us assert).
+        //   • HS256 → legacy/forged token signed with the project JWT secret.
+        // Either way we verify signature + expiry and do NOT trust any role claims.
+        let alg: string | undefined;
+        try {
+          alg = decodeProtectedHeader(token).alg;
+        } catch {
+          throw new Error('malformed token');
+        }
+
+        let payloadSub: string | undefined;
+        if (alg === 'ES256') {
+          const { payload } = await jwtVerify(token, jwks, {
+            algorithms: ['ES256'],
+            issuer,
+            audience: 'authenticated',
+          });
+          payloadSub = payload.sub;
+        } else {
+          const { payload } = await jwtVerify(token, secret, {
+            algorithms: ['HS256'],
+          });
+          payloadSub = payload.sub;
+        }
+        if (!payloadSub) throw new Error('no sub');
+        sub = payloadSub;
       } catch {
         // Uniform 401 — never reveal why (expired vs malformed vs bad signature).
         throw AppError.unauthorized('Invalid or expired token');

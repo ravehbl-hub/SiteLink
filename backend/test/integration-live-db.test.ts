@@ -17,7 +17,6 @@
  * the run is idempotent and leaves only the seed data behind.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import type { TestContext } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { SignJWT } from 'jose';
 import { createClient } from '@supabase/supabase-js';
@@ -44,12 +43,6 @@ function auth(token: string) {
   return { authorization: `Bearer ${token}` };
 }
 
-// A Supabase Storage error whose message names a missing bucket → treat as infra,
-// not an assertion failure (per the per-test infra/permission caveat).
-function isMissingBucket(msg: string | undefined): boolean {
-  return !!msg && /bucket.*not.*found|not.*found.*bucket|no such bucket/i.test(msg);
-}
-
 let app: FastifyInstance;
 let mgrToken: string;
 const MGR_AUTH_ID = 'seed-live-manager'; // stable authUserId we own for these tests
@@ -60,6 +53,8 @@ const createdWorkerIds: string[] = [];
 const createdUserIds: string[] = [];
 const createdAuthIds: string[] = [];
 const createdAttendanceKeys: Array<{ workerId: string; date: Date }> = [];
+// worker-docs storage object keys uploaded by live tests (delete bytes in teardown).
+const createdDocStorageKeys: string[] = [];
 
 const D = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
@@ -99,6 +94,10 @@ afterAll(async () => {
     await prisma.user.delete({ where: { id } }).catch(() => undefined);
   }
   const svc = app.supabase;
+  // Purge any bytes uploaded to the private worker-docs bucket (keep storage clean).
+  for (const key of createdDocStorageKeys) {
+    await svc.removeObject({ kind: 'doc', storageKey: key }).catch(() => undefined);
+  }
   for (const authId of createdAuthIds) {
     await svc.deleteAuthUser(authId).catch(() => undefined);
   }
@@ -420,63 +419,98 @@ describe('Live DB/Supabase integration (provisioned infra)', () => {
   // Asserts: worker-docs signed upload/read URLs are minted only through the
   // back-end authorization path, and the bucket is PRIVATE (the signed read URL is
   // token-bearing / time-limited, and the raw public object URL is not accessible).
-  it('worker-docs signed upload/read URLs minted only after back-end authorization (private bucket)', async (ctx: TestContext) => {
+  it('worker-docs signed upload/read URLs minted only after back-end authorization (private bucket)', async () => {
     // Back-end authorization gate holds regardless of Storage provisioning: an
     // unauthenticated request is refused BEFORE any URL is minted.
     const noAuth = await app.inject({
       method: 'POST',
       url: '/api/v1/workers/seed-worker-01/docs/upload-url',
-      payload: { type: 'PASSPORT_ID', mimeType: 'application/pdf' },
+      payload: { type: 'PASSPORT_ID', fileName: 'passport.pdf', mimeType: 'application/pdf' },
     });
     expect(noAuth.statusCode).toBe(401);
 
-    // The rest of this case needs the private `worker-docs` bucket to actually
-    // exist on the project. If it is not provisioned, this is an INFRA gap (not an
-    // assertion failure) — skip with a precise note rather than a bare fail.
+    // The private `worker-docs` bucket now exists on the project (Savant). It MUST
+    // be private (Architecture §7a): deny-by-default RLS, service-role mints URLs.
     const buk = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
     const { data: buckets } = await buk.storage.listBuckets();
     const bucket = (buckets ?? []).find((b) => b.name === 'worker-docs');
-    if (!bucket) {
-      ctx.skip(
-        "INFRA: private bucket 'worker-docs' not provisioned on the Supabase project " +
-          '(listBuckets() empty). Auth gate asserted (401); signed-URL path needs the bucket.',
-      );
-      return;
-    }
-    // The bucket exists — it MUST be private (Architecture §7a).
-    expect(bucket.public).toBe(false);
+    expect(bucket, "private bucket 'worker-docs' must be provisioned").toBeTruthy();
+    expect(bucket!.public).toBe(false);
 
-    // Authorized: mint a signed UPLOAD url on the private worker-docs bucket.
+    // A dedicated worker for this case (tracked for teardown).
+    const workerRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/workers',
+      headers: auth(mgrToken),
+      payload: { firstName: 'Doc', lastName: 'Flow', profession: 'GENERAL_LABORER' },
+    });
+    expect(workerRes.statusCode).toBe(201);
+    const workerId: string = workerRes.json().id;
+    createdWorkerIds.push(workerId);
+
+    // (1) MINT a signed UPLOAD url on the private worker-docs bucket.
     const up = await app.inject({
       method: 'POST',
-      url: '/api/v1/workers/seed-worker-01/docs/upload-url',
+      url: `/api/v1/workers/${workerId}/docs/upload-url`,
       headers: auth(mgrToken),
-      payload: { type: 'PASSPORT_ID', mimeType: 'application/pdf' },
+      payload: { type: 'PASSPORT_ID', fileName: 'passport.pdf', mimeType: 'application/pdf' },
     });
-    if (up.statusCode !== 200 && isMissingBucket(up.body)) {
-      ctx.skip(`INFRA: worker-docs storage not fully provisioned (${up.body})`);
-      return;
-    }
     expect(up.statusCode).toBe(200);
     const signed = up.json();
     // Server-chosen key scoped to the worker (traversal guard) + real signed URL.
-    expect(signed.storageKey.startsWith('seed-worker-01/')).toBe(true);
+    expect(signed.storageKey.startsWith(`${workerId}/`)).toBe(true);
     expect(signed.bucket).toBe('worker-docs');
     expect(signed.uploadUrl).toMatch(/token=|\/object\/upload\/sign\//);
+    // Remember the object for teardown (delete bytes even if a later assert fails).
+    createdDocStorageKeys.push(signed.storageKey);
 
-    // Mint a signed READ url for the seeded doc (seed-doc-01) and prove privacy:
-    // the signed url carries a token, and the equivalent unsigned public url 404s.
+    // (2) PUT real bytes to the signed upload URL (a minimal valid PDF).
+    const pdfBytes = Buffer.from(
+      '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
+      'latin1',
+    );
+    const putRes = await fetch(signed.uploadUrl, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/pdf' },
+      body: pdfBytes,
+    });
+    expect(putRes.ok).toBe(true); // 200 — bytes landed in the private bucket
+
+    // (3) CONFIRM the upload → persist the FileRef row (tracked via workerId teardown).
+    const confirm = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workers/${workerId}/docs`,
+      headers: auth(mgrToken),
+      payload: {
+        type: 'PASSPORT_ID',
+        storageKey: signed.storageKey,
+        fileName: 'passport.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: pdfBytes.length,
+      },
+    });
+    expect(confirm.statusCode).toBe(201);
+    const docId: string = confirm.json().id;
+
+    // (4) MINT a signed READ url for the just-uploaded doc.
     const readRes = await app.inject({
       method: 'GET',
-      url: '/api/v1/workers/seed-worker-01/docs/seed-doc-01/url',
+      url: `/api/v1/workers/${workerId}/docs/${docId}/url`,
       headers: auth(mgrToken),
     });
     expect(readRes.statusCode).toBe(200);
     const read = readRes.json();
     expect(read.expiresInSeconds).toBeGreaterThan(0);
     expect(read.url).toMatch(/token=/);
+
+    // (5) VERIFY the signed read URL actually serves the bytes we uploaded.
+    const got = await fetch(read.url);
+    expect(got.ok).toBe(true);
+    const gotBytes = Buffer.from(await got.arrayBuffer());
+    expect(gotBytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(gotBytes.length).toBe(pdfBytes.length);
 
     // Private-bucket proof: the same object via the PUBLIC path must be denied.
     const publicUrl = read.url.replace('/object/sign/', '/object/public/').split('?')[0];

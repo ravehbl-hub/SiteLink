@@ -9,6 +9,18 @@ import { Language, Theme } from '@sitelink/shared';
 
 const THEME_KEY = 'sitelink_theme';
 const LANG_KEY = 'sitelink_language';
+const DASH_VIEW_KEY = 'sitelink_dashboard_view';
+
+export type DashboardView = 'data' | 'graphics';
+
+export async function loadDashboardViewPref(): Promise<DashboardView | null> {
+  const v = await SecureStore.getItemAsync(DASH_VIEW_KEY);
+  return v === 'graphics' || v === 'data' ? v : null;
+}
+
+export async function saveDashboardViewPref(view: DashboardView): Promise<void> {
+  await SecureStore.setItemAsync(DASH_VIEW_KEY, view);
+}
 
 export async function loadThemePref(): Promise<Theme | null> {
   const v = await SecureStore.getItemAsync(THEME_KEY);

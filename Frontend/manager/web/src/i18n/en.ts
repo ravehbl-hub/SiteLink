@@ -83,6 +83,11 @@ export const en = {
     financeChart: 'Revenue vs costs',
     workforceChart: 'Attendance breakdown',
     costs: 'Costs',
+    chartNoData: 'No data to display',
+    chartTotal: 'Total',
+    chartWorkersDesc: 'Bar chart of worker headcount per site.',
+    chartFinanceDesc: 'Bar chart comparing revenue against salary, loan and advance costs.',
+    chartWorkforceDesc: 'Donut chart of attendance, vacation and sick days.',
   },
   workers: {
     title: 'Employees',

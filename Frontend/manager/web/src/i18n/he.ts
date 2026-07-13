@@ -85,6 +85,11 @@ export const he: Resources = {
     financeChart: 'הכנסות מול עלויות',
     workforceChart: 'פילוח נוכחות',
     costs: 'עלויות',
+    chartNoData: 'אין נתונים להצגה',
+    chartTotal: 'סך הכול',
+    chartWorkersDesc: 'תרשים עמודות של מספר העובדים בכל אתר.',
+    chartFinanceDesc: 'תרשים עמודות המשווה הכנסות מול עלויות שכר, הלוואות ומקדמות.',
+    chartWorkforceDesc: 'תרשים טבעת של ימי נוכחות, חופשה ומחלה.',
   },
   workers: {
     title: 'עובדים',

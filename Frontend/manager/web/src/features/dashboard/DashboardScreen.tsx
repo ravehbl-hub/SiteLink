@@ -9,6 +9,7 @@ import { dashboardApi } from '../../lib/api/endpoints';
 import { qk } from '../../lib/api/queryKeys';
 import { useSitesList } from '../../lib/api/hooks';
 import { DataState } from '../../components/ui';
+import { dirForLocale } from '../../i18n';
 import type { DashboardRollup } from '@sitelink/shared';
 import { currentMonthRange, formatCurrency, formatNumber, formatDate, toDateInput, dateInputToISO } from '../../lib/format';
 
@@ -201,7 +202,13 @@ function DataView({
   );
 }
 
-/** GRAPHICS view: three dependency-free inline-SVG charts built from the SAME rollup. */
+/** GRAPHICS view: three dependency-free inline-SVG charts built from the SAME rollup.
+ *  - workersPerSite[]                        → vertical SVG BAR chart
+ *  - profitAndLoss.{revenue,salaryCost,…}    → vertical SVG BAR chart (revenue vs costs)
+ *  - workers.{attendance,vacation,disease}   → SVG DONUT chart
+ *  All colors come from @sitelink/ui-tokens CSS custom props, so dark/light theme
+ *  and future palette changes are handled by the tokens. RTL is honoured by mirroring
+ *  bar order and text-anchor for the active locale direction. */
 function GraphicsView({
   data,
   currency,
@@ -211,9 +218,11 @@ function GraphicsView({
   currency: string;
   t: TFn;
 }) {
+  const { i18n } = useTranslation();
+  const rtl = dirForLocale(i18n.language) === 'rtl';
   const pnl = data.finance.profitAndLoss;
 
-  const financeBars = [
+  const financeBars: Datum[] = [
     { label: t('dashboard.revenue'), value: Math.max(0, pnl.revenue), color: 'var(--sl-color-success)' },
     { label: t('dashboard.salaryCost'), value: Math.max(0, pnl.salaryCost), color: 'var(--sl-color-accent)' },
     { label: t('finance.loans'), value: Math.max(0, pnl.loansCost), color: 'var(--sl-color-info)' },
@@ -225,13 +234,13 @@ function GraphicsView({
     },
   ];
 
-  const workforceBars = [
+  const workforceSlices: Datum[] = [
     { label: t('dashboard.attendanceDays'), value: data.workers.attendanceDays, color: 'var(--sl-color-success)' },
     { label: t('dashboard.vacationDays'), value: data.workers.vacationDays, color: 'var(--sl-color-info)' },
     { label: t('dashboard.diseaseDays'), value: data.workers.diseaseDays, color: 'var(--sl-color-warning)' },
   ];
 
-  const siteBars = data.workers.workersPerSite.map((w) => ({
+  const siteBars: Datum[] = data.workers.workersPerSite.map((w) => ({
     label: w.siteName,
     value: w.workerCount,
     color: 'var(--sl-color-accent)',
@@ -242,50 +251,199 @@ function GraphicsView({
       {siteBars.length > 0 ? (
         <div className="card">
           <h3 className="subsection-title">{t('dashboard.workersPerSite')}</h3>
-          <BarChart bars={siteBars} formatValue={(v) => formatNumber(v)} />
+          <BarChart
+            data={siteBars}
+            rtl={rtl}
+            formatValue={(v) => formatNumber(v)}
+            ariaLabel={`${t('dashboard.workersPerSite')}. ${t('dashboard.chartWorkersDesc')}`}
+          />
         </div>
       ) : null}
 
       <div className="card">
         <h3 className="subsection-title">{t('dashboard.financeChart')}</h3>
-        <BarChart bars={financeBars} formatValue={(v) => formatCurrency(v, currency)} />
+        <BarChart
+          data={financeBars}
+          rtl={rtl}
+          formatValue={(v) => formatCurrency(v, currency)}
+          ariaLabel={`${t('dashboard.financeChart')}. ${t('dashboard.chartFinanceDesc')}`}
+        />
       </div>
 
       <div className="card">
         <h3 className="subsection-title">{t('dashboard.workforceChart')}</h3>
-        <BarChart bars={workforceBars} formatValue={(v) => formatNumber(v)} />
+        <DonutChart
+          data={workforceSlices}
+          totalLabel={t('dashboard.chartTotal')}
+          formatValue={(v) => formatNumber(v)}
+          emptyLabel={t('dashboard.chartNoData')}
+          ariaLabel={`${t('dashboard.workforceChart')}. ${t('dashboard.chartWorkforceDesc')}`}
+        />
       </div>
     </div>
   );
 }
 
-interface Bar {
+interface Datum {
   label: string;
   value: number;
   color: string;
 }
 
-/** Horizontal bar chart built from HTML + CSS logical properties (no dependency).
- *  Bars use `inline-size` and the flow follows the document direction, so under
- *  html[dir='rtl'] (Hebrew) labels sit on the inline-start and bars grow correctly. */
-function BarChart({ bars, formatValue }: { bars: Bar[]; formatValue: (v: number) => string }) {
-  const max = Math.max(1, ...bars.map((b) => b.value));
+/** Vertical SVG bar chart (no dependency). Uses a viewBox so it scales fluidly.
+ *  Under RTL the bar order and value/label text-anchor are mirrored so the chart
+ *  reads right-to-left. `role="img"` + `aria-label` give screen readers a summary. */
+function BarChart({
+  data,
+  rtl,
+  formatValue,
+  ariaLabel,
+}: {
+  data: Datum[];
+  rtl: boolean;
+  formatValue: (v: number) => string;
+  ariaLabel: string;
+}) {
+  const W = 320;
+  const H = 180;
+  const padTop = 8;
+  const padBottom = 40; // room for category labels
+  const plotH = H - padTop - padBottom;
+  const n = data.length;
+  const slot = W / Math.max(1, n);
+  const barW = Math.min(48, slot * 0.6);
+  const max = Math.max(1, ...data.map((d) => d.value));
+  const baseY = padTop + plotH;
+
+  const items = rtl ? [...data].reverse() : data;
+
   return (
-    <div className="bars">
-      {bars.map((b, i) => (
-        <div className="bar-row" key={`${b.label}-${i}`}>
-          <span>{b.label}</span>
-          <span className="bar-track">
-            <span
-              className="bar-fill"
-              style={{ inlineSize: `${(b.value / max) * 100}%`, background: b.color }}
+    <svg
+      className="svg-chart"
+      viewBox={`0 0 ${W} ${H}`}
+      role="img"
+      aria-label={ariaLabel}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      {/* baseline */}
+      <line x1={0} y1={baseY} x2={W} y2={baseY} stroke="var(--sl-color-border)" strokeWidth={1} />
+      {items.map((d, i) => {
+        const h = (d.value / max) * plotH;
+        const cx = slot * i + slot / 2;
+        const x = cx - barW / 2;
+        const y = baseY - h;
+        return (
+          <g key={`${d.label}-${i}`}>
+            <rect x={x} y={y} width={barW} height={h} rx={3} fill={d.color}>
+              <title>{`${d.label}: ${formatValue(d.value)}`}</title>
+            </rect>
+            <text
+              x={cx}
+              y={y - 4}
+              textAnchor="middle"
+              className="svg-value"
+              fill="var(--sl-color-text-primary)"
+            >
+              {formatValue(d.value)}
+            </text>
+            <text
+              x={cx}
+              y={baseY + 14}
+              textAnchor="middle"
+              className="svg-label"
+              fill="var(--sl-color-text-secondary)"
+            >
+              {truncate(d.label, 12)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** SVG donut chart (no dependency) using stroke-dasharray on circle arcs, plus a
+ *  legend. The ring is direction-agnostic; the legend flows with the document
+ *  direction (flex + logical gap) so it flips correctly under RTL. */
+function DonutChart({
+  data,
+  totalLabel,
+  formatValue,
+  emptyLabel,
+  ariaLabel,
+}: {
+  data: Datum[];
+  totalLabel: string;
+  formatValue: (v: number) => string;
+  emptyLabel: string;
+  ariaLabel: string;
+}) {
+  const total = data.reduce((s, d) => s + Math.max(0, d.value), 0);
+  const size = 160;
+  const stroke = 26;
+  const r = (size - stroke) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circ = 2 * Math.PI * r;
+
+  let offset = 0;
+  const arcs = total
+    ? data.map((d) => {
+        const frac = Math.max(0, d.value) / total;
+        const dash = frac * circ;
+        const arc = { color: d.color, dash, gap: circ - dash, rotate: (offset / circ) * 360 };
+        offset += dash;
+        return arc;
+      })
+    : [];
+
+  return (
+    <div className="donut-wrap" role="img" aria-label={`${ariaLabel} ${totalLabel}: ${formatValue(total)}.`}>
+      <svg className="svg-chart donut" viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        {/* track */}
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--sl-color-surface-alt)" strokeWidth={stroke} />
+        {total > 0 ? (
+          arcs.map((a, i) => (
+            <circle
+              key={i}
+              cx={cx}
+              cy={cy}
+              r={r}
+              fill="none"
+              stroke={a.color}
+              strokeWidth={stroke}
+              strokeDasharray={`${a.dash} ${a.gap}`}
+              // start at 12 o'clock, then rotate by this slice's cumulative offset
+              transform={`rotate(${-90 + a.rotate} ${cx} ${cy})`}
             />
-          </span>
-          <span>{formatValue(b.value)}</span>
-        </div>
-      ))}
+          ))
+        ) : null}
+        <text x={cx} y={cy - 4} textAnchor="middle" className="svg-donut-total" fill="var(--sl-color-text-primary)">
+          {formatValue(total)}
+        </text>
+        <text x={cx} y={cy + 14} textAnchor="middle" className="svg-label" fill="var(--sl-color-text-secondary)">
+          {totalLabel}
+        </text>
+      </svg>
+      <ul className="chart-legend">
+        {total > 0 ? (
+          data.map((d, i) => (
+            <li key={`${d.label}-${i}`}>
+              <span className="legend-swatch" style={{ background: d.color }} aria-hidden="true" />
+              <span className="legend-label">{d.label}</span>
+              <span className="legend-value">{formatValue(d.value)}</span>
+            </li>
+          ))
+        ) : (
+          <li className="muted">{emptyLabel}</li>
+        )}
+      </ul>
     </div>
   );
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
 function Kpi({

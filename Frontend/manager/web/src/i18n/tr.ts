@@ -85,6 +85,11 @@ export const tr: Resources = {
     financeChart: 'Gelir vs maliyetler',
     workforceChart: 'Devam dağılımı',
     costs: 'Maliyetler',
+    chartNoData: 'Görüntülenecek veri yok',
+    chartTotal: 'Toplam',
+    chartWorkersDesc: 'Şantiye başına işçi sayısının çubuk grafiği.',
+    chartFinanceDesc: 'Geliri maaş, kredi ve avans maliyetleriyle karşılaştıran çubuk grafik.',
+    chartWorkforceDesc: 'Devam, izin ve hastalık günlerinin halka grafiği.',
   },
   workers: {
     title: 'Çalışanlar',

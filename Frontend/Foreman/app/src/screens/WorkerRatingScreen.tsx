@@ -57,6 +57,7 @@ export function WorkerRatingScreen() {
       if (!workerId) throw new ApiError(0, 'NO_WORKER', 'Select a worker');
       if (score == null) throw new ApiError(0, 'NO_SCORE', 'Select a score');
       return endpoints.createWorkerRating(workerId, {
+        date: new Date().toISOString().slice(0, 10),
         score,
         notes: notes.trim() ? notes.trim() : null,
       });

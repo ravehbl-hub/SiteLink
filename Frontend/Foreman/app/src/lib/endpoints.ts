@@ -23,11 +23,14 @@ export interface DashboardParams {
 }
 
 /**
- * Worker rating (FR-FOR-5). No shared DTO exists yet for this domain, so the wire
- * shape lives here. `foremanId` is server-derived from the session — never sent.
- * Mirrors the intended @sitelink/shared createWorkerRatingSchema { score, notes? }.
+ * Worker rating (FR-FOR-5). Wire shape mirrors @sitelink/shared
+ * createWorkerRatingSchema: { workerId, date, score, notes? }. `workerId` is taken
+ * from the path (:id) and `foremanId` is server-derived from the session — neither
+ * is sent in the body here; `date` (ISO calendar date) IS required by the schema.
  */
 export interface CreateWorkerRatingInput {
+  /** ISO calendar date, e.g. "2026-07-13". Required by the shared schema. */
+  date: string;
   /** 1–5 (inclusive). */
   score: number;
   notes?: string | null;

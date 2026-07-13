@@ -14,4 +14,5 @@ export * from './salary';
 export * from './finance';
 export * from './dashboard';
 export * from './request';
+export * from './worker-rating';
 export * from './billing';

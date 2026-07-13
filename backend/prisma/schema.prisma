@@ -139,6 +139,9 @@ model User {
   // Requests this user resolved as Admin/Manager (future workflow)
   resolvedRequests WorkerRequest[] @relation("RequestResolvedBy")
 
+  // Worker ratings this user authored as a FOREMAN (FR-FOR-5)
+  authoredRatings  WorkerRating[]  @relation("RatingByForeman")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -226,6 +229,7 @@ model Worker {
   loans       Loan[]
   advances    AdvancePayment[]
   requests    WorkerRequest[]
+  ratings     WorkerRating[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -405,6 +409,36 @@ model WorkerRequest {
   @@index([workerId])
   @@index([status])
   @@index([type])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Foreman worker ratings  [v1]  (PRD FR-FOR-5)
+// A FOREMAN rates a worker's performance on a given date. This is a per-event,
+// time-series numeric signal (multiple ratings over time, averageable) — distinct
+// from Worker.level (WorkerLevel), which is the Manager's single authoritative
+// classification. Hence `score` is a free Int on a 1..5 scale, NOT the WorkerLevel
+// enum: reusing the enum would conflate a computed reputation trend with the
+// manager-set static level and block averaging.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model WorkerRating {
+  id        String   @id @default(cuid())
+  worker    Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  workerId  String
+  // The FOREMAN user who authored the rating (named relation to avoid clashing
+  // with User's other relations, mirroring WorkerRequest's "RequestResolvedBy").
+  foreman   User     @relation("RatingByForeman", fields: [foremanId], references: [id])
+  foremanId String
+  date      DateTime @db.Date
+  score     Int // 1..5 performance rating (validated in the service/DTO layer)
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workerId])
+  @@index([foremanId])
+  @@index([workerId, date])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

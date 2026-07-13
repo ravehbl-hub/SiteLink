@@ -19,7 +19,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const appUser = req.appUser!;
       const user = await prisma.user.findUnique({ where: { id: appUser.id } });
       if (!user) throw AppError.unauthorized();
-      return { user: mapUser(user) };
+      // Data minimization: strip authUserId (the Supabase identity FK) from the
+      // /auth/me projection — the client never needs it (nexo LOW).
+      const { authUserId: _authUserId, ...safe } = mapUser(user);
+      return { user: safe };
     },
   );
 }

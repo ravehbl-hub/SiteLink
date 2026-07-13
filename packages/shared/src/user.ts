@@ -92,7 +92,11 @@ export interface AuthSession {
   tokens: AuthTokens;
 }
 
-/** Result of `GET /auth/me`: the app User for the verified Supabase identity. */
+/**
+ * Result of `GET /auth/me`: the app User for the verified Supabase identity.
+ * `authUserId` (the Supabase identity FK) is intentionally omitted — the client
+ * has no use for it and it should not be cached client-side (data minimization).
+ */
 export interface CurrentUser {
-  user: User;
+  user: Omit<User, 'authUserId'>;
 }

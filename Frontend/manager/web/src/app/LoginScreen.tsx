@@ -33,8 +33,7 @@ export function LoginScreen() {
       <div className="card auth-card">
         <div className="page-header">
           <span className="brand">
-            <span className="brand-mark">SL</span>
-            {t('common.appName')}
+            <img className="brand-logo" src="/logo.png" alt={t('common.appName')} />
           </span>
           <div className="header-spacer" />
           <select

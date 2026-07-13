@@ -26,8 +26,7 @@ export function AppShell() {
     <div className="app-shell">
       <header className="app-header">
         <span className="brand">
-          <span className="brand-mark">SL</span>
-          {t('common.appName')}
+          <img className="brand-logo" src="/logo.png" alt={t('common.appName')} />
         </span>
         <div className="header-spacer" />
         <div className="header-controls">

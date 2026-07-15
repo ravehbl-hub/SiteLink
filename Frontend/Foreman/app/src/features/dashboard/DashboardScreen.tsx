@@ -10,13 +10,13 @@ import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { endpoints } from '../lib/endpoints';
-import { qk } from '../lib/queryKeys';
-import { presetRange, type DatePreset } from '../lib/format';
-import { useActiveSite } from '../site/ActiveSiteProvider';
-import { SitePicker } from '../site/SitePicker';
-import { useTheme } from '../theme/ThemeProvider';
-import { DonutChart, BarChart } from '../components/charts';
+import { endpoints } from '../../lib/endpoints';
+import { qk } from '../../lib/queryKeys';
+import { presetRange, type DatePreset } from '../../lib/format';
+import { useActiveSite } from '../../site/ActiveSiteProvider';
+import { SitePicker } from '../../site/SitePicker';
+import { useTheme } from '../../theme/ThemeProvider';
+import { DonutChart, BarChart } from '../../components/charts';
 import {
   Body,
   Card,
@@ -29,7 +29,7 @@ import {
   SectionHeading,
   Segmented,
   Title,
-} from '../components/ui';
+} from '../../components/ui';
 
 export function DashboardScreen() {
   const { t } = useTranslation();

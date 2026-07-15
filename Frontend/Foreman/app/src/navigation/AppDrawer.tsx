@@ -17,11 +17,11 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { DrawerParamList } from './types';
 import { useTheme } from '../theme/ThemeProvider';
-import { DashboardScreen } from '../screens/DashboardScreen';
-import { AttendanceScreen } from '../screens/AttendanceScreen';
-import { WorkerRatingScreen } from '../screens/WorkerRatingScreen';
-import { ReportsScreen } from '../screens/ReportsScreen';
-import { SettingsScreen } from '../screens/SettingsScreen';
+import { DashboardScreen } from '../features/dashboard/DashboardScreen';
+import { AttendanceScreen } from '../features/attendance/AttendanceScreen';
+import { WorkerRatingScreen } from '../features/rating/WorkerRatingScreen';
+import { ReportsScreen } from '../features/reports/ReportsScreen';
+import { SettingsScreen } from '../features/settings/SettingsScreen';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const logo = require('../../assets/logo.png');

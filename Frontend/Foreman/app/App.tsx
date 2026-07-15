@@ -17,7 +17,7 @@ import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import { AuthProvider, useAuth } from './src/auth/AuthProvider';
 import { ActiveSiteProvider } from './src/site/ActiveSiteProvider';
 import { AppDrawer } from './src/navigation/AppDrawer';
-import { LoginScreen } from './src/screens/LoginScreen';
+import { LoginScreen } from './src/features/auth/LoginScreen';
 import { Loading } from './src/components/ui';
 
 const queryClient = new QueryClient({

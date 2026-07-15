@@ -11,7 +11,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { FOREMAN_ROLES } from '../../plugins/auth.js';
-import { effectiveSiteId } from '../../lib/scope.js';
+import { effectiveSiteScope } from '../../lib/scope.js';
 import { DashboardService } from './service.js';
 import { dashboardQuery } from './schemas.js';
 
@@ -21,17 +21,17 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/dashboard', guard, async (req) => {
     const query = dashboardQuery.parse(req.query);
-    // SECURITY: override the parsed siteId with the caller-scoped effective site.
-    // For a FOREMAN this throws 403 on a cross-site probe and defaults to their site;
-    // for ADMIN/MANAGER it passes the requested value through (or undefined = all).
-    const siteId = effectiveSiteId(req.appUser!, query.siteId);
-    return service.rollup({ ...query, siteId });
+    // SECURITY: override the parsed siteId with the caller-scoped effective site set.
+    // For a FOREMAN this throws 403 on a cross-site probe; a requested site narrows to
+    // that site, none = their WHOLE union. ADMIN/MANAGER: requested narrows, none = all.
+    const scope = await effectiveSiteScope(req.appUser!, query.siteId);
+    return service.rollup({ ...query, siteId: query.siteId }, scope);
   });
 
   // Worker-count report — same site-scoping stance as /dashboard.
   app.get('/worker-count', guard, async (req) => {
     const { siteId: requested } = dashboardQuery.pick({ siteId: true }).parse(req.query);
-    const siteId = effectiveSiteId(req.appUser!, requested);
-    return service.workerCount(siteId);
+    const scope = await effectiveSiteScope(req.appUser!, requested);
+    return service.workerCount(scope);
   });
 }

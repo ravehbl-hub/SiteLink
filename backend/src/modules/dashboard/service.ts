@@ -17,9 +17,21 @@ import { AttendanceType } from '@sitelink/shared';
 import { prisma } from '../../db/client.js';
 import { toISORequired } from '../../lib/dates.js';
 import { round2, toNumber } from '../../lib/money.js';
+import type { SiteScope } from '../../lib/scope.js';
 import { FinanceService } from '../finance/service.js';
 import { SalaryService } from '../salary/service.js';
 import type { DashboardQuery } from './schemas.js';
+
+/**
+ * Multi-site scope → a Prisma `siteId` filter fragment. `{ all: true }` (ADMIN/MANAGER,
+ * all sites) → no constraint. A concrete `siteIds` set → `{ in: siteIds }` (one site
+ * for a narrowed/single-site view, or the foreman's whole UNION). The scope is
+ * SERVER-resolved (route → effectiveSiteScope), so an in-scope set can be trusted here.
+ */
+function siteIdFilter(scope: SiteScope): { in: string[] } | undefined {
+  if ('all' in scope) return undefined;
+  return { in: scope.siteIds };
+}
 
 /** Default window: first day of the current month → now (FR-MGR-DASH default). */
 function defaultWindow(): { from: string; to: string } {
@@ -34,24 +46,31 @@ export class DashboardService {
     private readonly finance = new FinanceService(),
   ) {}
 
-  async rollup(query: DashboardQuery): Promise<DashboardRollup> {
+  async rollup(query: DashboardQuery, scope: SiteScope): Promise<DashboardRollup> {
     const fallback = defaultWindow();
     const fromISO = query.from ?? fallback.from;
     const toISO = query.to ?? fallback.to;
     const from = new Date(fromISO);
     const to = new Date(toISO);
-    const siteId = query.siteId;
+    // SECURITY: the effective site filter comes from the caller-resolved scope, NOT
+    // the raw client siteId. `siteIn` = a set constraint (single site, foreman union,
+    // or undefined = all sites for ADMIN/MANAGER). `filterSiteId` is what we ECHO back
+    // in the response: the requested single site, else null (union/all-sites view).
+    const siteIn = siteIdFilter(scope);
+    const filterSiteId = 'all' in scope ? (query.siteId ?? null)
+      : scope.siteIds.length === 1 ? scope.siteIds[0]
+      : null;
 
     // ── WORKERS: active headcount in scope ────────────────────────────────
     const workerWhere = {
       isArchived: false,
-      ...(siteId ? { assignments: { some: { siteId } } } : {}),
+      ...(siteIn ? { assignments: { some: { siteId: siteIn } } } : {}),
     };
     const amountOfWorkers = await prisma.worker.count({ where: workerWhere });
 
-    // Workers-per-site breakdown (active workers only). For a single-site filter
-    // this is just that site; all-sites lists every active site.
-    const siteWhere = siteId ? { id: siteId } : { isArchived: false };
+    // Workers-per-site breakdown (active workers only). For a scoped filter this is
+    // the site(s) in scope; all-sites lists every active site.
+    const siteWhere = siteIn ? { id: siteIn } : { isArchived: false };
     const sites = await prisma.site.findMany({
       where: siteWhere,
       select: { id: true, name: true },
@@ -68,7 +87,7 @@ export class DashboardService {
     const attendance = await prisma.attendanceRecord.findMany({
       where: {
         date: { gte: from, lte: to },
-        ...(siteId ? { siteId } : {}),
+        ...(siteIn ? { siteId: siteIn } : {}),
       },
       select: { type: true, hours: true },
     });
@@ -92,8 +111,8 @@ export class DashboardService {
       _sum: { outstanding: true },
       where: {
         date: { gte: from, lte: to },
-        ...(siteId
-          ? { worker: { assignments: { some: { siteId } } } }
+        ...(siteIn
+          ? { worker: { assignments: { some: { siteId: siteIn } } } }
           : {}),
       },
     });
@@ -101,8 +120,8 @@ export class DashboardService {
       _sum: { outstanding: true },
       where: {
         date: { gte: from, lte: to },
-        ...(siteId
-          ? { worker: { assignments: { some: { siteId } } } }
+        ...(siteIn
+          ? { worker: { assignments: { some: { siteId: siteIn } } } }
           : {}),
       },
     });
@@ -110,13 +129,17 @@ export class DashboardService {
     const advancePaymentsTotal = toNumber(advanceAgg._sum.outstanding);
 
     // ── FINANCE: salary total via the SalaryRuleEngine ───────────────────
-    const scopedWorkerIds = await this.workersWithActivity(from, to, siteId);
+    // Worker set is scoped to the site(s) in scope (single site, foreman union, or
+    // all). `filterSiteId` (single site or null) is passed to per-worker calc — for a
+    // multi-site union the salary calc runs unfiltered by site over the scoped workers.
+    const scopedWorkerIds = await this.workersWithActivity(from, to, siteIn);
+    const salarySiteId = filterSiteId ?? undefined;
     let salaryTotal = 0;
     for (const workerId of scopedWorkerIds) {
       try {
         const result = await this.salary.calculate({
           workerId,
-          siteId,
+          siteId: salarySiteId,
           periodStart: fromISO,
           periodEnd: toISO,
         });
@@ -129,7 +152,7 @@ export class DashboardService {
 
     // ── FINANCE: P&L (manual revenue, delegated to FinanceService) ───────
     const profitAndLoss = await this.finance.profitLoss({
-      siteId,
+      siteId: filterSiteId ?? undefined,
       from: fromISO,
       to: toISO,
       revenue: query.revenue,
@@ -137,7 +160,7 @@ export class DashboardService {
     });
 
     return {
-      filter: { siteId: siteId ?? null, from: fromISO, to: toISO },
+      filter: { siteId: filterSiteId, from: fromISO, to: toISO },
       workers: {
         amountOfWorkers,
         attendanceDays,
@@ -158,13 +181,14 @@ export class DashboardService {
   }
 
   /**
-   * Worker-count report: active headcount per site (FR-FOR worker-count). When
-   * `siteId` is given, just that site; otherwise every active site. The caller-scope
-   * (effective siteId) is resolved in the route, so a FOREMAN only ever passes their
-   * own site here.
+   * Worker-count report: active headcount per site (FR-FOR worker-count). The
+   * caller-scope (effective site set) is resolved in the route: a FOREMAN only ever
+   * passes their own site(s) here — a single narrowed site or their whole union;
+   * ADMIN/MANAGER pass `{ all: true }` (every active site).
    */
-  async workerCount(siteId?: string): Promise<WorkersPerSite[]> {
-    const siteWhere = siteId ? { id: siteId } : { isArchived: false };
+  async workerCount(scope: SiteScope): Promise<WorkersPerSite[]> {
+    const siteIn = siteIdFilter(scope);
+    const siteWhere = siteIn ? { id: siteIn } : { isArchived: false };
     const sites = await prisma.site.findMany({
       where: siteWhere,
       select: { id: true, name: true },
@@ -183,12 +207,12 @@ export class DashboardService {
   private async workersWithActivity(
     from: Date,
     to: Date,
-    siteId?: string,
+    siteIn?: { in: string[] },
   ): Promise<string[]> {
     const rows = await prisma.attendanceRecord.findMany({
       where: {
         date: { gte: from, lte: to },
-        ...(siteId ? { siteId } : {}),
+        ...(siteIn ? { siteId: siteIn } : {}),
       },
       select: { workerId: true },
       distinct: ['workerId'],

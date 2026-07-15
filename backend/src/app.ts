@@ -27,6 +27,7 @@ import { requestRoutes } from './modules/requests/routes.js';
 import { reportRoutes } from './modules/reports/routes.js';
 import { dashboardRoutes } from './modules/dashboard/routes.js';
 import { ratingRoutes } from './modules/ratings/routes.js';
+import { foremanAssignmentRoutes } from './modules/foreman-assignments/routes.js';
 import { backOfficeRoutes } from './modules/backoffice/routes.js';
 
 export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
@@ -68,6 +69,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
       await api.register(reportRoutes);
       await api.register(dashboardRoutes);
       await api.register(ratingRoutes);
+      await api.register(foremanAssignmentRoutes);
       await api.register(backOfficeRoutes);
     },
     { prefix: '/api/v1' },

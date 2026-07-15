@@ -24,6 +24,7 @@ import {
   effectiveSiteId,
   isForeman,
   isWorker,
+  resolveSiteScope,
   resolveWorkerId,
 } from '../../lib/scope.js';
 import type { AuthUser } from '../../plugins/types.js';
@@ -40,42 +41,51 @@ type ListQuery = z.infer<typeof listAttendanceQuery>;
 type HoursQuery = z.infer<typeof workingHoursQuery>;
 
 /**
- * Prisma `where` fragment that HARD-scopes attendance rows to a FOREMAN's site.
- * ADMIN/MANAGER (or no caller) → `{}` (unscoped). A Foreman with no configured
- * primarySite → an impossible predicate so they see nothing (fail-closed).
+ * Prisma `where` fragment that HARD-scopes attendance rows to a FOREMAN's UNION of
+ * sites (primarySiteId + active ForemanSiteAssignment sites). ADMIN/MANAGER (or no
+ * caller) → `{}` (unscoped). A Foreman with an EMPTY union → an impossible predicate
+ * so they see nothing (fail-closed). ASYNC now: the union needs a DB read.
  *
  * HARDENING (nexo-back Stage B): two constraints are applied for a FOREMAN caller —
- *   1. the WORKER must be assigned to the Foreman's site (worker.assignments), AND
- *   2. the RECORD's own `siteId` must be the Foreman's site (or NULL).
+ *   1. the WORKER must be assigned to one of the Foreman's union sites
+ *      (worker.assignments), AND
+ *   2. the RECORD's own `siteId` must be one of the Foreman's union sites (or NULL).
  * Constraint (2) closes the shared-worker cross-site leak: a worker assigned to both
- * the Foreman's site AND another site would otherwise expose their OTHER-site
- * attendance rows to the Foreman. We now only return rows LOGGED AT the Foreman's
- * site. `AttendanceRecord.siteId` is nullable; a NULL siteId means legacy/unspecified
- * and — since the worker is already confirmed on the Foreman's site by (1) — is
- * INCLUDED (treated as the Foreman's own, not another site's). Only a record whose
- * siteId is explicitly some OTHER site is excluded.
+ * a Foreman's site AND another (out-of-union) site would otherwise expose their
+ * OTHER-site attendance rows to the Foreman. We now only return rows LOGGED AT a site
+ * in the Foreman's union. `AttendanceRecord.siteId` is nullable; a NULL siteId means
+ * legacy/unspecified and — since the worker is already confirmed on the Foreman's
+ * union by (1) — is INCLUDED. Only a record whose siteId is explicitly some site
+ * OUTSIDE the union is excluded.
  */
-function foremanAttendanceScope(caller?: AuthUser): Record<string, unknown> {
+async function foremanAttendanceScope(caller?: AuthUser): Promise<Record<string, unknown>> {
   if (!caller || !isForeman(caller)) return {};
-  if (!caller.primarySiteId) return { id: '__no_site_for_foreman__' };
+  const scope = await resolveSiteScope(caller);
+  if ('all' in scope) return {}; // defensive: a foreman never resolves to `all`.
+  if (scope.siteIds.length === 0) return { id: '__no_site_for_foreman__' };
   return {
     worker: {
-      assignments: { some: { unassignedAt: null, siteId: caller.primarySiteId } },
+      assignments: { some: { unassignedAt: null, siteId: { in: scope.siteIds } } },
     },
-    OR: [{ siteId: caller.primarySiteId }, { siteId: null }],
+    OR: [{ siteId: { in: scope.siteIds } }, { siteId: null }],
   };
 }
 
 /**
  * Resolve the siteId a FOREMAN's attendance record must carry (data-integrity
  * hardening, nexo-back Stage B). Delegates to the shared `effectiveSiteId` scope
- * helper: a supplied siteId that is NOT the Foreman's own site → 403; a supplied
- * siteId equal to their site → that site; no siteId supplied → defaults to their
- * (single) site. A Foreman with no primarySite → 403 (fail-closed). This mirrors
- * "a foreman acts on their own site" — they can never stamp another site's id.
+ * helper (ASYNC, multi-site): a supplied siteId NOT in the Foreman's union → 403; a
+ * supplied siteId in their union → that site; no siteId supplied → their single
+ * union site, or 403 if their union has MORE THAN ONE site (ambiguous write — the
+ * Foreman must name which site). A Foreman with an empty union → 403 (fail-closed).
+ * This mirrors "a foreman acts on their own site" — they can never stamp a site
+ * outside their union.
  */
-function forceForemanSite(caller: AuthUser, requestedSiteId: string | null | undefined): string {
-  return effectiveSiteId(caller, requestedSiteId ?? undefined) as string;
+async function forceForemanSite(
+  caller: AuthUser,
+  requestedSiteId: string | null | undefined,
+): Promise<string> {
+  return (await effectiveSiteId(caller, requestedSiteId ?? undefined)) as string;
 }
 
 export class AttendanceService {
@@ -86,7 +96,7 @@ export class AttendanceService {
    * matches nothing). ADMIN/MANAGER (or no caller) are unscoped.
    */
   async list(query: ListQuery, caller?: AuthUser): Promise<Paginated<AttendanceRecord>> {
-    const foremanScope = foremanAttendanceScope(caller);
+    const foremanScope = await foremanAttendanceScope(caller);
     const where = {
       ...foremanScope,
       ...(query.workerId ? { workerId: query.workerId } : {}),
@@ -124,7 +134,7 @@ export class AttendanceService {
     let siteId = input.siteId ?? null;
     if (caller && isForeman(caller)) {
       await assertWorkerInScope(caller, input.workerId);
-      siteId = forceForemanSite(caller, input.siteId);
+      siteId = await forceForemanSite(caller, input.siteId);
     }
     // Enforce exclusivity: reject a second record for the same worker/day.
     const date = new Date(input.date);
@@ -159,7 +169,7 @@ export class AttendanceService {
       await assertWorkerInScope(caller, current.workerId);
       // Force the record onto the Foreman's own site whenever siteId is supplied.
       if (input.siteId !== undefined) {
-        siteIdPatch = { siteId: forceForemanSite(caller, input.siteId) };
+        siteIdPatch = { siteId: await forceForemanSite(caller, input.siteId) };
       }
     }
     const row = await prisma.attendanceRecord.update({
@@ -200,9 +210,10 @@ export class AttendanceService {
       selfWorkerId = resolved;
     }
 
+    const foremanScope = await foremanAttendanceScope(caller);
     const rows = await prisma.attendanceRecord.findMany({
       where: {
-        ...foremanAttendanceScope(caller),
+        ...foremanScope,
         ...(selfWorkerId
           ? { workerId: selfWorkerId }
           : query.workerId

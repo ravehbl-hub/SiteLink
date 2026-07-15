@@ -2,10 +2,14 @@
  * SiteLink back end — reports service (FR-X-PDF). Renders templates to a PDF buffer.
  */
 import { renderToBuffer } from '@react-pdf/renderer';
+import type { ReactElement } from 'react';
+import type { DocumentProps } from '@react-pdf/renderer';
 import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { toDateOnly } from '../../lib/dates.js';
 import { toNumber } from '../../lib/money.js';
+import { loadConfig } from '../../config.js';
+import { CloudConvertService } from '../../lib/cloudconvert.js';
 import { AttendanceType } from '@sitelink/shared';
 import type { WorkingHoursGrain } from '@sitelink/shared';
 import { SalaryService } from '../salary/service.js';
@@ -19,13 +23,46 @@ import {
   type AttendanceSummaryRow,
   type ReportHeaderMeta,
 } from './templates.js';
+import {
+  attendanceSummaryHtml,
+  payslipHtml,
+  profitLossHtml,
+  workingHoursHtml,
+} from './html-templates.js';
 
 export class ReportsService {
+  /**
+   * CloudConvert client, lazily constructed only when CLOUDCONVERT_API_KEY is
+   * present. `null` => env-gate OFF => fall back to the in-process @react-pdf
+   * renderer (unchanged behaviour, keeps local/dev/CI green without the key).
+   */
+  private readonly cloudConvert: CloudConvertService | null;
+
   constructor(
     private readonly salary = new SalaryService(),
     private readonly finance = new FinanceService(),
     private readonly attendance = new AttendanceService(),
-  ) {}
+  ) {
+    const apiKey = loadConfig().CLOUDCONVERT_API_KEY;
+    this.cloudConvert = apiKey ? new CloudConvertService(apiKey) : null;
+  }
+
+  /**
+   * Single switch point for the two render paths. When the CloudConvert key is
+   * present, render the HTML producer through CloudConvert (HTML→PDF); otherwise
+   * fall back to the @react-pdf document. Both return identical Buffer contracts
+   * (`%PDF-` bytes) so the endpoints are unaffected either way.
+   */
+  private renderPdf(
+    html: () => string,
+    reactDoc: () => ReactElement<DocumentProps>,
+    filename: string,
+  ): Promise<Buffer> {
+    if (this.cloudConvert) {
+      return this.cloudConvert.htmlToPdf(html(), { filename });
+    }
+    return renderToBuffer(reactDoc());
+  }
 
   async payslipPdf(params: {
     workerId: string;
@@ -51,13 +88,13 @@ export class ReportsService {
       direction: params.direction,
     };
 
-    const doc = PayslipDocument({
-      meta,
-      workerName: `${worker.firstName} ${worker.lastName}`,
-      result,
-      warnings: result.warnings,
-    });
-    return renderToBuffer(doc);
+    const workerName = `${worker.firstName} ${worker.lastName}`;
+    const data = { meta, workerName, result, warnings: result.warnings };
+    return this.renderPdf(
+      () => payslipHtml(data),
+      () => PayslipDocument(data),
+      'payslip',
+    );
   }
 
   async workingHoursPdf(params: {
@@ -90,13 +127,17 @@ export class ReportsService {
       direction: params.direction,
     };
 
-    const doc = WorkingHoursDocument({
+    const data = {
       meta,
       workerName: `${worker.firstName} ${worker.lastName}`,
       grain: params.grain,
       rows,
-    });
-    return renderToBuffer(doc);
+    };
+    return this.renderPdf(
+      () => workingHoursHtml(data),
+      () => WorkingHoursDocument(data),
+      'working-hours',
+    );
   }
 
   async attendanceSummaryPdf(params: {
@@ -156,8 +197,12 @@ export class ReportsService {
       direction: params.direction,
     };
 
-    const doc = AttendanceSummaryDocument({ meta, rows: [...byWorker.values()] });
-    return renderToBuffer(doc);
+    const data = { meta, rows: [...byWorker.values()] };
+    return this.renderPdf(
+      () => attendanceSummaryHtml(data),
+      () => AttendanceSummaryDocument(data),
+      'attendance',
+    );
   }
 
   async profitLossPdf(params: {
@@ -194,7 +239,11 @@ export class ReportsService {
       direction: params.direction,
     };
 
-    const doc = ProfitLossDocument({ meta, pnl });
-    return renderToBuffer(doc);
+    const data = { meta, pnl };
+    return this.renderPdf(
+      () => profitLossHtml(data),
+      () => ProfitLossDocument(data),
+      'profit-loss',
+    );
   }
 }

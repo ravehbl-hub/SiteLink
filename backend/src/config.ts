@@ -29,6 +29,12 @@ const EnvSchema = z.object({
   // Storage bucket names (private). Defaults match Architecture §7a.
   STORAGE_BUCKET_WORKER_DOCS: z.string().default('worker-docs'),
   STORAGE_BUCKET_WORKER_IMAGES: z.string().default('worker-images'),
+
+  // Secret — CloudConvert API key (HTML→PDF report rendering). OPTIONAL and
+  // env-gated: when ABSENT the reports module falls back to the in-process
+  // @react-pdf renderer, so local/dev/CI boot + pass without it. When PRESENT,
+  // report PDFs are produced via CloudConvert. Never logged or echoed.
+  CLOUDCONVERT_API_KEY: z.string().min(1).optional(),
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;

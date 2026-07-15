@@ -19,6 +19,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { to: '/', key: 'nav.dashboard' },
+  { to: '/admin-users', key: 'nav.adminUsers' },
   { to: '/users-activity', key: 'nav.usersActivity' },
   { to: '/bookkeeping', key: 'nav.bookkeeping' },
   { to: '/customers', key: 'nav.customers', future: true },

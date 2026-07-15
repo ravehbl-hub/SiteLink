@@ -5,6 +5,7 @@ import { useAuth } from './AuthProvider';
 import { AppShell } from './AppShell';
 import { LoginScreen } from './LoginScreen';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
+import { AdminUsersScreen } from '../features/adminUsers/AdminUsersScreen';
 import { UsersActivityScreen } from '../features/usersActivity/UsersActivityScreen';
 import { BookkeepingScreen } from '../features/bookkeeping/BookkeepingScreen';
 import { CustomersScreen } from '../features/future/CustomersScreen';
@@ -40,6 +41,7 @@ export function Root() {
       <Routes>
         <Route element={<AppShell />}>
           <Route index element={<DashboardScreen />} />
+          <Route path="admin-users" element={<AdminUsersScreen />} />
           <Route path="users-activity" element={<UsersActivityScreen />} />
           <Route path="bookkeeping" element={<BookkeepingScreen />} />
           <Route path="customers" element={<CustomersScreen />} />

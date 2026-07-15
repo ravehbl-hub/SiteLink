@@ -567,3 +567,80 @@ table.data tbody tr:hover {
   align-items: center;
   flex-wrap: wrap;
 }
+
+/* ── Buttons: ghost variant (icon-only, e.g. modal close) ─────────────── */
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* ── Form field error + inline row actions ────────────────────────────── */
+.field-error {
+  color: var(--sl-color-danger);
+  font-size: var(--sl-font-size-xs);
+}
+
+.row-actions {
+  display: flex;
+  gap: var(--sl-space-2);
+  justify-content: flex-end;
+}
+
+/* ── Modal (token-driven scrim; no hex literals) ──────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--sl-color-text-primary) 45%, transparent);
+  display: grid;
+  place-items: center;
+  padding: var(--sl-space-4);
+  z-index: 100;
+}
+.modal {
+  background: var(--sl-color-surface);
+  border-radius: var(--sl-radius-xl);
+  box-shadow: var(--sl-elevation-lg);
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow: auto;
+  padding: var(--sl-space-6);
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  margin-block-end: var(--sl-space-4);
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sl-space-2);
+  margin-block-start: var(--sl-space-5);
+}
+
+/* ── Segmented role filter (Users Activity) ───────────────────────────── */
+.segmented {
+  display: inline-flex;
+  gap: var(--sl-space-1);
+  padding: var(--sl-space-1);
+  border-radius: var(--sl-radius-md);
+  background: var(--sl-color-surface-alt);
+  border: var(--sl-border-hairline) solid var(--sl-color-border);
+  flex-wrap: wrap;
+}
+.segmented .seg {
+  height: var(--sl-size-controlSm);
+  padding: 0 var(--sl-space-3);
+  border-radius: var(--sl-radius-sm);
+  border: var(--sl-border-hairline) solid transparent;
+  background: transparent;
+  color: var(--sl-color-text-secondary);
+  font-size: var(--sl-font-size-xs);
+  font-weight: var(--sl-font-weight-medium);
+  cursor: pointer;
+}
+.segmented .seg.active {
+  background: var(--sl-color-accent-subtle);
+  color: var(--sl-color-accent);
+  border-color: var(--sl-color-accent);
+}

@@ -3,7 +3,15 @@
  * Bound to @sitelink/shared DTOs where they exist; the Back Office list/status
  * shapes are declared locally to mirror the back-end service projections.
  */
-import type { CurrentUser, ProfitLoss } from '@sitelink/shared';
+import type {
+  CreateUserInput,
+  CurrentUser,
+  Paginated,
+  ProfitLoss,
+  Role,
+  UpdateUserInput,
+  User,
+} from '@sitelink/shared';
 import { http, rootGet, type Query } from './client';
 
 /* ── Auth ─────────────────────────────────────────────────────────────── */
@@ -65,4 +73,24 @@ export const backOfficeApi = {
   users: () => http.get<BackOfficeUser[]>('/backoffice/users'),
   profitLoss: (params: ProfitLossParams) =>
     http.get<ProfitLoss>('/backoffice/profit-loss', params as unknown as Query),
+};
+
+/* ── Users CRUD (FR-MGR-USER, ADMIN-scoped) ───────────────────────────────
+ * The Manager/Admin-gated /users routes. ADMIN callers may list & manage any
+ * role (incl. ADMIN) via the OPTIONAL ?role filter. All list endpoints return
+ * a Paginated<T> envelope — consume `.items`, never the bare response. */
+export interface ListUsersParams {
+  role?: Role;
+  page?: number;
+  pageSize?: number;
+}
+export const usersApi = {
+  list: (params?: ListUsersParams) =>
+    http.get<Paginated<User>>('/users', params as Query),
+  get: (id: string) => http.get<User>(`/users/${id}`),
+  create: (body: CreateUserInput) => http.post<User>('/users', body),
+  update: (id: string, body: UpdateUserInput) => http.patch<User>(`/users/${id}`, body),
+  lockout: (id: string, isLockedOut: boolean) =>
+    http.post<User>(`/users/${id}/lockout`, { isLockedOut }),
+  remove: (id: string) => http.del<void>(`/users/${id}`),
 };

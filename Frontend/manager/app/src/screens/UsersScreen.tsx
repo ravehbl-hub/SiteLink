@@ -12,7 +12,8 @@ import { Role, type CreateUserInput, type Site } from '@sitelink/shared';
 import { endpoints } from '../lib/endpoints';
 import { qk } from '../lib/queryKeys';
 import { ApiError } from '../lib/api';
-import { roleOptions } from '../lib/enumOptions';
+import { roleOptions, manageableRolesFor } from '../lib/enumOptions';
+import { useAuth } from '../auth/AuthProvider';
 import {
   Body,
   Button,
@@ -31,10 +32,12 @@ import {
 export function UsersScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const { user: currentUser } = useAuth();
+  const allowedRoles = manageableRolesFor(currentUser?.role);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<Role>(Role.FOREMAN);
+  const [role, setRole] = useState<Role>(allowedRoles[0] ?? Role.FOREMAN);
   const [primarySiteId, setPrimarySiteId] = useState<string | null>(null);
 
   const usersQ = useQuery({ queryKey: qk.users, queryFn: () => endpoints.listUsers() });
@@ -90,7 +93,7 @@ export function UsersScreen() {
       <Card>
         <SectionHeading>{t('users.add')}</SectionHeading>
         <SectionHeading>{t('users.role')}</SectionHeading>
-        <Segmented options={roleOptions(t)} value={role} onChange={setRole} />
+        <Segmented options={roleOptions(t, currentUser?.role)} value={role} onChange={setRole} />
         <Field label={t('users.fullName')} value={fullName} onChangeText={setFullName} />
         <Field
           label={t('users.email')}

@@ -8,9 +8,21 @@ import { usersApi } from '../../lib/api/endpoints';
 import { ApiError } from '../../lib/api/client';
 import { qk } from '../../lib/api/queryKeys';
 import { useSitesList } from '../../lib/api/hooks';
+import { useAuth } from '../../app/AuthProvider';
 import { DataState, Modal, Field, Chip } from '../../components/ui';
 
-const ROLE_OPTIONS = [Role.FOREMAN, Role.WORKER, Role.PARTNER, Role.ADMIN, Role.MANAGER];
+/**
+ * UI mirror of the backend's manageableRolesFor (backend/src/plugins/auth.ts).
+ * ADMIN → all five roles; MANAGER → {FOREMAN, WORKER, MANAGER} (NO ADMIN/PARTNER).
+ * Defense-in-depth + UX only — the server remains the authorization boundary.
+ */
+function manageableRolesFor(callerRole: Role | undefined): Role[] {
+  if (callerRole === Role.ADMIN) {
+    return [Role.ADMIN, Role.MANAGER, Role.PARTNER, Role.FOREMAN, Role.WORKER];
+  }
+  // MANAGER (or unknown — fail closed to the narrower Manager set).
+  return [Role.FOREMAN, Role.WORKER, Role.MANAGER];
+}
 
 export function UsersScreen() {
   const { t } = useTranslation();
@@ -111,7 +123,14 @@ function UserForm({ user, onClose }: { user?: User; onClose: () => void }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const sites = useSitesList();
-  const [role, setRole] = useState<Role>(user?.role ?? Role.FOREMAN);
+  const { user: currentUser } = useAuth();
+  const roleOptions = manageableRolesFor(currentUser?.role);
+  // Edit edge case: if an existing user's role is outside the caller's allowed
+  // set (a Manager normally can't even reach such a user — backend 403s), keep
+  // it visible so we never render an empty/mismatched combobox or crash.
+  const options =
+    user && !roleOptions.includes(user.role) ? [user.role, ...roleOptions] : roleOptions;
+  const [role, setRole] = useState<Role>(user?.role ?? roleOptions[0] ?? Role.FOREMAN);
   const [fullName, setFullName] = useState(user?.fullName ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [primarySiteId, setPrimarySiteId] = useState(user?.primarySiteId ?? '');
@@ -173,7 +192,7 @@ function UserForm({ user, onClose }: { user?: User; onClose: () => void }) {
       {error ? <div className="banner banner-danger">{error}</div> : null}
       <Field label={t('users.role')}>
         <select className="select" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-          {ROLE_OPTIONS.map((r) => (
+          {options.map((r) => (
             <option key={r} value={r}>
               {t(`roles.${r}`)}
             </option>

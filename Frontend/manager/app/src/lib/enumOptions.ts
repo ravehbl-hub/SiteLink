@@ -19,9 +19,22 @@ export function levelOptions(t: TFunction) {
   }));
 }
 
-export function roleOptions(t: TFunction) {
-  // Manager provisions Foreman/Worker/Partner/Admin (FR-MGR-USER-1).
-  return [Role.FOREMAN, Role.WORKER, Role.PARTNER, Role.ADMIN].map((value) => ({
+/**
+ * UI mirror of the backend's manageableRolesFor (backend/src/plugins/auth.ts).
+ * ADMIN → all five roles; MANAGER → {FOREMAN, WORKER, MANAGER} (NO ADMIN/PARTNER).
+ * Defense-in-depth + UX only — the server remains the authorization boundary.
+ */
+export function manageableRolesFor(callerRole: Role | undefined): Role[] {
+  if (callerRole === Role.ADMIN) {
+    return [Role.ADMIN, Role.MANAGER, Role.PARTNER, Role.FOREMAN, Role.WORKER];
+  }
+  // MANAGER (or unknown — fail closed to the narrower Manager set).
+  return [Role.FOREMAN, Role.WORKER, Role.MANAGER];
+}
+
+/** Role options for the Users picker, filtered by the signed-in caller's role. */
+export function roleOptions(t: TFunction, callerRole?: Role) {
+  return manageableRolesFor(callerRole).map((value) => ({
     value,
     label: t(`roles.${value}`),
   }));

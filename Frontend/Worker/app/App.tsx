@@ -15,7 +15,7 @@ import i18n from './src/i18n';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import { AuthProvider, useAuth } from './src/auth/AuthProvider';
 import { AppDrawer } from './src/navigation/AppDrawer';
-import { LoginScreen } from './src/screens/LoginScreen';
+import { LoginScreen } from './src/features/auth/LoginScreen';
 import { Loading } from './src/components/ui';
 
 const queryClient = new QueryClient({

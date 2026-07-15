@@ -6,13 +6,13 @@
 import React, { useState } from 'react';
 import { Image, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../auth/AuthProvider';
-import { ApiError } from '../lib/api';
-import { Body, Button, Card, Field, ScreenPlain, Title } from '../components/ui';
-import { useTheme } from '../theme/ThemeProvider';
+import { useAuth } from '../../auth/AuthProvider';
+import { ApiError } from '../../lib/api';
+import { Body, Button, Card, Field, ScreenPlain, Title } from '../../components/ui';
+import { useTheme } from '../../theme/ThemeProvider';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const LOGO = require('../../assets/logo.png');
+const LOGO = require('../../../assets/logo.png');
 
 export function LoginScreen() {
   const { t } = useTranslation();

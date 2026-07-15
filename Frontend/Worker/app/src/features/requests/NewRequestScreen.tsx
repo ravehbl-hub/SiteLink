@@ -12,9 +12,9 @@ import { Alert, View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { RequestType } from '@sitelink/shared';
-import { endpoints, type CreateSelfRequestInput } from '../lib/endpoints';
-import { qk } from '../lib/queryKeys';
-import { ApiError } from '../lib/api';
+import { endpoints, type CreateSelfRequestInput } from '../../lib/endpoints';
+import { qk } from '../../lib/queryKeys';
+import { ApiError } from '../../lib/api';
 import {
   Body,
   Button,
@@ -26,7 +26,7 @@ import {
   Segmented,
   StatusPill,
   Title,
-} from '../components/ui';
+} from '../../components/ui';
 
 function toIsoOrNull(value: string): string | null {
   const trimmed = value.trim();

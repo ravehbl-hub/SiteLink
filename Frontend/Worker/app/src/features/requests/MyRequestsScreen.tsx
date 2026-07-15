@@ -7,9 +7,9 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { RequestStatus, type WorkerRequest } from '@sitelink/shared';
-import { endpoints } from '../lib/endpoints';
-import { qk } from '../lib/queryKeys';
-import { money, shortDate } from '../lib/format';
+import { endpoints } from '../../lib/endpoints';
+import { qk } from '../../lib/queryKeys';
+import { money, shortDate } from '../../lib/format';
 import {
   Body,
   Card,
@@ -20,7 +20,7 @@ import {
   Screen,
   StatusPill,
   Title,
-} from '../components/ui';
+} from '../../components/ui';
 
 type Tone = 'success' | 'warning' | 'danger';
 

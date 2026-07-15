@@ -7,9 +7,9 @@ import React from 'react';
 import { Alert, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Language, Theme } from '@sitelink/shared';
-import { useTheme } from '../theme/ThemeProvider';
-import { useAuth } from '../auth/AuthProvider';
-import { isRtlLanguage } from '../i18n';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useAuth } from '../../auth/AuthProvider';
+import { isRtlLanguage } from '../../i18n';
 import {
   Body,
   Button,
@@ -19,7 +19,7 @@ import {
   SectionHeading,
   Segmented,
   Title,
-} from '../components/ui';
+} from '../../components/ui';
 
 const APP_VERSION = '0.1.0';
 

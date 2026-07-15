@@ -9,13 +9,13 @@ import { Alert, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { WorkingHours } from '@sitelink/shared';
-import { endpoints, type WorkingHoursGrainParam } from '../lib/endpoints';
-import { qk } from '../lib/queryKeys';
-import { currentMonthRange, shortDate } from '../lib/format';
-import { exportWorkingHoursPdf } from '../lib/pdf';
-import { ApiError } from '../lib/api';
-import { toLocale } from '../i18n';
-import { useTheme } from '../theme/ThemeProvider';
+import { endpoints, type WorkingHoursGrainParam } from '../../lib/endpoints';
+import { qk } from '../../lib/queryKeys';
+import { currentMonthRange, shortDate } from '../../lib/format';
+import { exportWorkingHoursPdf } from '../../lib/pdf';
+import { ApiError } from '../../lib/api';
+import { toLocale } from '../../i18n';
+import { useTheme } from '../../theme/ThemeProvider';
 import {
   Body,
   Button,
@@ -29,8 +29,8 @@ import {
   SectionHeading,
   Segmented,
   Title,
-} from '../components/ui';
-import { BarChart } from '../components/charts';
+} from '../../components/ui';
+import { BarChart } from '../../components/charts';
 
 export function WorkingHoursScreen() {
   const { t } = useTranslation();

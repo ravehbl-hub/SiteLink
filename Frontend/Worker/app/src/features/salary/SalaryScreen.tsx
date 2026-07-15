@@ -9,12 +9,12 @@ import { Alert, View } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { SalaryResult } from '@sitelink/shared';
-import { endpoints } from '../lib/endpoints';
-import { currentMonthRange, money, shortDate } from '../lib/format';
-import { exportPayslipPdf } from '../lib/pdf';
-import { ApiError } from '../lib/api';
-import { toLocale } from '../i18n';
-import { useTheme } from '../theme/ThemeProvider';
+import { endpoints } from '../../lib/endpoints';
+import { currentMonthRange, money, shortDate } from '../../lib/format';
+import { exportPayslipPdf } from '../../lib/pdf';
+import { ApiError } from '../../lib/api';
+import { toLocale } from '../../i18n';
+import { useTheme } from '../../theme/ThemeProvider';
 import {
   Body,
   Button,
@@ -25,7 +25,7 @@ import {
   Screen,
   SectionHeading,
   Title,
-} from '../components/ui';
+} from '../../components/ui';
 
 /** Net = gross minus the sum of negative breakdown lines (deductions). */
 function computeNet(result: SalaryResult): number {

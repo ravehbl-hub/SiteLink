@@ -13,11 +13,11 @@ import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useTranslation } from 'react-i18next';
 import type { DrawerParamList } from './types';
 import { useTheme } from '../theme/ThemeProvider';
-import { WorkingHoursScreen } from '../screens/WorkingHoursScreen';
-import { SalaryScreen } from '../screens/SalaryScreen';
-import { NewRequestScreen } from '../screens/NewRequestScreen';
-import { MyRequestsScreen } from '../screens/MyRequestsScreen';
-import { SettingsScreen } from '../screens/SettingsScreen';
+import { WorkingHoursScreen } from '../features/hours/WorkingHoursScreen';
+import { SalaryScreen } from '../features/salary/SalaryScreen';
+import { NewRequestScreen } from '../features/requests/NewRequestScreen';
+import { MyRequestsScreen } from '../features/requests/MyRequestsScreen';
+import { SettingsScreen } from '../features/settings/SettingsScreen';
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
 

@@ -12,7 +12,7 @@ import {
 } from '@sitelink/shared';
 import { workersApi } from '../../lib/api/endpoints';
 import { qk } from '../../lib/api/queryKeys';
-import { DataState, Field } from '../../components/ui';
+import { DataState, Field, Chip } from '../../components/ui';
 import { dateInputToISO, formatDate, toDateInput } from '../../lib/format';
 import {
   WorkerFields,
@@ -62,6 +62,7 @@ function toForm(w: Awaited<ReturnType<typeof workersApi.get>>): WorkerFormState 
     qualityOfWorks: w.qualityOfWorks ?? '',
     phone: w.phone ?? '',
     email: w.email ?? '',
+    password: '',
     personnelCompany: w.personnelCompany ?? '',
     residence: w.residence ?? '',
     startDate: toDateInput(w.startDate),
@@ -95,7 +96,10 @@ function DetailsCard({
         address: form.address || null,
         qualityOfWorks: form.qualityOfWorks || null,
         phone: form.phone || null,
-        email: form.email || null,
+        // item 12: email maps to the login contract (email: string). An email change
+        // propagates to the linked User.email server-side. Only send when present so
+        // legacy login-less workers (null email) aren't forced to acquire one here.
+        ...(form.email.trim() ? { email: form.email.trim() } : {}),
         personnelCompany: form.personnelCompany || null,
         residence: form.residence || null,
         startDate: form.startDate ? dateInputToISO(form.startDate) : null,
@@ -111,16 +115,35 @@ function DetailsCard({
   });
 
   function onSave() {
-    const errs = validateWorker(form, t('common.required'));
+    const errs = validateWorker(form, t('common.required'), {
+      // On edit, email is optional (legacy login-less workers keep null), but if
+      // supplied it must be well-formed since it propagates to the linked login.
+      requireEmail: false,
+      emailInvalid: t('workers.emailInvalid'),
+    });
     setErrors(errs);
     if (Object.keys(errs).length === 0) save.mutate();
   }
 
+  // item 12: userId present ⇒ the worker has a linked WORKER login. The 4 legacy
+  // login-less workers have userId null (and typically a null email) — flag them.
+  const hasLogin = data.userId != null;
+
   return (
     <div className="card">
-      <h3 className="subsection-title">{t('workers.details')}</h3>
+      <div className="row-actions" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 className="subsection-title" style={{ margin: 0 }}>
+          {t('workers.details')}
+        </h3>
+        {hasLogin ? (
+          <Chip tone="success">{t('workers.workerLogin')}</Chip>
+        ) : (
+          <Chip tone="neutral">{t('workers.noLogin')}</Chip>
+        )}
+      </div>
+      {!hasLogin ? <div className="banner banner-info">{t('workers.noLoginHint')}</div> : null}
       {error ? <div className="banner banner-danger">{error}</div> : null}
-      <WorkerFields form={form} set={set} errors={errors} />
+      <WorkerFields form={form} set={set} errors={errors} mode="edit" />
       <div className="modal-footer">
         <button className="btn btn-primary" disabled={save.isPending} onClick={onSave}>
           {t('common.save')}

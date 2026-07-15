@@ -70,11 +70,17 @@ export function WorkersListScreen({ navigation }: Props) {
                   </Body>
                   <Body muted>{t(`professions.${w.profession}`)}</Body>
                 </View>
-                {w.isArchived ? (
-                  <StatusPill label={t('workers.archived')} tone="warning" />
-                ) : (
-                  <StatusPill label={t(`levels.${w.level}`)} tone="info" />
-                )}
+                <Row>
+                  {/* item 12: flag legacy login-less workers (userId null). */}
+                  {w.userId == null ? (
+                    <StatusPill label={t('workers.noLogin')} tone="warning" />
+                  ) : null}
+                  {w.isArchived ? (
+                    <StatusPill label={t('workers.archived')} tone="warning" />
+                  ) : (
+                    <StatusPill label={t(`levels.${w.level}`)} tone="info" />
+                  )}
+                </Row>
               </Row>
             </Card>
           </Pressable>

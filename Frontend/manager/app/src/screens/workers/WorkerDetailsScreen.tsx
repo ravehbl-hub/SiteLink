@@ -111,7 +111,16 @@ export function WorkerDetailsScreen({ route, navigation }: Props) {
         <Title>
           {w.firstName} {w.lastName}
         </Title>
-        {w.isArchived ? <StatusPill label={t('workers.archived')} tone="warning" /> : null}
+        <Row>
+          {/* item 12: userId present ⇒ linked WORKER login; the 4 legacy
+              login-less workers (userId null) are flagged 'No login'. */}
+          {w.userId != null ? (
+            <StatusPill label={t('workers.workerLogin')} tone="info" />
+          ) : (
+            <StatusPill label={t('workers.noLogin')} tone="warning" />
+          )}
+          {w.isArchived ? <StatusPill label={t('workers.archived')} tone="warning" /> : null}
+        </Row>
       </Row>
 
       <Card>
@@ -119,9 +128,12 @@ export function WorkerDetailsScreen({ route, navigation }: Props) {
         <DetailRow label={t('workers.profession')} value={t(`professions.${w.profession}`)} />
         <DetailRow label={t('workers.level')} value={t(`levels.${w.level}`)} />
         <DetailRow label={t('workers.phone')} value={w.phone ?? '—'} />
+        {/* Email may be null for legacy login-less workers — render gracefully. */}
+        <DetailRow label={t('workers.email')} value={w.email ?? '—'} />
         <DetailRow label={t('workers.country')} value={w.country ?? '—'} />
         <DetailRow label={t('workers.personnelCompany')} value={w.personnelCompany ?? '—'} />
         <DetailRow label={t('workers.startDate')} value={shortDate(w.startDate)} />
+        {w.userId == null ? <Body muted>{t('workers.noLoginHint')}</Body> : null}
       </Card>
 
       <Card>

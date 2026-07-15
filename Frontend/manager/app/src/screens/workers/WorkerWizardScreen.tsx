@@ -46,6 +46,9 @@ export function WorkerWizardScreen({ navigation }: Props) {
   const [phone, setPhone] = useState('');
   const [country, setCountry] = useState('');
   const [personnelCompany, setPersonnelCompany] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [hourlyWage, setHourlyWage] = useState('');
   const [image, setImage] = useState<PickedFile | null>(null);
 
@@ -59,6 +62,10 @@ export function WorkerWizardScreen({ navigation }: Props) {
         phone: phone.trim() || null,
         country: country.trim() || null,
         personnelCompany: personnelCompany.trim() || null,
+        // item 12: email is REQUIRED — every new worker is provisioned a WORKER
+        // login from this address. Validated (non-empty + format) before submit.
+        email: email.trim(),
+        ...(password ? { password } : {}),
       };
       const worker = await endpoints.createWorker(body);
       const wage = Number(hourlyWage);
@@ -114,7 +121,22 @@ export function WorkerWizardScreen({ navigation }: Props) {
     if (file) setImage(file);
   }
 
-  const canSubmit = firstName.trim() && lastName.trim();
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const canSubmit = Boolean(firstName.trim() && lastName.trim() && email.trim());
+
+  function onSubmit() {
+    const value = email.trim();
+    if (!value) {
+      setEmailError(t('workers.emailRequired'));
+      return;
+    }
+    if (!EMAIL_RE.test(value)) {
+      setEmailError(t('workers.emailInvalid'));
+      return;
+    }
+    setEmailError(null);
+    createMut.mutate();
+  }
 
   return (
     <Screen>
@@ -169,6 +191,34 @@ export function WorkerWizardScreen({ navigation }: Props) {
       </Card>
 
       <Card>
+        <SectionHeading>{t('workers.login')}</SectionHeading>
+        {/* item 12: role is always WORKER for a worker login — fixed, not a picker. */}
+        <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
+          <Body muted>{t('workers.role')}</Body>
+          <Body>{t('workers.roleWorker')}</Body>
+        </Row>
+        <Field
+          label={`${t('workers.email')} *`}
+          value={email}
+          onChangeText={(v) => {
+            setEmail(v);
+            if (emailError) setEmailError(null);
+          }}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+        {emailError ? <Body muted>{emailError}</Body> : null}
+        <Field
+          label={t('workers.initialPassword')}
+          value={password}
+          onChangeText={setPassword}
+          placeholder={t('workers.initialPasswordHint')}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+      </Card>
+
+      <Card>
         <SectionHeading>{t('workers.salaryData')}</SectionHeading>
         <Field
           label={t('workers.hourlyWage')}
@@ -180,7 +230,7 @@ export function WorkerWizardScreen({ navigation }: Props) {
 
       <Button
         title={t('common.save')}
-        onPress={() => createMut.mutate()}
+        onPress={onSubmit}
         loading={createMut.isPending}
         disabled={!canSubmit}
       />

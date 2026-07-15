@@ -55,7 +55,10 @@ export function WorkerWizard() {
         address: form.address || null,
         qualityOfWorks: form.qualityOfWorks || null,
         phone: form.phone || null,
-        email: form.email || null,
+        // item 12: email is REQUIRED — every new worker is provisioned a WORKER
+        // login from this address. Validated (non-empty + format) before we get here.
+        email: form.email.trim(),
+        ...(form.password ? { password: form.password } : {}),
         personnelCompany: form.personnelCompany || null,
         residence: form.residence || null,
         startDate: form.startDate ? dateInputToISO(form.startDate) : null,
@@ -81,7 +84,11 @@ export function WorkerWizard() {
   });
 
   function goToSalary() {
-    const errs = validateWorker(form, t('common.required'));
+    const errs = validateWorker(form, t('common.required'), {
+      requireEmail: true,
+      emailRequired: t('workers.emailRequired'),
+      emailInvalid: t('workers.emailInvalid'),
+    });
     setErrors(errs);
     if (Object.keys(errs).length === 0) setStep(1);
   }
@@ -119,7 +126,7 @@ export function WorkerWizard() {
               />
               {imageName ? <span className="muted">{imageName}</span> : null}
             </Field>
-            <WorkerFields form={form} set={set} errors={errors} />
+            <WorkerFields form={form} set={set} errors={errors} mode="create" />
             <div className="modal-footer">
               <button className="btn btn-primary" onClick={goToSalary}>
                 {t('common.next')}

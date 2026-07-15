@@ -91,11 +91,17 @@ export function WorkersList() {
                     <td>{t(`profession.${w.profession}`)}</td>
                     <td>{t(`level.${w.level}`)}</td>
                     <td>
-                      {w.isArchived ? (
-                        <Chip tone="neutral">{t('workers.archived')}</Chip>
-                      ) : (
-                        <Chip tone="success">{t('workers.active')}</Chip>
-                      )}
+                      <div className="row-actions">
+                        {w.isArchived ? (
+                          <Chip tone="neutral">{t('workers.archived')}</Chip>
+                        ) : (
+                          <Chip tone="success">{t('workers.active')}</Chip>
+                        )}
+                        {/* item 12: legacy login-less workers (userId null) flagged. */}
+                        {w.userId == null ? (
+                          <Chip tone="warning">{t('workers.noLogin')}</Chip>
+                        ) : null}
+                      </div>
                     </td>
                     <td>
                       <div className="row-actions">

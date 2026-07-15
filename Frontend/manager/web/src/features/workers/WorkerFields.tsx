@@ -14,6 +14,7 @@ export interface WorkerFormState {
   qualityOfWorks: string;
   phone: string;
   email: string;
+  password: string;
   personnelCompany: string;
   residence: string;
   startDate: string; // YYYY-MM-DD
@@ -30,6 +31,7 @@ export const emptyWorkerForm: WorkerFormState = {
   qualityOfWorks: '',
   phone: '',
   email: '',
+  password: '',
   personnelCompany: '',
   residence: '',
   startDate: '',
@@ -40,13 +42,33 @@ export interface WorkerFieldErrors {
   firstName?: string;
   lastName?: string;
   profession?: string;
+  email?: string;
 }
 
-export function validateWorker(form: WorkerFormState, required: string): WorkerFieldErrors {
+/** Basic RFC-lite email shape check for the required worker login email. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Validate the worker form.
+ * `requireEmail` is true on CREATE (item 12: every new worker gets a WORKER login
+ * provisioned from this email). On EDIT the field is optional — legacy login-less
+ * workers may still have an empty email — but if present it must be well-formed.
+ */
+export function validateWorker(
+  form: WorkerFormState,
+  required: string,
+  messages?: { requireEmail?: boolean; emailRequired?: string; emailInvalid?: string },
+): WorkerFieldErrors {
   const errors: WorkerFieldErrors = {};
   if (!form.firstName.trim()) errors.firstName = required;
   if (!form.lastName.trim()) errors.lastName = required;
   if (!form.profession) errors.profession = required;
+  const email = form.email.trim();
+  if (!email) {
+    if (messages?.requireEmail) errors.email = messages.emailRequired ?? required;
+  } else if (!EMAIL_RE.test(email)) {
+    errors.email = messages?.emailInvalid ?? required;
+  }
   return errors;
 }
 
@@ -54,13 +76,18 @@ export function WorkerFields({
   form,
   set,
   errors,
+  mode = 'edit',
 }: {
   form: WorkerFormState;
   set: (patch: Partial<WorkerFormState>) => void;
   errors: WorkerFieldErrors;
+  /** 'create' shows the login provisioning fields (required email, optional
+   *  password, static Role: Worker). 'edit' shows email as an optional update. */
+  mode?: 'create' | 'edit';
 }) {
   const { t } = useTranslation();
   const sites = useSitesList();
+  const isCreate = mode === 'create';
 
   return (
     <div className="form-grid">
@@ -113,7 +140,10 @@ export function WorkerFields({
       <Field label={t('workers.phone')}>
         <input className="input" value={form.phone} onChange={(e) => set({ phone: e.target.value })} />
       </Field>
-      <Field label={t('workers.email')}>
+      <Field
+        label={isCreate ? `${t('workers.email')} *` : t('workers.email')}
+        error={errors.email}
+      >
         <input
           className="input"
           type="email"
@@ -121,6 +151,25 @@ export function WorkerFields({
           onChange={(e) => set({ email: e.target.value })}
         />
       </Field>
+      {isCreate ? (
+        <>
+          <Field label={t('workers.initialPassword')}>
+            <input
+              className="input"
+              type="password"
+              autoComplete="new-password"
+              placeholder={t('workers.initialPasswordHint')}
+              value={form.password}
+              onChange={(e) => set({ password: e.target.value })}
+            />
+          </Field>
+          <Field label={t('workers.role')}>
+            <div className="input" aria-readonly="true" style={{ display: 'flex', alignItems: 'center' }}>
+              {t('workers.roleWorker')}
+            </div>
+          </Field>
+        </>
+      ) : null}
       <Field label={t('workers.personnelCompany')}>
         <input
           className="input"

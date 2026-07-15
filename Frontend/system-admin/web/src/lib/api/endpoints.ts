@@ -4,12 +4,20 @@
  * shapes are declared locally to mirror the back-end service projections.
  */
 import type {
+  Billing,
+  BillingStatus,
+  CreateBillingInput,
+  CreateCustomerInput,
+  CreateUsageInput,
   CreateUserInput,
   CurrentUser,
+  Customer,
   Paginated,
   ProfitLoss,
   Role,
+  UpdateCustomerInput,
   UpdateUserInput,
+  Usage,
   User,
 } from '@sitelink/shared';
 import { http, rootGet, type Query } from './client';
@@ -94,3 +102,45 @@ export const usersApi = {
     http.post<User>(`/users/${id}/lockout`, { isLockedOut }),
   remove: (id: string) => http.del<void>(`/users/${id}`),
 };
+
+/* ── Customers (SaaS tenants, FR-BO-1/2, ADMIN-only) ──────────────────────
+ * All list endpoints return a Paginated<T> envelope — consume `.items`. */
+export interface ListCustomersParams {
+  includeArchived?: boolean;
+}
+export const customersApi = {
+  list: (params?: ListCustomersParams) =>
+    http.get<Paginated<Customer>>('/backoffice/customers', params as Query),
+  get: (id: string) => http.get<Customer>(`/backoffice/customers/${id}`),
+  create: (body: CreateCustomerInput) =>
+    http.post<Customer>('/backoffice/customers', body),
+  update: (id: string, body: UpdateCustomerInput) =>
+    http.patch<Customer>(`/backoffice/customers/${id}`, body),
+  archive: (id: string) => http.post<Customer>(`/backoffice/customers/${id}/archive`),
+  unarchive: (id: string) =>
+    http.post<Customer>(`/backoffice/customers/${id}/unarchive`),
+};
+
+/* ── Billing (FR-BO-2, ADMIN-only) ────────────────────────────────────── */
+export interface ListBillingParams {
+  customerId?: string;
+}
+export const billingApi = {
+  list: (params?: ListBillingParams) =>
+    http.get<Paginated<Billing>>('/backoffice/billing', params as Query),
+  create: (body: CreateBillingInput) => http.post<Billing>('/backoffice/billing', body),
+};
+
+/* ── Usage (FR-BO-2/3, ADMIN-only) ────────────────────────────────────── */
+export interface ListUsageParams {
+  customerId?: string;
+  metric?: string;
+}
+export const usageApi = {
+  list: (params?: ListUsageParams) =>
+    http.get<Paginated<Usage>>('/backoffice/usage', params as Query),
+  create: (body: CreateUsageInput) => http.post<Usage>('/backoffice/usage', body),
+};
+
+/** Re-export for screen chips without a second shared import site. */
+export type { BillingStatus };

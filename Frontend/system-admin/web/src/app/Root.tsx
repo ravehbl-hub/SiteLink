@@ -8,9 +8,9 @@ import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { AdminUsersScreen } from '../features/adminUsers/AdminUsersScreen';
 import { UsersActivityScreen } from '../features/usersActivity/UsersActivityScreen';
 import { BookkeepingScreen } from '../features/bookkeeping/BookkeepingScreen';
-import { CustomersScreen } from '../features/future/CustomersScreen';
-import { BillingScreen } from '../features/future/BillingScreen';
-import { UsageScreen } from '../features/future/UsageScreen';
+import { CustomersScreen } from '../features/customers/CustomersScreen';
+import { BillingScreen } from '../features/billing/BillingScreen';
+import { UsageScreen } from '../features/usage/UsageScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 
 export function Root() {

@@ -22,9 +22,9 @@ const NAV: NavItem[] = [
   { to: '/admin-users', key: 'nav.adminUsers' },
   { to: '/users-activity', key: 'nav.usersActivity' },
   { to: '/bookkeeping', key: 'nav.bookkeeping' },
-  { to: '/customers', key: 'nav.customers', future: true },
-  { to: '/billing', key: 'nav.billing', future: true },
-  { to: '/usage', key: 'nav.usage', future: true },
+  { to: '/customers', key: 'nav.customers' },
+  { to: '/billing', key: 'nav.billing' },
+  { to: '/usage', key: 'nav.usage' },
   { to: '/settings', key: 'nav.settings' },
 ];
 

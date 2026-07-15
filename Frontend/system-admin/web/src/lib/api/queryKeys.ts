@@ -6,4 +6,7 @@ export const qk = {
   boUsers: ['backoffice', 'users'] as const,
   boProfitLoss: (params: unknown) => ['backoffice', 'profit-loss', params] as const,
   users: (params: unknown) => ['users', params] as const,
+  customers: (params: unknown) => ['customers', params] as const,
+  billing: (params: unknown) => ['billing', params] as const,
+  usage: (params: unknown) => ['usage', params] as const,
 };

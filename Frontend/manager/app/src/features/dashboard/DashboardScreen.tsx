@@ -12,9 +12,9 @@ import { View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { DashboardRollup, Site } from '@sitelink/shared';
-import { endpoints } from '../lib/endpoints';
-import { qk } from '../lib/queryKeys';
-import { currentMonthRange, money } from '../lib/format';
+import { endpoints } from '../../lib/endpoints';
+import { qk } from '../../lib/queryKeys';
+import { currentMonthRange, money } from '../../lib/format';
 import {
   Body,
   Card,
@@ -27,14 +27,14 @@ import {
   SectionHeading,
   Segmented,
   Title,
-} from '../components/ui';
-import { BarChart, DonutChart, type Datum } from '../components/charts';
+} from '../../components/ui';
+import { BarChart, DonutChart, type Datum } from '../../components/charts';
 import {
   loadDashboardViewPref,
   saveDashboardViewPref,
   type DashboardView,
-} from '../lib/prefs';
-import { useTheme } from '../theme/ThemeProvider';
+} from '../../lib/prefs';
+import { useTheme } from '../../theme/ThemeProvider';
 
 export function DashboardScreen() {
   const { t } = useTranslation();

@@ -7,11 +7,11 @@ import { Alert, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Profession, RateType, SalaryCalcMode } from '@sitelink/shared';
-import { endpoints } from '../lib/endpoints';
-import { qk } from '../lib/queryKeys';
-import { money } from '../lib/format';
-import { ApiError } from '../lib/api';
-import { calcModeOptions, professionOptions, rateTypeOptions } from '../lib/enumOptions';
+import { endpoints } from '../../lib/endpoints';
+import { qk } from '../../lib/queryKeys';
+import { money } from '../../lib/format';
+import { ApiError } from '../../lib/api';
+import { calcModeOptions, professionOptions, rateTypeOptions } from '../../lib/enumOptions';
 import {
   Body,
   Button,
@@ -25,7 +25,7 @@ import {
   Segmented,
   StatusPill,
   Title,
-} from '../components/ui';
+} from '../../components/ui';
 
 export function PaymentScreen() {
   const { t } = useTranslation();

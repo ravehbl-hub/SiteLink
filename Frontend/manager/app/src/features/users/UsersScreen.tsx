@@ -9,11 +9,11 @@ import { Alert, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Role, type CreateUserInput, type Site } from '@sitelink/shared';
-import { endpoints } from '../lib/endpoints';
-import { qk } from '../lib/queryKeys';
-import { ApiError } from '../lib/api';
-import { roleOptions, manageableRolesFor } from '../lib/enumOptions';
-import { useAuth } from '../auth/AuthProvider';
+import { endpoints } from '../../lib/endpoints';
+import { qk } from '../../lib/queryKeys';
+import { ApiError } from '../../lib/api';
+import { roleOptions, manageableRolesFor } from '../../lib/enumOptions';
+import { useAuth } from '../../auth/AuthProvider';
 import {
   Body,
   Button,
@@ -27,7 +27,7 @@ import {
   Segmented,
   StatusPill,
   Title,
-} from '../components/ui';
+} from '../../components/ui';
 
 export function UsersScreen() {
   const { t } = useTranslation();

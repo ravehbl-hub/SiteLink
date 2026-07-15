@@ -4,9 +4,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeProvider';
 import type { WorkersStackParamList } from './types';
-import { WorkersListScreen } from '../screens/workers/WorkersListScreen';
-import { WorkerWizardScreen } from '../screens/workers/WorkerWizardScreen';
-import { WorkerDetailsScreen } from '../screens/workers/WorkerDetailsScreen';
+import { WorkersListScreen } from '../features/workers/WorkersListScreen';
+import { WorkerWizardScreen } from '../features/workers/WorkerWizardScreen';
+import { WorkerDetailsScreen } from '../features/workers/WorkerDetailsScreen';
 
 const Stack = createNativeStackNavigator<WorkersStackParamList>();
 

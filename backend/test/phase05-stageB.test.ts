@@ -918,3 +918,278 @@ describe('FR-BO — Back Office ADMIN-only surfaces', () => {
     expect(billRes.statusCode).toBe(403);
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// FR-MGR-USER — /users privilege boundary (privilege-escalation prevention).
+//
+// manageableRolesFor: ADMIN ⇒ all five roles; MANAGER ⇒ {FOREMAN,WORKER,MANAGER}.
+// A MANAGER can neither SEE nor ACT ON ADMIN/PARTNER users; ADMIN is unrestricted.
+// Enforcement is SERVER-SIDE in the users service (list filter, ?role
+// intersection, per-id 403, create/role-change restriction).
+// ════════════════════════════════════════════════════════════════════════════
+describe('FR-MGR-USER — /users privilege boundary (no privilege escalation)', () => {
+  // A PARTNER fixture user — a MANAGER must never see or act on it.
+  const PARTNER_AUTH = `seedB-partner-${randomUUID()}`;
+  let partnerUserId: string;
+  // A second ADMIN target the MANAGER must be refused on, and that ADMIN can act on.
+  const ADMIN2_AUTH = `seedB-admin2-${randomUUID()}`;
+  let admin2UserId: string;
+
+  beforeAll(async () => {
+    const partner = await prisma.user.upsert({
+      where: { email: 'stageB-partner@sitelink.test' },
+      update: { role: Role.PARTNER, isLockedOut: false, authUserId: PARTNER_AUTH },
+      create: {
+        authUserId: PARTNER_AUTH,
+        role: Role.PARTNER,
+        fullName: 'StageB Partner',
+        email: 'stageB-partner@sitelink.test',
+      },
+    });
+    partnerUserId = partner.id;
+    createdAppUserIds.push(partnerUserId);
+
+    const admin2 = await prisma.user.upsert({
+      where: { email: 'stageB-admin2@sitelink.test' },
+      update: { role: Role.ADMIN, isLockedOut: false, authUserId: ADMIN2_AUTH },
+      create: {
+        authUserId: ADMIN2_AUTH,
+        role: Role.ADMIN,
+        fullName: 'StageB Admin2',
+        email: 'stageB-admin2@sitelink.test',
+      },
+    });
+    admin2UserId = admin2.id;
+    createdAppUserIds.push(admin2UserId);
+  }, 60_000);
+
+  // (a) MANAGER list excludes ADMIN/PARTNER rows.
+  it('CRITICAL: MANAGER list excludes ADMIN and PARTNER rows', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users?page=1&pageSize=200',
+      headers: auth(mgrToken),
+    });
+    expect(res.statusCode).toBe(200);
+    const items: Array<{ id: string; role: string }> = res.json().items;
+    for (const u of items) {
+      expect(['FOREMAN', 'WORKER', 'MANAGER']).toContain(u.role);
+    }
+    // The specific ADMIN/PARTNER fixtures must not leak.
+    expect(items.some((u) => u.id === adminUserId)).toBe(false);
+    expect(items.some((u) => u.id === admin2UserId)).toBe(false);
+    expect(items.some((u) => u.id === partnerUserId)).toBe(false);
+  });
+
+  // (d) MANAGER ?role=ADMIN → empty (intersection is empty).
+  it('CRITICAL: MANAGER ?role=ADMIN returns an empty page (never admins)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users?role=ADMIN&page=1&pageSize=200',
+      headers: auth(mgrToken),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.items).toEqual([]);
+    expect(body.total).toBe(0);
+  });
+
+  it('CRITICAL: MANAGER ?role=PARTNER returns an empty page (never partners)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users?role=PARTNER&page=1&pageSize=200',
+      headers: auth(mgrToken),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().items).toEqual([]);
+  });
+
+  // (b) MANAGER GET/PATCH/DELETE/lockout on an ADMIN target → 403.
+  it('CRITICAL: MANAGER GET on an ADMIN target → 403 (cannot view a hidden user)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/users/${admin2UserId}`,
+      headers: auth(mgrToken),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('CRITICAL: MANAGER PATCH on an ADMIN target → 403, no mutation', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${admin2UserId}`,
+      headers: auth(mgrToken),
+      payload: { fullName: 'HACKED' },
+    });
+    expect(res.statusCode).toBe(403);
+    const row = await prisma.user.findUnique({ where: { id: admin2UserId } });
+    expect(row!.fullName).toBe('StageB Admin2'); // untouched
+  });
+
+  it('CRITICAL: MANAGER lockout on an ADMIN target → 403, no lockout', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/users/${admin2UserId}/lockout`,
+      headers: auth(mgrToken),
+      payload: { isLockedOut: true },
+    });
+    expect(res.statusCode).toBe(403);
+    const row = await prisma.user.findUnique({ where: { id: admin2UserId } });
+    expect(row!.isLockedOut).toBe(false); // untouched
+  });
+
+  it('CRITICAL: MANAGER DELETE on an ADMIN target → 403, row survives', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/users/${admin2UserId}`,
+      headers: auth(mgrToken),
+    });
+    expect(res.statusCode).toBe(403);
+    const row = await prisma.user.findUnique({ where: { id: admin2UserId } });
+    expect(row).not.toBeNull(); // still there
+  });
+
+  it('CRITICAL: MANAGER GET/PATCH on a PARTNER target → 403', async () => {
+    const get = await app.inject({
+      method: 'GET',
+      url: `/api/v1/users/${partnerUserId}`,
+      headers: auth(mgrToken),
+    });
+    expect(get.statusCode).toBe(403);
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${partnerUserId}`,
+      headers: auth(mgrToken),
+      payload: { role: 'WORKER' },
+    });
+    expect(patch.statusCode).toBe(403);
+    const row = await prisma.user.findUnique({ where: { id: partnerUserId } });
+    expect(row!.role).toBe('PARTNER'); // untouched
+  });
+
+  // (c) MANAGER create role=ADMIN / role=PARTNER → 403, nothing written.
+  it('CRITICAL: MANAGER create role=ADMIN → 403, no user or identity created', async () => {
+    const email = `stageB-mgr-escalate-${randomUUID().slice(0, 8)}@sitelink.test`;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: auth(mgrToken),
+      payload: { role: 'ADMIN', fullName: 'Should Not Exist', email, password: `Pw-${randomUUID()}` },
+    });
+    expect(res.statusCode).toBe(403);
+    const leaked = await prisma.user.count({ where: { email } });
+    expect(leaked).toBe(0); // no dual-write occurred
+  });
+
+  it('CRITICAL: MANAGER create role=PARTNER → 403', async () => {
+    const email = `stageB-mgr-partner-${randomUUID().slice(0, 8)}@sitelink.test`;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: auth(mgrToken),
+      payload: { role: 'PARTNER', fullName: 'Nope', email, password: `Pw-${randomUUID()}` },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(await prisma.user.count({ where: { email } })).toBe(0);
+  });
+
+  it('MANAGER cannot PATCH a manageable user TO role ADMIN (role-change guard)', async () => {
+    // Target the FOREMAN fixture (in the MANAGER's set) and try to promote to ADMIN.
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${foremanAUserId}`,
+      headers: auth(mgrToken),
+      payload: { role: 'ADMIN' },
+    });
+    expect(res.statusCode).toBe(403);
+    const row = await prisma.user.findUnique({ where: { id: foremanAUserId } });
+    expect(row!.role).toBe('FOREMAN'); // not promoted
+  });
+
+  it('MANAGER CAN create a WORKER (in-set role succeeds)', async () => {
+    const email = `stageB-mgr-worker-${randomUUID().slice(0, 8)}@sitelink.test`;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: auth(mgrToken),
+      payload: { role: 'WORKER', fullName: 'Mgr Made Worker', email, password: `Pw-${randomUUID()}` },
+    });
+    expect(res.statusCode).toBe(201);
+    const created = res.json();
+    createdAppUserIds.push(created.id);
+    const row = await prisma.user.findUnique({ where: { id: created.id } });
+    if (row) createdAuthIds.push(row.authUserId);
+    expect(created.role).toBe('WORKER');
+  });
+
+  // (e) ADMIN list ?role=ADMIN returns admins (full access).
+  it('ADMIN list ?role=ADMIN returns ADMIN rows (System Admin screen use-case)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users?role=ADMIN&page=1&pageSize=200',
+      headers: auth(adminToken),
+    });
+    expect(res.statusCode).toBe(200);
+    const items: Array<{ id: string; role: string }> = res.json().items;
+    expect(items.length).toBeGreaterThan(0);
+    for (const u of items) expect(u.role).toBe('ADMIN');
+    expect(items.some((u) => u.id === admin2UserId)).toBe(true);
+  });
+
+  it('ADMIN list (no filter) can see ADMIN and PARTNER rows (unrestricted)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users?page=1&pageSize=200',
+      headers: auth(adminToken),
+    });
+    expect(res.statusCode).toBe(200);
+    const items: Array<{ id: string }> = res.json().items;
+    expect(items.some((u) => u.id === admin2UserId)).toBe(true);
+    expect(items.some((u) => u.id === partnerUserId)).toBe(true);
+  });
+
+  // (f) ADMIN can create + lockout an ADMIN (full access retained).
+  it('ADMIN can create an ADMIN and lock it out (full access retained)', async () => {
+    const email = `stageB-admin-made-${randomUUID().slice(0, 8)}@sitelink.test`;
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: auth(adminToken),
+      payload: { role: 'ADMIN', fullName: 'Admin Made Admin', email, password: `Pw-${randomUUID()}` },
+    });
+    expect(create.statusCode).toBe(201);
+    const created = create.json();
+    createdAppUserIds.push(created.id);
+    const row = await prisma.user.findUnique({ where: { id: created.id } });
+    if (row) createdAuthIds.push(row.authUserId);
+    expect(created.role).toBe('ADMIN');
+
+    const lockout = await app.inject({
+      method: 'POST',
+      url: `/api/v1/users/${created.id}/lockout`,
+      headers: auth(adminToken),
+      payload: { isLockedOut: true },
+    });
+    expect(lockout.statusCode).toBe(200);
+    expect(lockout.json().isLockedOut).toBe(true);
+  });
+
+  it('ADMIN can GET and PATCH an ADMIN target (no privilege block for ADMIN)', async () => {
+    const get = await app.inject({
+      method: 'GET',
+      url: `/api/v1/users/${admin2UserId}`,
+      headers: auth(adminToken),
+    });
+    expect(get.statusCode).toBe(200);
+    expect(get.json().role).toBe('ADMIN');
+
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${admin2UserId}`,
+      headers: auth(adminToken),
+      payload: { fullName: 'StageB Admin2 Edited' },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().fullName).toBe('StageB Admin2 Edited');
+  });
+});

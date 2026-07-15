@@ -151,3 +151,32 @@ export const READ_ROLES: Role[] = [Role.ADMIN, Role.MANAGER, Role.PARTNER];
 export const FOREMAN_ROLES: Role[] = [Role.ADMIN, Role.MANAGER, Role.FOREMAN];
 export const WORKER_ROLES: Role[] = [Role.WORKER];
 export const BACKOFFICE_ROLES: Role[] = [Role.ADMIN];
+
+/**
+ * Users-module privilege boundary (prevents privilege escalation via the
+ * Manager/Admin-gated /users surface).
+ *
+ * Returns the set of roles a caller may SEE and MANAGE (list/get/create/edit/
+ * lockout/delete) on the /users module:
+ *   - ADMIN   ⇒ ALL five roles (System Admin screen — no restriction).
+ *   - MANAGER ⇒ {FOREMAN, WORKER, MANAGER} ONLY.
+ *
+ * PARTNER-EXCLUSION ASSUMPTION: the product owner's explicit list was
+ * Foreman/Worker/Manager, so PARTNER (and ADMIN) are intentionally OUT of a
+ * MANAGER's manageable set — a MANAGER can neither see nor act on ADMIN or
+ * PARTNER users. If PARTNER should later be visible to MANAGERs, add Role.PARTNER
+ * to the array below (one line) — no other code changes needed.
+ *
+ * This is the SERVER-SIDE authorization source of truth; UI hiding is never
+ * sufficient. All /users enforcement derives from this set.
+ */
+const MANAGER_MANAGEABLE_ROLES: Role[] = [Role.FOREMAN, Role.WORKER, Role.MANAGER];
+
+export function manageableRolesFor(caller: Pick<AuthUser, 'role'>): Role[] {
+  if (caller.role === Role.ADMIN) {
+    return [Role.ADMIN, Role.MANAGER, Role.PARTNER, Role.FOREMAN, Role.WORKER];
+  }
+  // MANAGER (the only other role that reaches the MANAGER_ROLES-gated /users
+  // surface). Return a fresh copy so callers can't mutate the module constant.
+  return [...MANAGER_MANAGEABLE_ROLES];
+}

@@ -9,35 +9,82 @@
  */
 import type { z } from 'zod';
 import type { User, Paginated } from '@sitelink/shared';
+import { Role } from '@sitelink/shared';
 import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { mapUser } from '../../lib/mappers.js';
 import type { SupabaseService } from '../../lib/supabase.js';
+import { manageableRolesFor } from '../../plugins/auth.js';
+import type { AuthUser } from '../../plugins/types.js';
 import { paginate, type PaginationParams, toSkipTake } from '../../lib/pagination.js';
-import type { createUserSchema, updateUserSchema } from './schemas.js';
+import type { createUserSchema, listUsersQuerySchema, updateUserSchema } from './schemas.js';
 
 type CreateInput = z.infer<typeof createUserSchema>;
 type UpdateInput = z.infer<typeof updateUserSchema>;
+type ListInput = z.infer<typeof listUsersQuerySchema>;
+
+/**
+ * The caller identity threaded from the route into every service method. Only the
+ * role is load-bearing for the users-module privilege boundary, but we accept the
+ * full AuthUser for clarity/future use.
+ */
+type Caller = Pick<AuthUser, 'role'>;
 
 export class UsersService {
   constructor(private readonly supabase: SupabaseService) {}
 
-  async list(params: PaginationParams): Promise<Paginated<User>> {
+  /**
+   * Compute the effective role filter for a list request:
+   *   effective = (requested ? {requested} : manageable) ∩ manageable
+   * A MANAGER passing ?role=ADMIN yields [] → an empty page (never ADMIN rows).
+   */
+  private effectiveListRoles(caller: Caller, requested?: Role): Role[] {
+    const manageable = manageableRolesFor(caller);
+    if (!requested) return manageable;
+    return manageable.includes(requested) ? [requested] : [];
+  }
+
+  /**
+   * Load a target user and enforce that the caller may act on it. If the target's
+   * CURRENT role is outside the caller's manageable set → 403 (prevents acting on a
+   * hidden user by guessing its id). Returns the row for the caller to mutate.
+   */
+  private async loadManageableTarget(caller: Caller, id: string) {
+    const row = await prisma.user.findUnique({ where: { id } });
+    if (!row) throw AppError.notFound('User not found');
+    if (!manageableRolesFor(caller).includes(row.role as Role)) {
+      throw AppError.forbidden();
+    }
+    return row;
+  }
+
+  async list(caller: Caller, params: ListInput): Promise<Paginated<User>> {
     const { skip, take } = toSkipTake(params);
+    const roles = this.effectiveListRoles(caller, params.role);
+    // Empty effective set (e.g. MANAGER + ?role=ADMIN) → empty page, no query.
+    if (roles.length === 0) return paginate<User>([], 0, params);
+
+    const where = { role: { in: roles } };
     const [rows, total] = await Promise.all([
-      prisma.user.findMany({ skip, take, orderBy: { createdAt: 'desc' } }),
-      prisma.user.count(),
+      prisma.user.findMany({ where, skip, take, orderBy: { createdAt: 'desc' } }),
+      prisma.user.count({ where }),
     ]);
     return paginate(rows.map(mapUser), total, params);
   }
 
-  async get(id: string): Promise<User> {
-    const row = await prisma.user.findUnique({ where: { id } });
-    if (!row) throw AppError.notFound('User not found');
+  async get(caller: Caller, id: string): Promise<User> {
+    const row = await this.loadManageableTarget(caller, id);
     return mapUser(row);
   }
 
-  async create(input: CreateInput): Promise<User> {
+  async create(caller: Caller, input: CreateInput): Promise<User> {
+    // Privilege boundary: a caller may only create a role within their manageable
+    // set (validated against manageableRolesFor, not just the Zod enum). A MANAGER
+    // creating ADMIN/PARTNER → 403; ADMIN may create any role.
+    if (!manageableRolesFor(caller).includes(input.role)) {
+      throw AppError.forbidden();
+    }
+
     // Guard the app-side unique constraint up front (email is unique). Use the
     // dedicated USER_EMAIL_EXISTS code so the client shows the friendly message —
     // same code the Supabase-side duplicate mapping uses (mapCreateAuthError).
@@ -73,9 +120,17 @@ export class UsersService {
     }
   }
 
-  async update(id: string, input: UpdateInput): Promise<User> {
-    const current = await prisma.user.findUnique({ where: { id } });
-    if (!current) throw AppError.notFound('User not found');
+  async update(caller: Caller, id: string, input: UpdateInput): Promise<User> {
+    // Enforce the target's CURRENT role is manageable BEFORE mutating (403 if the
+    // caller is a MANAGER acting on an ADMIN/PARTNER — even by guessing the id).
+    const current = await this.loadManageableTarget(caller, id);
+
+    // Role-change guard: a MANAGER cannot promote a user TO a role outside their
+    // set (ADMIN/PARTNER). The new role must also be manageable. (The old role was
+    // already validated above.) ADMIN is unrestricted.
+    if (input.role !== undefined && !manageableRolesFor(caller).includes(input.role)) {
+      throw AppError.forbidden();
+    }
 
     // If lockout is being changed, mirror it to Supabase (ban/unban).
     if (input.isLockedOut !== undefined && input.isLockedOut !== current.isLockedOut) {
@@ -99,17 +154,15 @@ export class UsersService {
     return mapUser(row);
   }
 
-  async setLockout(id: string, isLockedOut: boolean): Promise<User> {
-    const current = await prisma.user.findUnique({ where: { id } });
-    if (!current) throw AppError.notFound('User not found');
+  async setLockout(caller: Caller, id: string, isLockedOut: boolean): Promise<User> {
+    const current = await this.loadManageableTarget(caller, id);
     await this.supabase.setUserLockout(current.authUserId, isLockedOut);
     const row = await prisma.user.update({ where: { id }, data: { isLockedOut } });
     return mapUser(row);
   }
 
-  async remove(id: string): Promise<void> {
-    const current = await prisma.user.findUnique({ where: { id } });
-    if (!current) throw AppError.notFound('User not found');
+  async remove(caller: Caller, id: string): Promise<void> {
+    const current = await this.loadManageableTarget(caller, id);
     // Remove app row first, then the Supabase identity (best-effort).
     await prisma.user.delete({ where: { id } });
     await this.supabase.deleteAuthUser(current.authUserId).catch(() => undefined);

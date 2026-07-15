@@ -107,7 +107,7 @@ export class WorkersService {
         address: input.address ?? null,
         qualityOfWorks: input.qualityOfWorks ?? null,
         phone: input.phone ?? null,
-        email: input.email ?? null,
+        email: input.email,
         personnelCompany: input.personnelCompany ?? null,
         residence: input.residence ?? null,
         startDate: input.startDate ? new Date(input.startDate) : null,
@@ -133,43 +133,40 @@ export class WorkersService {
       },
     });
 
-    // OPTIONAL create-time WORKER LOGIN dual-write (Phase 05 Stage B). Gated purely
-    // on `input.login` being provided; when absent the Worker is created with no
-    // login (unchanged path). Mirrors the users-service provisioning:
+    // MANDATORY create-time WORKER LOGIN dual-write (Phase 05 Stage C, forward-only).
+    // EVERY new worker gets a WORKER login provisioned from its OWN email — there is
+    // no login-less create path anymore. Mirrors the users-service provisioning:
     //   Supabase identity → app User(role WORKER, authUserId) → link Worker.userId.
     // The whole thing is one unit of work: if ANY step fails we roll back everything
     // we created (Supabase identity, User row, and the Worker itself) so no orphaned
     // Supabase identity, no half-linked login, and no login-less ghost worker survive.
-    if (input.login) {
-      await this.provisionAndLinkLogin(created.id, input);
-    }
+    await this.provisionAndLinkLogin(created.id, input);
 
     return this.getWithDetails(created.id);
   }
 
   /**
-   * Provision a Supabase identity + app User(role WORKER) and link it to the just-
-   * created Worker via Worker.userId. Compensating rollback on any failure: delete
-   * the User row (if written), the Supabase identity (if created), and the Worker
-   * (so a login-provisioning failure never leaves a partial Worker behind).
+   * Provision a Supabase identity + app User(role WORKER) from the worker's own email
+   * and link it to the just-created Worker via Worker.userId. `password` optional —
+   * omit to send a Supabase INVITE (worker sets their own password), matching the
+   * Users Manager flow. Compensating rollback on any failure: delete the User row (if
+   * written), the Supabase identity (if created), and the Worker (so a provisioning
+   * failure never leaves a partial Worker behind).
    */
   private async provisionAndLinkLogin(
     workerId: string,
     input: CreateInput,
   ): Promise<void> {
-    const login = input.login;
-    if (!login) return;
-
     // Guard the app-side unique constraint up front (User.email is unique).
-    const existing = await prisma.user.findUnique({ where: { email: login.email } });
+    const existing = await prisma.user.findUnique({ where: { email: input.email } });
     if (existing) {
       await prisma.worker.delete({ where: { id: workerId } }).catch(() => undefined);
       throw AppError.conflict('A user with this login email already exists');
     }
 
-    // Step 1 — provision the Supabase identity.
+    // Step 1 — provision the Supabase identity (invite-by-email when no password).
     const { authUserId } = await this.supabase
-      .createAuthUser({ email: login.email, password: login.password })
+      .createAuthUser({ email: input.email, password: input.password })
       .catch(async (err: unknown) => {
         // No identity was created → only the Worker needs unwinding.
         await prisma.worker.delete({ where: { id: workerId } }).catch(() => undefined);
@@ -185,8 +182,8 @@ export class WorkersService {
           data: {
             authUserId,
             role: Role.WORKER,
-            fullName: login.fullName ?? `${input.firstName} ${input.lastName}`.trim(),
-            email: login.email,
+            fullName: `${input.firstName} ${input.lastName}`.trim(),
+            email: input.email,
           },
         });
         await tx.worker.update({ where: { id: workerId }, data: { userId: user.id } });
@@ -202,7 +199,40 @@ export class WorkersService {
   }
 
   async update(id: string, input: UpdateInput): Promise<WorkerWithDetails> {
-    await this.ensureExists(id);
+    const before = await prisma.worker.findUnique({
+      where: { id },
+      select: { id: true, email: true, userId: true },
+    });
+    if (!before) throw AppError.notFound('Worker not found');
+
+    // Email-change propagation to the linked WORKER login (Phase 05 Stage C).
+    // If the worker HAS a linked User and the email actually changes, keep the app
+    // User.email in sync so the login identity never diverges from the worker record.
+    //
+    // SUPABASE LIMITATION (flagged, not silently ignored): changing the Supabase Auth
+    // identity email is a separate admin operation that triggers an email-confirmation
+    // round-trip (updateUserById with email → pending confirm). We deliberately do NOT
+    // mutate the Supabase identity email here — the app User.email is the source of
+    // truth for display/scoping, and the Supabase login email stays as originally
+    // provisioned. If a future story requires re-keying the Supabase login email, add
+    // a supabase.updateUserEmail(authUserId, email) admin call + confirmation handling.
+    if (
+      input.email !== undefined &&
+      input.email !== null &&
+      before.userId &&
+      input.email !== before.email
+    ) {
+      // Guard User.email uniqueness before propagating (avoids a raw P2002).
+      const clash = await prisma.user.findUnique({ where: { email: input.email } });
+      if (clash && clash.id !== before.userId) {
+        throw AppError.conflict('A user with this login email already exists');
+      }
+      await prisma.user.update({
+        where: { id: before.userId },
+        data: { email: input.email },
+      });
+    }
+
     await prisma.worker.update({
       where: { id },
       data: {

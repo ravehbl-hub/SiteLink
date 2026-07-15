@@ -88,6 +88,23 @@ afterAll(async () => {
     await prisma.siteAssignment.deleteMany({ where: { workerId: id } }).catch(() => undefined);
     await prisma.workerSalaryData.deleteMany({ where: { workerId: id } }).catch(() => undefined);
     await prisma.attendanceRecord.deleteMany({ where: { workerId: id } }).catch(() => undefined);
+    // Worker create now MANDATORILY provisions a WORKER login (Supabase identity + app
+    // User linked via Worker.userId). Detach + purge that login so teardown leaves no
+    // orphaned User row or Supabase auth identity behind.
+    const w = await prisma.worker
+      .findUnique({ where: { id }, select: { userId: true } })
+      .catch(() => null);
+    const loginUserId = w?.userId ?? null;
+    if (loginUserId) {
+      const loginUser = await prisma.user
+        .findUnique({ where: { id: loginUserId }, select: { authUserId: true } })
+        .catch(() => null);
+      await prisma.worker.update({ where: { id }, data: { userId: null } }).catch(() => undefined);
+      await prisma.user.delete({ where: { id: loginUserId } }).catch(() => undefined);
+      if (loginUser?.authUserId) {
+        await app.supabase.deleteAuthUser(loginUser.authUserId).catch(() => undefined);
+      }
+    }
     await prisma.worker.delete({ where: { id } }).catch(() => undefined);
   }
   for (const id of createdUserIds) {
@@ -259,6 +276,10 @@ describe('Live DB/Supabase integration (provisioned infra)', () => {
         profession: 'PLUMBER',
         level: 'GOOD',
         country: 'Poland',
+        // Worker login is now MANDATORY (Phase 05 Stage C) — email required, password
+        // provided so no invite email is sent for this fixture.
+        email: `live-wizard-${randomUUID().slice(0, 8)}@sitelink.test`,
+        password: `Pw-${randomUUID()}`,
         siteIds: ['seed-site-tower', 'seed-site-bridge'],
         salaryData: { hourlyWage: 70, rateType: 'HOURLY', currency: 'ILS' },
       },
@@ -288,7 +309,15 @@ describe('Live DB/Supabase integration (provisioned infra)', () => {
       method: 'POST',
       url: '/api/v1/workers',
       headers: auth(mgrToken),
-      payload: { firstName: 'Arch', lastName: `Ived-${randomUUID().slice(0, 8)}`, profession: 'OTHER', level: 'MEDIUM' },
+      payload: {
+        firstName: 'Arch',
+        lastName: `Ived-${randomUUID().slice(0, 8)}`,
+        profession: 'OTHER',
+        level: 'MEDIUM',
+        // Worker login now mandatory.
+        email: `arch-ived-${randomUUID().slice(0, 8)}@sitelink.test`,
+        password: `Pw-${randomUUID()}`,
+      },
     });
     const w = createRes.json();
     createdWorkerIds.push(w.id);
@@ -444,7 +473,14 @@ describe('Live DB/Supabase integration (provisioned infra)', () => {
       method: 'POST',
       url: '/api/v1/workers',
       headers: auth(mgrToken),
-      payload: { firstName: 'Doc', lastName: 'Flow', profession: 'GENERAL_LABORER' },
+      payload: {
+        firstName: 'Doc',
+        lastName: 'Flow',
+        profession: 'GENERAL_LABORER',
+        // Worker login now mandatory.
+        email: `doc-flow-${randomUUID().slice(0, 8)}@sitelink.test`,
+        password: `Pw-${randomUUID()}`,
+      },
     });
     expect(workerRes.statusCode).toBe(201);
     const workerId: string = workerRes.json().id;

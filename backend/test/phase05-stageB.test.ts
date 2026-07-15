@@ -182,7 +182,10 @@ beforeAll(async () => {
       level: 'GOOD',
       siteIds: [SITE_A],
       salaryData: { hourlyWage: 80, rateType: 'HOURLY', currency: 'ILS' },
-      login: { email: workerLoginEmail, password: `Pw-${randomUUID()}`, fullName: 'StageB Worker Login' },
+      // Worker login is now MANDATORY and provisioned from the worker's own top-level
+      // email (Phase 05 Stage C) — the old optional `login` sub-block is gone.
+      email: workerLoginEmail,
+      password: `Pw-${randomUUID()}`,
     },
   });
   if (createWorker.statusCode !== 201) {
@@ -1191,5 +1194,128 @@ describe('FR-MGR-USER — /users privilege boundary (no privilege escalation)', 
     });
     expect(patch.statusCode).toBe(200);
     expect(patch.json().fullName).toBe('StageB Admin2 Edited');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// FR-MGR-EMP — worker create now MANDATORILY provisions a WORKER login (Phase 05
+// Stage C, forward-only). Email is required; every create dual-writes a Supabase
+// identity + app User(role WORKER) linked via Worker.userId. No login-less create.
+// ════════════════════════════════════════════════════════════════════════════
+describe('FR-MGR-EMP — worker create mandatorily provisions a WORKER login', () => {
+  it('creating a worker provisions a WORKER User + links Worker.userId', async () => {
+    const email = `stageC-provision-${randomUUID().slice(0, 8)}@sitelink.test`;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/workers',
+      headers: auth(mgrToken),
+      payload: {
+        firstName: 'StageC',
+        lastName: `Provision-${randomUUID().slice(0, 8)}`,
+        profession: 'ELECTRICIAN',
+        level: 'MEDIUM',
+        siteIds: [SITE_A],
+        email,
+        password: `Pw-${randomUUID()}`, // Manager-set initial password (no invite email)
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const created = res.json();
+    createdWorkerIds.push(created.id);
+
+    // Worker.userId is linked to a freshly-provisioned WORKER User.
+    const row = await prisma.worker.findUnique({
+      where: { id: created.id },
+      select: { userId: true, email: true },
+    });
+    expect(row!.email).toBe(email);
+    expect(row!.userId).toBeTruthy();
+
+    const loginUser = await prisma.user.findUnique({ where: { id: row!.userId! } });
+    expect(loginUser).not.toBeNull();
+    expect(loginUser!.role).toBe(Role.WORKER);
+    expect(loginUser!.email).toBe(email);
+    expect(loginUser!.authUserId).toBeTruthy(); // real Supabase identity
+
+    // Track the provisioned login for teardown.
+    createdAppUserIds.push(loginUser!.id);
+    createdAuthIds.push(loginUser!.authUserId);
+  });
+
+  it('creating a worker WITHOUT an email is rejected (400, nothing provisioned)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/workers',
+      headers: auth(mgrToken),
+      payload: {
+        firstName: 'NoEmail',
+        lastName: `Worker-${randomUUID().slice(0, 8)}`,
+        profession: 'GENERAL_LABORER',
+        level: 'MEDIUM',
+      },
+    });
+    expect(res.statusCode).toBe(400); // email is now required by the create schema
+  });
+
+  it('editing the email of a worker WITH a login propagates to the linked User row', async () => {
+    // `workerId` is the Stage-B provisioned worker (has a linked WORKER login).
+    const newEmail = `stageC-edited-${randomUUID().slice(0, 8)}@sitelink.test`;
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/workers/${workerId}`,
+      headers: auth(mgrToken),
+      payload: { email: newEmail },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().email).toBe(newEmail);
+
+    // App User.email is kept in sync (Supabase identity email is intentionally NOT
+    // re-keyed — flagged limitation; authUserId unchanged).
+    const loginUser = await prisma.user.findUnique({ where: { id: workerUserId } });
+    expect(loginUser!.email).toBe(newEmail);
+    expect(loginUser!.authUserId).toBe(workerAuthId); // identity unchanged
+
+    // Restore so downstream teardown/assertions stay stable.
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/workers/${workerId}`,
+      headers: auth(mgrToken),
+      payload: { email: workerLoginEmail },
+    });
+  });
+
+  it('a legacy login-less worker row still reads and edits fine (no backfill)', async () => {
+    // Simulate a legacy row: a Worker with NO userId (one of the 4 not backfilled).
+    // Created directly at the DB layer (bypassing the now-mandatory create schema).
+    const legacy = await prisma.worker.create({
+      data: {
+        firstName: 'Legacy',
+        lastName: `NoLogin-${randomUUID().slice(0, 8)}`,
+        profession: 'OTHER',
+        level: 'MEDIUM',
+        email: null,
+        userId: null,
+      },
+    });
+    createdWorkerIds.push(legacy.id);
+
+    // READ works.
+    const read = await app.inject({
+      method: 'GET',
+      url: `/api/v1/workers/${legacy.id}`,
+      headers: auth(mgrToken),
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.json().userId ?? null).toBeNull();
+
+    // EDIT (a non-email field) works and does not require an email.
+    const edit = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/workers/${legacy.id}`,
+      headers: auth(mgrToken),
+      payload: { level: 'GOOD' },
+    });
+    expect(edit.statusCode).toBe(200);
+    expect(edit.json().level).toBe('GOOD');
   });
 });

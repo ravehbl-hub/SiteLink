@@ -82,7 +82,18 @@ export interface CreateWorkerInput {
   address?: string | null;
   qualityOfWorks?: string | null;
   phone?: string | null;
-  email?: string | null;
+  /**
+   * REQUIRED for NEW workers (forward-only, Phase 05 Stage C). Every new worker is
+   * created WITH a WORKER login provisioned from this email (Supabase identity + app
+   * User row, role WORKER, linked via Worker.userId). The 4 legacy login-less workers
+   * are NOT backfilled — they keep a null email/userId and are read/edited as-is.
+   */
+  email: string;
+  /**
+   * Optional Manager-set initial password. Omit to send a Supabase INVITE email so
+   * the worker sets their own password (the default, matching the Users Manager flow).
+   */
+  password?: string;
   personnelCompany?: string | null;
   residence?: string | null;
   startDate?: ISODate | null;

@@ -12,7 +12,7 @@ Built by the SiteLink agent fleet under Cortex orchestration, from the topology 
 | Manager | Web (tab menu) + App (hamburger) | `Frontend/manager/{web,app}` | **In scope** |
 | Foreman | App (hamburger) | `Frontend/Foreman/app` | Future |
 | Worker | App (hamburger) | `Frontend/Worker/app` | Future |
-| Back Office | Web (vertical menu, LR/RL by language) | `Frontend/backoffice/web` | Future |
+| Back Office | Web (vertical menu, LR/RL by language) | `Frontend/system-admin/web` | Future |
 
 All surfaces share one Node/TypeScript back end (`backend/`), one PostgreSQL database
 (managed by **Supabase**), and a common types package (`packages/shared`).

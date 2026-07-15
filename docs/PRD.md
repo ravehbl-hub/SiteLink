@@ -220,7 +220,7 @@ Surface: App at `Frontend/Worker/app` (hamburger).
 - **FR-WRK-6** Worker has Settings.
 
 ## 10. Back Office Surface — Documented, OUT OF SCOPE v1 (`FR-BO`)
-Surface: Web at `Frontend/backoffice/web` (vertical menu, LR/RL by language).
+Surface: Web at `Frontend/system-admin/web` (vertical menu, LR/RL by language).
 - **FR-BO-1** Dashboard: customers registered/left, profit & loss, construction sites, and system status (deploy/server health, database health).
 - **FR-BO-2** Customers Manager: customer details, billing, usage.
 - **FR-BO-3** Users Activity: events over time, event type, and search query.

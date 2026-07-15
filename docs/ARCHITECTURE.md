@@ -57,7 +57,7 @@ SiteLink/Code/
 │  ├─ Worker/
 │  │  └─ app/        # @sitelink/worker-app    (Expo RN)         [future]
 │  └─ backoffice/
-│     └─ web/        # @sitelink/backoffice-web (Vite+React)     [future]
+│     └─ web/        # @sitelink/system-admin-web (Vite+React)     [future]
 │
 ├─ packages/
 │  ├─ shared/        # @sitelink/shared  (types, Zod schemas, enums, API client contract)

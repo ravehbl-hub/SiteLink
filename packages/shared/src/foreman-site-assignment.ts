@@ -12,6 +12,7 @@
  */
 import { z } from 'zod';
 import type { ID, ISODate, Timestamped } from './common';
+import type { SiteStatus } from './enums';
 
 /** Assignment linking a FOREMAN user to a site (many-to-many). */
 export interface ForemanSiteAssignment extends Timestamped {
@@ -40,3 +41,19 @@ export const createForemanSiteAssignmentSchema = z.object({
 export type CreateForemanSiteAssignmentInput = z.infer<
   typeof createForemanSiteAssignmentSchema
 >;
+
+/**
+ * A single site the CALLER foreman may pick, resolved to its Site name/status. Returned
+ * by the SELF-scoped GET /foreman-sites (the foreman-facing multi-site picker source).
+ *
+ * The union is `User.primarySiteId` (isPrimary = true) + active ForemanSiteAssignment
+ * rows, computed SERVER-side from the caller (req.appUser) — never a client-supplied
+ * foremanId. This is the read-only, name-bearing projection of that scope union.
+ */
+export interface PickableSite {
+  siteId: ID;
+  name: string;
+  /** True for the entry resolved from the foreman's primarySiteId. */
+  isPrimary: boolean;
+  status: SiteStatus;
+}

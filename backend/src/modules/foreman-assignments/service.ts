@@ -14,11 +14,13 @@
  *   - Guarding to MANAGER/ADMIN is done at the route (requireRole); this service is
  *     only reached by those roles.
  */
-import { Role } from '@sitelink/shared';
-import type { ForemanSiteAssignment } from '@sitelink/shared';
+import { Role, SiteStatus } from '@sitelink/shared';
+import type { ForemanSiteAssignment, PickableSite } from '@sitelink/shared';
 import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { toISO, toISORequired } from '../../lib/dates.js';
+import { resolveSiteScope } from '../../lib/scope.js';
+import type { AuthUser } from '../../plugins/types.js';
 
 type AssignmentRow = {
   id: string;
@@ -97,6 +99,40 @@ export class ForemanAssignmentsService {
       orderBy: { assignedAt: 'desc' },
     });
     return rows.map(mapAssignment);
+  }
+
+  /**
+   * SELF-scoped pickable sites for the CALLER foreman (GET /foreman-sites source).
+   *
+   * SECURITY: the union is derived ONLY from `caller` (req.appUser) via the SHARED
+   * resolveSiteScope — the same helper the enforcement path uses — so it can never
+   * include a site the foreman is not primary-on or actively assigned to, and a
+   * client-supplied foremanId is never trusted (there is none). ADMIN/MANAGER resolve
+   * to { all: true } here; this surface is FOREMAN-only at the route, so in practice
+   * `caller` is a FOREMAN and we get a concrete (possibly empty) siteId union.
+   *
+   * Empty union → [] (200), NOT 403: the picker renders the no-site state. We then
+   * join the union siteIds to Site rows for names/status and flag the primary entry.
+   */
+  async pickableSitesFor(caller: AuthUser): Promise<PickableSite[]> {
+    const scope = await resolveSiteScope(caller);
+    // ADMIN/MANAGER (unscoped) have no foreman union; this self surface returns nothing
+    // meaningful for them. FOREMAN gets their concrete union (possibly empty).
+    if ('all' in scope) return [];
+    if (scope.siteIds.length === 0) return [];
+
+    const sites = await prisma.site.findMany({
+      where: { id: { in: scope.siteIds } },
+      select: { id: true, name: true, status: true },
+      orderBy: { name: 'asc' },
+    });
+
+    return sites.map((s) => ({
+      siteId: s.id,
+      name: s.name,
+      isPrimary: caller.primarySiteId === s.id,
+      status: s.status as SiteStatus,
+    }));
   }
 
   private async ensureForeman(foremanId: string): Promise<void> {

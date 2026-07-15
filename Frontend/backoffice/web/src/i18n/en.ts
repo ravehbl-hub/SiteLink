@@ -1,6 +1,6 @@
 export const en = {
   common: {
-    appName: 'SiteLink Back Office',
+    appName: 'SiteLink System Admin',
     loading: 'Loading…',
     search: 'Search',
     from: 'From',
@@ -33,7 +33,7 @@ export const en = {
     supabaseMissing:
       'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable sign-in.',
     apiMissing: 'The back-end API is not configured (VITE_API_BASE_URL).',
-    notAdmin: 'Your account does not have Back Office (Admin) access.',
+    notAdmin: 'Your account does not have System Admin access.',
     checking: 'Checking session…',
   },
   dashboard: {
@@ -53,6 +53,19 @@ export const en = {
     totalUsers: 'Total users',
     lockedUsers: 'Locked out',
     period: 'Current month',
+    viewData: 'Data',
+    viewGraphics: 'Graphics',
+    financeChart: 'Revenue vs costs',
+    usersRoleChart: 'Users by role',
+    usersStatusChart: 'Account status',
+    loansCost: 'Loans cost',
+    advancesCost: 'Advances cost',
+    activeUsers: 'Active',
+    chartTotal: 'Total',
+    chartNoData: 'No data',
+    chartFinanceDesc: 'Bar chart of revenue against salary, loans, advances and net profit.',
+    chartUsersRoleDesc: 'Bar chart of user counts by role.',
+    chartUsersStatusDesc: 'Donut chart of active versus locked-out users.',
   },
   usersActivity: {
     title: 'Users Activity',
@@ -101,7 +114,7 @@ export const en = {
     language: 'Language',
     profile: 'Profile',
     about: 'About',
-    aboutText: 'SiteLink Back Office — administration console. v1.',
+    aboutText: 'SiteLink System Admin — administration console. v1.',
     disconnect: 'Disconnect',
   },
   roles: {

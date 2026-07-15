@@ -2,7 +2,7 @@ import type { Resources } from './en';
 
 export const he: Resources = {
   common: {
-    appName: 'SiteLink ניהול',
+    appName: 'SiteLink מנהל מערכת',
     loading: 'טוען…',
     search: 'חיפוש',
     from: 'מתאריך',
@@ -35,7 +35,7 @@ export const he: Resources = {
     supabaseMissing:
       'Supabase אינו מוגדר. הגדר את VITE_SUPABASE_URL ו-VITE_SUPABASE_ANON_KEY כדי לאפשר התחברות.',
     apiMissing: 'ה-API של השרת אינו מוגדר (VITE_API_BASE_URL).',
-    notAdmin: 'לחשבון שלך אין הרשאת ניהול (Admin) למערכת הבק-אופיס.',
+    notAdmin: 'לחשבון שלך אין הרשאת מנהל מערכת.',
     checking: 'בודק הפעלה…',
   },
   dashboard: {
@@ -55,6 +55,19 @@ export const he: Resources = {
     totalUsers: 'סך המשתמשים',
     lockedUsers: 'נעולים',
     period: 'החודש הנוכחי',
+    viewData: 'נתונים',
+    viewGraphics: 'גרפיקה',
+    financeChart: 'הכנסות מול עלויות',
+    usersRoleChart: 'משתמשים לפי תפקיד',
+    usersStatusChart: 'סטטוס חשבון',
+    loansCost: 'עלות הלוואות',
+    advancesCost: 'עלות מקדמות',
+    activeUsers: 'פעילים',
+    chartTotal: 'סה״כ',
+    chartNoData: 'אין נתונים',
+    chartFinanceDesc: 'תרשים עמודות של הכנסות מול שכר, הלוואות, מקדמות ורווח נקי.',
+    chartUsersRoleDesc: 'תרשים עמודות של מספר המשתמשים לפי תפקיד.',
+    chartUsersStatusDesc: 'תרשים טבעת של משתמשים פעילים מול נעולים.',
   },
   usersActivity: {
     title: 'פעילות משתמשים',
@@ -103,7 +116,7 @@ export const he: Resources = {
     language: 'שפה',
     profile: 'פרופיל',
     about: 'אודות',
-    aboutText: 'SiteLink בק-אופיס — מסוף ניהול. גרסה 1.',
+    aboutText: 'SiteLink מנהל מערכת — מסוף ניהול. גרסה 1.',
     disconnect: 'התנתק',
   },
   roles: {

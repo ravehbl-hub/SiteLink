@@ -410,6 +410,97 @@ table.data tbody tr:hover {
   gap: var(--sl-space-3);
 }
 
+/* ── Segmented toggle (Data / Graphics) ───────────────────────────────── */
+.segmented {
+  display: inline-flex;
+  gap: var(--sl-space-1);
+  padding: var(--sl-space-1);
+  border-radius: var(--sl-radius-md);
+  background: var(--sl-color-surface-alt);
+  border: var(--sl-border-hairline) solid var(--sl-color-border);
+}
+.segmented button {
+  appearance: none;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--sl-color-text-secondary);
+  padding: var(--sl-space-1) var(--sl-space-4);
+  border-radius: var(--sl-radius-sm);
+  font-size: var(--sl-font-size-sm);
+  line-height: 2;
+}
+.segmented button[aria-pressed='true'] {
+  background: var(--sl-color-accent);
+  color: var(--sl-color-on-accent);
+}
+
+/* ── Charts (dependency-free inline-SVG bar + donut) ──────────────────── */
+.chart-grid {
+  display: grid;
+  gap: var(--sl-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  margin-block-start: var(--sl-space-4);
+}
+.svg-chart {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  margin-block-start: var(--sl-space-3);
+}
+.svg-value {
+  font-size: 11px;
+  font-weight: 600;
+}
+.svg-label {
+  font-size: 11px;
+}
+.svg-donut-total {
+  font-size: 18px;
+  font-weight: 700;
+}
+.svg-chart.donut {
+  max-inline-size: 180px;
+  margin-inline: auto;
+}
+.donut-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sl-space-4);
+  margin-block-start: var(--sl-space-3);
+}
+.chart-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sl-space-2);
+  min-inline-size: 140px;
+  flex: 1 1 auto;
+}
+.chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--sl-space-2);
+  font-size: var(--sl-font-size-sm);
+}
+.legend-swatch {
+  inline-size: 12px;
+  block-size: 12px;
+  border-radius: var(--sl-radius-sm);
+  flex: 0 0 auto;
+}
+.legend-label {
+  color: var(--sl-color-text-secondary);
+}
+.legend-value {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--sl-color-text-primary);
+}
+
 /* ── States ───────────────────────────────────────────────────────────── */
 .empty-state,
 .loading-state {

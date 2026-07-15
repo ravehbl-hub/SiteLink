@@ -2,7 +2,7 @@ import type { Resources } from './en';
 
 export const tr: Resources = {
   common: {
-    appName: 'SiteLink Yönetim',
+    appName: 'SiteLink Sistem Yöneticisi',
     loading: 'Yükleniyor…',
     search: 'Ara',
     from: 'Başlangıç',
@@ -35,7 +35,7 @@ export const tr: Resources = {
     supabaseMissing:
       'Supabase yapılandırılmadı. Girişi etkinleştirmek için VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY değerlerini ayarlayın.',
     apiMissing: 'Arka uç API yapılandırılmadı (VITE_API_BASE_URL).',
-    notAdmin: 'Hesabınızın Yönetim (Admin) erişimi yok.',
+    notAdmin: 'Hesabınızın Sistem Yöneticisi erişimi yok.',
     checking: 'Oturum denetleniyor…',
   },
   dashboard: {
@@ -55,6 +55,19 @@ export const tr: Resources = {
     totalUsers: 'Toplam kullanıcı',
     lockedUsers: 'Kilitli',
     period: 'Bu ay',
+    viewData: 'Veri',
+    viewGraphics: 'Grafik',
+    financeChart: 'Gelir ve giderler',
+    usersRoleChart: 'Role göre kullanıcılar',
+    usersStatusChart: 'Hesap durumu',
+    loansCost: 'Kredi maliyeti',
+    advancesCost: 'Avans maliyeti',
+    activeUsers: 'Etkin',
+    chartTotal: 'Toplam',
+    chartNoData: 'Veri yok',
+    chartFinanceDesc: 'Gelirin maaş, kredi, avans ve net kâra karşı sütun grafiği.',
+    chartUsersRoleDesc: 'Role göre kullanıcı sayılarının sütun grafiği.',
+    chartUsersStatusDesc: 'Etkin ve kilitli kullanıcıların halka grafiği.',
   },
   usersActivity: {
     title: 'Kullanıcı Etkinliği',
@@ -103,7 +116,7 @@ export const tr: Resources = {
     language: 'Dil',
     profile: 'Profil',
     about: 'Hakkında',
-    aboutText: 'SiteLink Yönetim — yönetim konsolu. v1.',
+    aboutText: 'SiteLink Sistem Yöneticisi — yönetim konsolu. v1.',
     disconnect: 'Bağlantıyı kes',
   },
   roles: {

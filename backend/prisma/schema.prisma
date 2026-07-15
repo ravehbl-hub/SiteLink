@@ -146,6 +146,10 @@ model User {
   // Named relation to avoid clashing with "RequestResolvedBy"/"RatingByForeman".
   worker    Worker?  @relation("WorkerLogin")
 
+  // Multi-site scope for a FOREMAN user (security-boundary change). primarySiteId above
+  // stays the DEFAULT/primary site; these are the additional/authoritative ASSIGNED sites.
+  foremanSiteAssignments ForemanSiteAssignment[] @relation("ForemanSiteScope")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -168,8 +172,9 @@ model Site {
   isArchived Boolean    @default(false)
   archivedAt DateTime?
 
-  users       User[]           @relation("UserPrimarySite")
-  assignments SiteAssignment[]
+  users            User[]                  @relation("UserPrimarySite")
+  assignments      SiteAssignment[]
+  foremanScope     ForemanSiteAssignment[] @relation("ForemanSiteScope")
   attendance  AttendanceRecord[]
   wageRates   ProfessionWageRate[]
   profitLoss  ProfitLoss[]
@@ -196,6 +201,32 @@ model SiteAssignment {
 
   @@unique([siteId, workerId])
   @@index([workerId])
+}
+
+// Foreman ⇄ Site many-to-many (multi-site Foreman scope; security-boundary change).
+// Mirrors SiteAssignment's shape/semantics: an active assignment has unassignedAt = null;
+// re-assigning an existing (foremanId, siteId) pair REACTIVATES the same row (clear
+// unassignedAt) rather than inserting a duplicate — enforced by @@unique([foremanId, siteId]).
+//
+// The foreman relation is named "ForemanSiteScope" to avoid clashing with User's
+// existing relations ("RatingByForeman", "RequestResolvedBy", "WorkerLogin",
+// "UserPrimarySite"). User.primarySiteId is KEPT as the foreman's DEFAULT/primary site;
+// these rows are the foreman's ASSIGNED scope set. Scope-union logic is Servio's (scope.ts).
+model ForemanSiteAssignment {
+  id           String    @id @default(cuid())
+  site         Site      @relation("ForemanSiteScope", fields: [siteId], references: [id], onDelete: Cascade)
+  siteId       String
+  foreman      User      @relation("ForemanSiteScope", fields: [foremanId], references: [id], onDelete: Cascade)
+  foremanId    String
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([foremanId, siteId])
+  @@index([foremanId])
+  @@index([siteId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

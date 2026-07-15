@@ -8,10 +8,13 @@
 import type {
   AdvancePayment as PAdvance,
   AttendanceRecord as PAttendance,
+  Billing as PBilling,
+  Customer as PCustomer,
   Loan as PLoan,
   ProfessionWageRate as PWageRate,
   ProfitLoss as PProfitLoss,
   Site as PSite,
+  Usage as PUsage,
   User as PUser,
   Worker as PWorker,
   WorkerDoc as PWorkerDoc,
@@ -23,6 +26,8 @@ import type {
   AdvancePayment,
   AttendanceRecord,
   AttendanceType,
+  Billing,
+  Customer,
   FileRef,
   Language,
   Loan,
@@ -37,6 +42,7 @@ import type {
   Site,
   SiteStatus,
   Theme,
+  Usage,
   User,
   Worker,
   WorkerDoc,
@@ -45,6 +51,7 @@ import type {
   WorkerRating,
   WorkerRequest,
   WorkerSalaryData,
+  BillingStatus,
 } from '@sitelink/shared';
 import { toISO, toISORequired } from './dates.js';
 import { toNumber, toNumberOrNull } from './money.js';
@@ -233,6 +240,51 @@ export function mapRating(r: PRating): WorkerRating {
     notes: r.notes ?? null,
     createdAt: toISORequired(r.createdAt),
     updatedAt: toISORequired(r.updatedAt),
+  };
+}
+
+// ─── SaaS business layer (Back Office, ADMIN-only) ──────────────────────────
+
+export function mapCustomer(c: PCustomer): Customer {
+  return {
+    id: c.id,
+    name: c.name,
+    contactEmail: c.contactEmail ?? null,
+    contactPhone: c.contactPhone ?? null,
+    registeredAt: toISORequired(c.registeredAt),
+    leftAt: toISO(c.leftAt),
+    isArchived: c.isArchived,
+    archivedAt: toISO(c.archivedAt),
+    createdAt: toISORequired(c.createdAt),
+    updatedAt: toISORequired(c.updatedAt),
+  };
+}
+
+export function mapBilling(b: PBilling): Billing {
+  return {
+    id: b.id,
+    customerId: b.customerId,
+    status: b.status as BillingStatus,
+    plan: b.plan,
+    amount: toNumber(b.amount),
+    currency: b.currency,
+    periodStart: toISORequired(b.periodStart),
+    periodEnd: toISORequired(b.periodEnd),
+    createdAt: toISORequired(b.createdAt),
+    updatedAt: toISORequired(b.updatedAt),
+  };
+}
+
+export function mapUsage(u: PUsage): Usage {
+  return {
+    id: u.id,
+    customerId: u.customerId,
+    metric: u.metric,
+    value: toNumber(u.value),
+    periodStart: toISORequired(u.periodStart),
+    periodEnd: toISORequired(u.periodEnd),
+    createdAt: toISORequired(u.createdAt),
+    updatedAt: toISORequired(u.updatedAt),
   };
 }
 

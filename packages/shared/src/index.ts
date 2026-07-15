@@ -8,6 +8,7 @@ export * from './enums';
 export * from './common';
 export * from './user';
 export * from './site';
+export * from './foreman-site-assignment';
 export * from './worker';
 export * from './attendance';
 export * from './salary';

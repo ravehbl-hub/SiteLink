@@ -91,6 +91,8 @@ const createdLoanIds: string[] = [];
 const createdWorkerIds: string[] = [];
 const createdAppUserIds: string[] = [];
 const createdAuthIds: string[] = [];
+// SaaS business layer (Back Office) fixtures.
+const createdCustomerIds: string[] = [];
 
 beforeAll(async () => {
   app = await buildApp(loadConfig());
@@ -254,6 +256,10 @@ afterAll(async () => {
   const svc = app.supabase;
   for (const authId of createdAuthIds) {
     await svc.deleteAuthUser(authId).catch(() => undefined);
+  }
+  // SaaS business-layer fixtures: Billing/Usage cascade on Customer delete.
+  for (const id of createdCustomerIds) {
+    await prisma.customer.delete({ where: { id } }).catch(() => undefined);
   }
   // Fixture role users.
   for (const id of [adminUserId, mgrUserId, foremanAUserId, foremanBUserId]) {
@@ -727,5 +733,188 @@ describe('FR-BO — Back Office ADMIN-only surfaces', () => {
       headers: auth(foremanAToken),
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  // ── SaaS business layer: Customers / Billing / Usage (FR-BO-1/2/3) ──────────
+  it('ADMIN can CRUD a Customer + archive/unarchive, and lists return Paginated', async () => {
+    // Create
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/v1/backoffice/customers',
+      headers: auth(adminToken),
+      payload: { name: `StageB Co ${randomUUID().slice(0, 8)}`, contactEmail: 'ops@stageb.test' },
+    });
+    expect(create.statusCode).toBe(201);
+    const customer = create.json();
+    createdCustomerIds.push(customer.id);
+    expect(customer.isArchived).toBe(false);
+    expect(customer.registeredAt).toBeTruthy();
+
+    // Get one
+    const one = await app.inject({
+      method: 'GET',
+      url: `/api/v1/backoffice/customers/${customer.id}`,
+      headers: auth(adminToken),
+    });
+    expect(one.statusCode).toBe(200);
+    expect(one.json().id).toBe(customer.id);
+
+    // Update
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/backoffice/customers/${customer.id}`,
+      headers: auth(adminToken),
+      payload: { name: 'StageB Co RENAMED', contactPhone: '+972-50-0000000' },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().name).toBe('StageB Co RENAMED');
+    expect(patch.json().contactPhone).toBe('+972-50-0000000');
+
+    // List (Paginated envelope with .items)
+    const list = await app.inject({
+      method: 'GET',
+      url: '/api/v1/backoffice/customers?page=1&pageSize=200',
+      headers: auth(adminToken),
+    });
+    expect(list.statusCode).toBe(200);
+    const listBody = list.json();
+    expect(Array.isArray(listBody.items)).toBe(true);
+    expect(typeof listBody.total).toBe('number');
+    expect(listBody.items.some((c: { id: string }) => c.id === customer.id)).toBe(true);
+
+    // Archive → excluded by default, included with ?includeArchived
+    const archive = await app.inject({
+      method: 'POST',
+      url: `/api/v1/backoffice/customers/${customer.id}/archive`,
+      headers: auth(adminToken),
+    });
+    expect(archive.statusCode).toBe(200);
+    expect(archive.json().isArchived).toBe(true);
+
+    const defaultList = await app.inject({
+      method: 'GET',
+      url: '/api/v1/backoffice/customers?page=1&pageSize=200',
+      headers: auth(adminToken),
+    });
+    expect(
+      defaultList.json().items.some((c: { id: string }) => c.id === customer.id),
+    ).toBe(false);
+
+    const archivedList = await app.inject({
+      method: 'GET',
+      url: '/api/v1/backoffice/customers?includeArchived=true&page=1&pageSize=200',
+      headers: auth(adminToken),
+    });
+    expect(
+      archivedList.json().items.some((c: { id: string }) => c.id === customer.id),
+    ).toBe(true);
+
+    // Unarchive
+    const unarchive = await app.inject({
+      method: 'POST',
+      url: `/api/v1/backoffice/customers/${customer.id}/unarchive`,
+      headers: auth(adminToken),
+    });
+    expect(unarchive.statusCode).toBe(200);
+    expect(unarchive.json().isArchived).toBe(false);
+  });
+
+  it('ADMIN can create Billing + Usage for a Customer; lists filter by customerId (Paginated)', async () => {
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/v1/backoffice/customers',
+      headers: auth(adminToken),
+      payload: { name: `StageB Billed ${randomUUID().slice(0, 8)}` },
+    });
+    expect(create.statusCode).toBe(201);
+    const customerId = create.json().id;
+    createdCustomerIds.push(customerId);
+
+    // Billing (status defaults to TRIALING, currency ILS; amount is Decimal → number)
+    const billing = await app.inject({
+      method: 'POST',
+      url: '/api/v1/backoffice/billing',
+      headers: auth(adminToken),
+      payload: {
+        customerId,
+        plan: 'PRO',
+        amount: 199.9,
+        periodStart: '2026-07-01T00:00:00.000Z',
+        periodEnd: '2026-07-31T00:00:00.000Z',
+      },
+    });
+    expect(billing.statusCode).toBe(201);
+    const billBody = billing.json();
+    expect(billBody.status).toBe('TRIALING');
+    expect(billBody.currency).toBe('ILS');
+    expect(billBody.amount).toBeCloseTo(199.9, 2);
+
+    const billList = await app.inject({
+      method: 'GET',
+      url: `/api/v1/backoffice/billing?customerId=${customerId}`,
+      headers: auth(adminToken),
+    });
+    expect(billList.statusCode).toBe(200);
+    const billItems: Array<{ customerId: string }> = billList.json().items;
+    expect(billItems.length).toBeGreaterThan(0);
+    for (const b of billItems) expect(b.customerId).toBe(customerId);
+
+    // Usage (value is Decimal → number)
+    const usage = await app.inject({
+      method: 'POST',
+      url: '/api/v1/backoffice/usage',
+      headers: auth(adminToken),
+      payload: {
+        customerId,
+        metric: 'active_workers',
+        value: 42,
+        periodStart: '2026-07-01T00:00:00.000Z',
+        periodEnd: '2026-07-31T00:00:00.000Z',
+      },
+    });
+    expect(usage.statusCode).toBe(201);
+    expect(usage.json().value).toBe(42);
+
+    const usageList = await app.inject({
+      method: 'GET',
+      url: `/api/v1/backoffice/usage?customerId=${customerId}&metric=active_workers`,
+      headers: auth(adminToken),
+    });
+    expect(usageList.statusCode).toBe(200);
+    const usageItems: Array<{ customerId: string; metric: string }> = usageList.json().items;
+    expect(usageItems.length).toBeGreaterThan(0);
+    for (const u of usageItems) {
+      expect(u.customerId).toBe(customerId);
+      expect(u.metric).toBe('active_workers');
+    }
+  });
+
+  it('CRITICAL: non-admin (MANAGER) is refused Customers/Billing/Usage (403, no write)', async () => {
+    const listRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/backoffice/customers',
+      headers: auth(mgrToken),
+    });
+    expect(listRes.statusCode).toBe(403);
+
+    // Unique sentinel name so the "nothing written" probe is immune to concurrent
+    // seeding (Savant seeds customers in parallel against the same live DB).
+    const sentinel = `MANAGER-should-not-create-${randomUUID()}`;
+    const writeRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/backoffice/customers',
+      headers: auth(mgrToken),
+      payload: { name: sentinel },
+    });
+    expect(writeRes.statusCode).toBe(403);
+    const leaked = await prisma.customer.count({ where: { name: sentinel } });
+    expect(leaked).toBe(0); // nothing written by the forbidden request
+
+    const billRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/backoffice/billing',
+      headers: auth(foremanAToken),
+    });
+    expect(billRes.statusCode).toBe(403);
   });
 });

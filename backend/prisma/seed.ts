@@ -19,6 +19,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 // Prisma 7: import from the generated client (see generator `output` in schema.prisma).
 import {
   AttendanceType,
+  BillingStatus,
   PrismaClient,
   Profession,
   RateType,
@@ -246,18 +247,162 @@ async function main() {
     }
   }
 
+  // ── SaaS business layer (Customers / Billing / Usage / P&L) ─────────────────
+  // A "Customer" here is one of SiteLink's own SaaS customers (a business that
+  // operates SiteLink) — clearly-demo rows so the Back Office screens aren't
+  // empty. Stable synthetic ids keep re-seeding idempotent. One customer is
+  // archived (isArchived + leftAt) so the archived filter is testable.
+  const customerSeeds = [
+    {
+      id: 'seed-customer-01',
+      name: 'Acme Construction Ltd',
+      contactEmail: 'billing@acme-construction.example',
+      contactPhone: '+972-3-555-0101',
+      registeredAt: d('2026-01-05'),
+      archived: false,
+    },
+    {
+      id: 'seed-customer-02',
+      name: 'BuildRight Co',
+      contactEmail: 'accounts@buildright.example',
+      contactPhone: '+972-3-555-0202',
+      registeredAt: d('2026-02-12'),
+      archived: false,
+    },
+    {
+      id: 'seed-customer-03',
+      name: 'Nordic Sites AB',
+      contactEmail: 'finance@nordicsites.example',
+      contactPhone: '+46-8-555-0303',
+      registeredAt: d('2025-11-20'),
+      archived: true, // churned customer — exercises the archived filter
+    },
+  ];
+
+  for (const c of customerSeeds) {
+    await prisma.customer.upsert({
+      where: { id: c.id },
+      update: {},
+      create: {
+        id: c.id,
+        name: c.name,
+        contactEmail: c.contactEmail,
+        contactPhone: c.contactPhone,
+        registeredAt: c.registeredAt,
+        isArchived: c.archived,
+        // Archived customer also carries a leftAt + archivedAt timestamp.
+        leftAt: c.archived ? d('2026-05-31') : null,
+        archivedAt: c.archived ? d('2026-05-31') : null,
+      },
+    });
+  }
+
+  const activeCustomers = customerSeeds.filter((c) => !c.archived);
+
+  // Billing: ~2 rows per active customer, varied status across the enum.
+  const billingSeeds = [
+    { id: 'seed-billing-01', customerId: 'seed-customer-01', status: BillingStatus.ACTIVE, plan: 'Pro', amount: 1490.0, periodStart: '2026-06-01', periodEnd: '2026-06-30' },
+    { id: 'seed-billing-02', customerId: 'seed-customer-01', status: BillingStatus.ACTIVE, plan: 'Pro', amount: 1490.0, periodStart: '2026-07-01', periodEnd: '2026-07-31' },
+    { id: 'seed-billing-03', customerId: 'seed-customer-02', status: BillingStatus.TRIALING, plan: 'Starter', amount: 0.0, periodStart: '2026-07-01', periodEnd: '2026-07-31' },
+    { id: 'seed-billing-04', customerId: 'seed-customer-02', status: BillingStatus.PAST_DUE, plan: 'Starter', amount: 490.0, periodStart: '2026-06-01', periodEnd: '2026-06-30' },
+  ];
+
+  for (const b of billingSeeds) {
+    await prisma.billing.upsert({
+      where: { id: b.id },
+      update: {},
+      create: {
+        id: b.id,
+        customerId: b.customerId,
+        status: b.status,
+        plan: b.plan,
+        amount: b.amount,
+        currency: 'ILS',
+        periodStart: d(b.periodStart),
+        periodEnd: d(b.periodEnd),
+      },
+    });
+  }
+
+  // Usage: ~2-3 metric rows per active customer for the current period.
+  const usageSeeds = [
+    { id: 'seed-usage-01', customerId: 'seed-customer-01', metric: 'active_workers', value: 42 },
+    { id: 'seed-usage-02', customerId: 'seed-customer-01', metric: 'api_calls', value: 128_540 },
+    { id: 'seed-usage-03', customerId: 'seed-customer-01', metric: 'storage_gb', value: 18.5 },
+    { id: 'seed-usage-04', customerId: 'seed-customer-02', metric: 'active_workers', value: 9 },
+    { id: 'seed-usage-05', customerId: 'seed-customer-02', metric: 'api_calls', value: 12_300 },
+  ];
+
+  for (const u of usageSeeds) {
+    await prisma.usage.upsert({
+      where: { id: u.id },
+      update: {},
+      create: {
+        id: u.id,
+        customerId: u.customerId,
+        metric: u.metric,
+        value: u.value,
+        periodStart: d('2026-07-01'),
+        periodEnd: d('2026-07-31'),
+      },
+    });
+  }
+
+  // BusinessProfitLoss: one row per active customer for the current period.
+  const pnlSeeds = [
+    { id: 'seed-pnl-01', customerId: 'seed-customer-01', revenue: 1490.0, cost: 620.0, netProfit: 870.0 },
+    { id: 'seed-pnl-02', customerId: 'seed-customer-02', revenue: 490.0, cost: 300.0, netProfit: 190.0 },
+  ];
+
+  for (const p of pnlSeeds) {
+    await prisma.businessProfitLoss.upsert({
+      where: { id: p.id },
+      update: {},
+      create: {
+        id: p.id,
+        customerId: p.customerId,
+        periodStart: d('2026-07-01'),
+        periodEnd: d('2026-07-31'),
+        currency: 'ILS',
+        revenue: p.revenue,
+        cost: p.cost,
+        netProfit: p.netProfit,
+      },
+    });
+  }
+
+  void activeCustomers; // documents intent; billing/usage keyed explicitly above
+
   // ── Report actual row counts ────────────────────────────────────────────────
-  const [sites, users, rates, workers, salaries, docs, assignments, attendance] =
-    await Promise.all([
-      prisma.site.count(),
-      prisma.user.count(),
-      prisma.professionWageRate.count(),
-      prisma.worker.count(),
-      prisma.workerSalaryData.count(),
-      prisma.workerDoc.count(),
-      prisma.siteAssignment.count(),
-      prisma.attendanceRecord.count(),
-    ]);
+  const [
+    sites,
+    users,
+    rates,
+    workers,
+    salaries,
+    docs,
+    assignments,
+    attendance,
+    customers,
+    customersArchived,
+    billings,
+    usages,
+    pnl,
+  ] = await Promise.all([
+    prisma.site.count(),
+    prisma.user.count(),
+    prisma.professionWageRate.count(),
+    prisma.worker.count(),
+    prisma.workerSalaryData.count(),
+    prisma.workerDoc.count(),
+    prisma.siteAssignment.count(),
+    prisma.attendanceRecord.count(),
+    prisma.customer.count(),
+    prisma.customer.count({ where: { isArchived: true } }),
+    prisma.billing.count(),
+    prisma.usage.count(),
+    prisma.businessProfitLoss.count(),
+  ]);
 
   console.log('✔ Seed complete. Row counts:');
   console.table({
@@ -270,6 +415,11 @@ async function main() {
     siteAssignments: assignments,
     attendanceRecords: attendance,
     attendanceWritten: attendanceCount,
+    customers,
+    customersArchived,
+    billings,
+    usages,
+    businessProfitLoss: pnl,
   });
 }
 

@@ -201,6 +201,7 @@ export const tr: Resources = {
   },
   users: {
     title: 'Kullanıcılar',
+    emailExists: 'Bu e-posta adresine sahip bir kullanıcı zaten var.',
     newUser: 'Kullanıcı ekle',
     role: 'Rol',
     fullName: 'Tam ad',

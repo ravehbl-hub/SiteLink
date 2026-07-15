@@ -185,6 +185,7 @@ export const he: TranslationResources = {
   },
   users: {
     title: 'משתמשים',
+    emailExists: 'משתמש עם כתובת דוא"ל זו כבר קיים.',
     add: 'הוסף משתמש',
     fullName: 'שם מלא',
     email: 'דוא"ל',

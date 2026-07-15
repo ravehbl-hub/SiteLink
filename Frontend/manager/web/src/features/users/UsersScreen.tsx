@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Role, type CreateUserInput, type User } from '@sitelink/shared';
 import { usersApi } from '../../lib/api/endpoints';
+import { ApiError } from '../../lib/api/client';
 import { qk } from '../../lib/api/queryKeys';
 import { useSitesList } from '../../lib/api/hooks';
 import { DataState, Modal, Field, Chip } from '../../components/ui';
@@ -140,7 +141,14 @@ function UserForm({ user, onClose }: { user?: User; onClose: () => void }) {
       qc.invalidateQueries({ queryKey: ['users'] });
       onClose();
     },
-    onError: (e) => setError(e instanceof Error ? e.message : String(e)),
+    onError: (e) =>
+      setError(
+        e instanceof ApiError && e.code === 'USER_EMAIL_EXISTS'
+          ? t('users.emailExists')
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      ),
   });
 
   return (

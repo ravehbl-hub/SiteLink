@@ -43,6 +43,30 @@ export interface SignedRead {
   expiresInSeconds: number;
 }
 
+/**
+ * Map a Supabase Admin create/invite error to a client-facing AppError.
+ *
+ * SECURITY: provider errors are generic by default (never leak Supabase-internal
+ * detail). The ONE exception is "email already registered" — safe and useful to
+ * surface on the ADMIN-gated Users screen so the admin knows the email is taken.
+ * Everything else stays a generic 409.
+ */
+function mapCreateAuthError(error: { code?: string; status?: number; message?: string } | null): AppError {
+  const code = error?.code?.toLowerCase() ?? '';
+  const msg = error?.message?.toLowerCase() ?? '';
+  const isDuplicate =
+    code === 'email_exists' ||
+    code === 'user_already_exists' ||
+    error?.status === 422 ||
+    msg.includes('already been registered') ||
+    msg.includes('already registered') ||
+    msg.includes('already exists');
+  if (isDuplicate) {
+    return new AppError('USER_EMAIL_EXISTS', 'A user with this email already exists');
+  }
+  return AppError.conflict('Could not create user identity');
+}
+
 export class SupabaseService {
   private readonly client: SupabaseClient;
   private readonly bucketDocs: string;
@@ -76,18 +100,15 @@ export class SupabaseService {
         email_confirm: true,
       });
       if (error || !data.user) {
-        // SECURITY: never surface the provider's raw error string to the client
-        // (it can leak Supabase-internal detail). Log server-side, return generic.
         if (error) console.error('[supabase] createUser failed:', error.message);
-        throw AppError.conflict('Could not create user identity');
+        throw mapCreateAuthError(error);
       }
       return { authUserId: data.user.id };
     }
     const { data, error } = await this.client.auth.admin.inviteUserByEmail(input.email);
     if (error || !data.user) {
-      // SECURITY: same as above — generic client-facing message, real error logged.
       if (error) console.error('[supabase] inviteUserByEmail failed:', error.message);
-      throw AppError.conflict('Could not create user identity');
+      throw mapCreateAuthError(error);
     }
     return { authUserId: data.user.id };
   }

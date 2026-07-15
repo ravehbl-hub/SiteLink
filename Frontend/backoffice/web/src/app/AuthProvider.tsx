@@ -16,7 +16,10 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
-import { Role, type User } from '@sitelink/shared';
+import { Role, type CurrentUser } from '@sitelink/shared';
+
+/** The app user from GET /auth/me (authUserId stripped server-side). */
+type AuthUser = CurrentUser['user'];
 import { getSupabase } from '../lib/supabase/client';
 import { isApiConfigured, isSupabaseConfigured } from '../lib/env';
 import { authApi } from '../lib/api/endpoints';
@@ -26,7 +29,7 @@ type Status = 'loading' | 'signed-out' | 'signed-in' | 'forbidden';
 
 interface AuthContextValue {
   status: Status;
-  user: User | null;
+  user: AuthUser | null;
   supabaseConfigured: boolean;
   apiConfigured: boolean;
   signIn: (email: string, password: string) => Promise<void>;
@@ -41,7 +44,7 @@ const BACKOFFICE_ROLES: Role[] = [Role.ADMIN];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading');
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
 
   const loadProfile = useCallback(async () => {
     if (!isApiConfigured) {

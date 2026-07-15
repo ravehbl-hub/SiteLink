@@ -65,7 +65,7 @@ export const endpoints = {
 
   // Attendance (FR-FOR-4). Back end forces a Foreman's siteId to their own site.
   listAttendance: (params: { siteId?: string; workerId?: string; from?: string; to?: string }) =>
-    api.get<AttendanceRecord[]>('/attendance', params),
+    api.get<Paginated<AttendanceRecord>>('/attendance', params),
   createAttendance: (body: CreateAttendanceInput) =>
     api.post<AttendanceRecord>('/attendance', body),
   updateAttendance: (id: string, body: Partial<CreateAttendanceInput>) =>

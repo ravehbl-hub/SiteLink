@@ -145,7 +145,7 @@ export const endpoints = {
 
   // Attendance + working hours
   listAttendance: (params: { siteId?: string; workerId?: string; from?: string; to?: string }) =>
-    api.get<AttendanceRecord[]>('/attendance', params),
+    api.get<Paginated<AttendanceRecord>>('/attendance', params),
   createAttendance: (body: CreateAttendanceInput) =>
     api.post<AttendanceRecord>('/attendance', body),
   updateAttendance: (id: string, body: Partial<CreateAttendanceInput>) =>
@@ -171,10 +171,10 @@ export const endpoints = {
   removeWageRate: (id: string) => api.del<void>(`/wage-rates/${id}`),
 
   // Finance
-  listLoans: (params?: { workerId?: string }) => api.get<Loan[]>('/loans', params),
+  listLoans: (params?: { workerId?: string }) => api.get<Paginated<Loan>>('/loans', params),
   createLoan: (body: CreateLoanInput) => api.post<Loan>('/loans', body),
   removeLoan: (id: string) => api.del<void>(`/loans/${id}`),
-  listAdvances: (params?: { workerId?: string }) => api.get<AdvancePayment[]>('/advances', params),
+  listAdvances: (params?: { workerId?: string }) => api.get<Paginated<AdvancePayment>>('/advances', params),
   createAdvance: (body: CreateAdvanceInput) => api.post<AdvancePayment>('/advances', body),
   removeAdvance: (id: string) => api.del<void>(`/advances/${id}`),
   profitLoss: (params: { siteId?: string; from?: string; to?: string }) =>

@@ -61,7 +61,7 @@ export function FinanceScreen() {
     label: `${w.firstName} ${w.lastName}`,
   }));
 
-  const list = kind === 'loans' ? loansQ.data : advQ.data;
+  const list = (kind === 'loans' ? loansQ.data : advQ.data)?.items;
   const loading = kind === 'loans' ? loansQ.isLoading : advQ.isLoading;
 
   return (

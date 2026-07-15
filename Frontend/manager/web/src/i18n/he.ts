@@ -201,6 +201,7 @@ export const he: Resources = {
   },
   users: {
     title: 'משתמשים',
+    emailExists: 'משתמש עם כתובת דוא"ל זו כבר קיים.',
     newUser: 'הוסף משתמש',
     role: 'תפקיד',
     fullName: 'שם מלא',

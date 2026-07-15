@@ -199,6 +199,7 @@ export const en = {
   },
   users: {
     title: 'Users',
+    emailExists: 'A user with this email already exists.',
     newUser: 'Add user',
     role: 'Role',
     fullName: 'Full name',

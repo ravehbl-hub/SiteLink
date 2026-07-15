@@ -8,7 +8,10 @@
  * screen scopes its queries to it. No site picker anywhere in this app.
  */
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Role, type User } from '@sitelink/shared';
+import { Role, type CurrentUser } from '@sitelink/shared';
+
+/** The app user as returned by GET /auth/me (authUserId is stripped server-side). */
+type AuthUser = CurrentUser['user'];
 import { supabase } from '../lib/supabase';
 import { config } from '../lib/config';
 import { endpoints } from '../lib/endpoints';
@@ -18,7 +21,7 @@ type Status = 'loading' | 'signedOut' | 'signedIn' | 'unauthorized' | 'unconfigu
 
 interface AuthContextValue {
   status: Status;
-  user: User | null;
+  user: AuthUser | null;
   /** The Foreman's single scoped site (User.primarySiteId), or null if unassigned. */
   primarySiteId: string | null;
   signIn: (email: string, password: string) => Promise<void>;
@@ -33,7 +36,7 @@ const FOREMAN_ROLES: Role[] = [Role.FOREMAN, Role.MANAGER, Role.ADMIN];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<Status>(config.isConfigured ? 'loading' : 'unconfigured');
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
 
   async function resolveMe(): Promise<void> {
     try {

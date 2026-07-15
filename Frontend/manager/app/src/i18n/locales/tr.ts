@@ -185,6 +185,7 @@ export const tr: TranslationResources = {
   },
   users: {
     title: 'Kullanıcılar',
+    emailExists: 'Bu e-posta adresine sahip bir kullanıcı zaten var.',
     add: 'Kullanıcı ekle',
     fullName: 'Tam ad',
     email: 'E-posta',

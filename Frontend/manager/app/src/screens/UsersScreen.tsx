@@ -57,7 +57,15 @@ export function UsersScreen() {
       setPassword('');
       await qc.invalidateQueries({ queryKey: qk.users });
     },
-    onError: (e) => Alert.alert(t('common.error'), e instanceof ApiError ? e.message : String(e)),
+    onError: (e) =>
+      Alert.alert(
+        t('common.error'),
+        e instanceof ApiError && e.code === 'USER_EMAIL_EXISTS'
+          ? t('users.emailExists')
+          : e instanceof ApiError
+            ? e.message
+            : String(e),
+      ),
   });
 
   const lockMut = useMutation({

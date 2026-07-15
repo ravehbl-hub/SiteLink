@@ -143,10 +143,10 @@ export function AttendanceScreen() {
       <SectionHeading>{t('attendance.records')}</SectionHeading>
       {attQ.isLoading ? (
         <Loading />
-      ) : !attQ.data || attQ.data.length === 0 ? (
+      ) : !attQ.data || attQ.data.items.length === 0 ? (
         <EmptyState label={t('attendance.noRecords')} />
       ) : (
-        attQ.data.map((r) => (
+        attQ.data.items.map((r) => (
           <Card key={r.id}>
             <Row style={{ justifyContent: 'space-between' }}>
               <View>

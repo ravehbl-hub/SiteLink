@@ -87,6 +87,7 @@ export const he: TranslationResources = {
     label: 'אתר',
     select: 'בחר אתר',
     primary: 'אתר ראשי',
+    loading: 'טוען אתרים…',
   },
   settings: {
     title: 'הגדרות',

@@ -34,7 +34,7 @@ import {
 export function DashboardScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
-  const { activeSiteId } = useActiveSite();
+  const { activeSiteId, ready } = useActiveSite();
   const [preset, setPreset] = useState<DatePreset>('month');
 
   const range = useMemo(() => presetRange(preset), [preset]);
@@ -45,6 +45,15 @@ export function DashboardScreen() {
     queryFn: () => endpoints.dashboard(params),
     enabled: Boolean(activeSiteId),
   });
+
+  if (!ready) {
+    return (
+      <Screen>
+        <Title>{t('dashboard.title')}</Title>
+        <Loading label={t('site.loading')} />
+      </Screen>
+    );
+  }
 
   if (!activeSiteId) {
     return (

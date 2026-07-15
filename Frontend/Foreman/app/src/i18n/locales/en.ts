@@ -85,6 +85,7 @@ export const en = {
     label: 'Site',
     select: 'Select site',
     primary: 'Primary site',
+    loading: 'Loading sites…',
   },
   settings: {
     title: 'Settings',

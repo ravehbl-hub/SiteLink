@@ -26,7 +26,7 @@ import {
 
 export function ReportsScreen() {
   const { t } = useTranslation();
-  const { activeSiteId } = useActiveSite();
+  const { activeSiteId, ready } = useActiveSite();
   const range = useMemo(currentMonthRange, []);
 
   const params = { siteId: activeSiteId ?? undefined, from: range.from, to: range.to };
@@ -42,6 +42,15 @@ export function ReportsScreen() {
     queryFn: () => endpoints.workerCount({ siteId: activeSiteId ?? undefined }),
     enabled: Boolean(activeSiteId),
   });
+
+  if (!ready) {
+    return (
+      <Screen>
+        <Title>{t('reports.title')}</Title>
+        <Loading label={t('site.loading')} />
+      </Screen>
+    );
+  }
 
   if (!activeSiteId) {
     return (

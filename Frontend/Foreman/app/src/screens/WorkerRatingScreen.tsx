@@ -33,7 +33,7 @@ import {
 export function WorkerRatingScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { activeSiteId } = useActiveSite();
+  const { activeSiteId, ready } = useActiveSite();
 
   const [workerId, setWorkerId] = useState<string | null>(null);
   const [score, setScore] = useState<number | null>(null);
@@ -77,6 +77,15 @@ export function WorkerRatingScreen() {
     setScore(null);
     setNotes('');
   }, [activeSiteId]);
+
+  if (!ready) {
+    return (
+      <Screen>
+        <Title>{t('rating.title')}</Title>
+        <Loading label={t('site.loading')} />
+      </Screen>
+    );
+  }
 
   if (!activeSiteId) {
     return (

@@ -87,6 +87,7 @@ export const tr: TranslationResources = {
     label: 'Şantiye',
     select: 'Şantiye seç',
     primary: 'Birincil şantiye',
+    loading: 'Şantiyeler yükleniyor…',
   },
   settings: {
     title: 'Ayarlar',

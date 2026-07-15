@@ -47,7 +47,7 @@ const TYPE_LABEL_KEY: Record<AttendanceType, string> = {
 export function AttendanceScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { activeSiteId } = useActiveSite();
+  const { activeSiteId, ready } = useActiveSite();
   const range = React.useMemo(currentMonthRange, []);
 
   const [workerId, setWorkerId] = useState<string | null>(null);
@@ -89,6 +89,15 @@ export function AttendanceScreen() {
   React.useEffect(() => {
     setWorkerId(null);
   }, [activeSiteId]);
+
+  if (!ready) {
+    return (
+      <Screen>
+        <Title>{t('attendance.title')}</Title>
+        <Loading label={t('site.loading')} />
+      </Screen>
+    );
+  }
 
   if (!activeSiteId) {
     return (

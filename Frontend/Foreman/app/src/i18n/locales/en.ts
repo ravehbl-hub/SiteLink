@@ -81,6 +81,11 @@ export const en = {
     attendanceSummary: 'Attendance summary',
     empty: 'No report data yet',
   },
+  site: {
+    label: 'Site',
+    select: 'Select site',
+    primary: 'Primary site',
+  },
   settings: {
     title: 'Settings',
     theme: 'Theme',

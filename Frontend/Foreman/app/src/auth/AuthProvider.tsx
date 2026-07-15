@@ -4,8 +4,10 @@
  * and gate the app to FOREMAN (ADMIN/MANAGER may also inspect the Foreman surface).
  * Login = supabase.auth.signInWithPassword; logout = signOut.
  *
- * SCOPE RULE: the Foreman sees ONLY their own primarySiteId — surfaced here so every
- * screen scopes its queries to it. No site picker anywhere in this app.
+ * SCOPE RULE: a Foreman's authorized scope is the UNION of primarySiteId + active
+ * ForemanSiteAssignment rows (multi-site), enforced server-side. This provider surfaces
+ * primarySiteId; ActiveSiteProvider derives the pickable union from it and owns which
+ * site is currently active (see src/site/ActiveSiteProvider.tsx + SitePicker.tsx).
  */
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Role, type CurrentUser } from '@sitelink/shared';

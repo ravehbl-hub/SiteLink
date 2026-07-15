@@ -83,6 +83,11 @@ export const he: TranslationResources = {
     attendanceSummary: 'סיכום נוכחות',
     empty: 'אין עדיין נתוני דוח',
   },
+  site: {
+    label: 'אתר',
+    select: 'בחר אתר',
+    primary: 'אתר ראשי',
+  },
   settings: {
     title: 'הגדרות',
     theme: 'ערכת נושא',

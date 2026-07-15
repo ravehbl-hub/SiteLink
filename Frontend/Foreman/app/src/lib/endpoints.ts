@@ -52,6 +52,28 @@ export interface WorkerCount {
   count: number;
 }
 
+/**
+ * A site the FOREMAN may operate on — one entry of their scope UNION
+ * (primarySiteId + active ForemanSiteAssignment rows). `isPrimary` marks the
+ * default/primary site. `name` is the display label for the picker.
+ *
+ * BACKEND GAP (flagged to Servio/Nexo): there is currently NO foreman-facing endpoint
+ * that returns this union WITH site names. `GET /foreman-assignments` and `GET /sites`
+ * are both MANAGER/ADMIN-gated (a FOREMAN gets 403), and `GET /auth/me` returns only a
+ * single `primarySiteId` (an id, no name, no assignments). Until the back end exposes
+ * the union — e.g. `GET /foreman-sites` (self) returning `PickableSite[]`, or extending
+ * `/auth/me` with `sites: PickableSite[]` — `foremanSites()` below derives the pickable
+ * set from what IS foreman-authorized today: the single primarySiteId. When the endpoint
+ * lands, swap ONLY `resolvePickableSites` in ActiveSiteProvider (the single swap point)
+ * and every screen/picker keeps working unchanged.
+ */
+export interface PickableSite {
+  siteId: string;
+  /** Display label. Falls back to a short id when the back end can't supply a name. */
+  name: string;
+  isPrimary: boolean;
+}
+
 export const endpoints = {
   // Auth
   me: () => api.get<CurrentUser>('/auth/me'),

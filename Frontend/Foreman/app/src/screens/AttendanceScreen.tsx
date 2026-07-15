@@ -1,8 +1,9 @@
 /**
  * Attendance / Vacation / Disease (FR-FOR-4). The Foreman logs an entry for a
- * worker on THEIR OWN site only. Worker picker is limited to own-site workers
- * (GET /workers?siteId=primarySiteId). The back end FORCES a Foreman's attendance
- * siteId to their own site — we still pass siteId=primarySiteId for consistency.
+ * worker on their ACTIVE selected site. Worker picker is limited to that site's
+ * workers (GET /workers?siteId=activeSiteId). For a MULTI-SITE foreman the back end
+ * requires a concrete siteId (it will not guess), so we pass siteId=activeSiteId on
+ * the create; the server still validates it is inside the foreman's scope union.
  * Semantic colors (DESIGN.md): present=success, vacation=info, disease=warning.
  */
 import React, { useState } from 'react';
@@ -14,7 +15,8 @@ import { endpoints } from '../lib/endpoints';
 import { qk } from '../lib/queryKeys';
 import { currentMonthRange, shortDate } from '../lib/format';
 import { ApiError } from '../lib/api';
-import { useAuth } from '../auth/AuthProvider';
+import { useActiveSite } from '../site/ActiveSiteProvider';
+import { SitePicker } from '../site/SitePicker';
 import {
   Body,
   Button,
@@ -45,26 +47,26 @@ const TYPE_LABEL_KEY: Record<AttendanceType, string> = {
 export function AttendanceScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { primarySiteId } = useAuth();
+  const { activeSiteId } = useActiveSite();
   const range = React.useMemo(currentMonthRange, []);
 
   const [workerId, setWorkerId] = useState<string | null>(null);
   const [type, setType] = useState<AttendanceType>(AttendanceType.ATTENDANCE);
   const [hours, setHours] = useState('8');
 
-  const siteId = primarySiteId ?? undefined;
+  const siteId = activeSiteId ?? undefined;
 
   const workersQ = useQuery({
     queryKey: qk.workers({ siteId }),
     queryFn: () => endpoints.listWorkers({ siteId }),
-    enabled: Boolean(primarySiteId),
+    enabled: Boolean(activeSiteId),
   });
 
   const params = { siteId, workerId: workerId ?? undefined, from: range.from, to: range.to };
   const attQ = useQuery({
     queryKey: qk.attendance(params),
     queryFn: () => endpoints.listAttendance(params),
-    enabled: Boolean(primarySiteId),
+    enabled: Boolean(activeSiteId),
   });
 
   const createMut = useMutation({
@@ -83,7 +85,12 @@ export function AttendanceScreen() {
     onError: (e) => Alert.alert(t('common.error'), e instanceof ApiError ? e.message : String(e)),
   });
 
-  if (!primarySiteId) {
+  // Switching sites invalidates the worker selection (workers are site-specific).
+  React.useEffect(() => {
+    setWorkerId(null);
+  }, [activeSiteId]);
+
+  if (!activeSiteId) {
     return (
       <Screen>
         <Title>{t('attendance.title')}</Title>
@@ -102,6 +109,7 @@ export function AttendanceScreen() {
   return (
     <Screen>
       <Title>{t('attendance.title')}</Title>
+      <SitePicker />
 
       <Card>
         <SectionHeading>{t('attendance.logEntry')}</SectionHeading>

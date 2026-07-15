@@ -9,7 +9,8 @@ import { useTranslation } from 'react-i18next';
 import { endpoints } from '../lib/endpoints';
 import { qk } from '../lib/queryKeys';
 import { currentMonthRange } from '../lib/format';
-import { useAuth } from '../auth/AuthProvider';
+import { useActiveSite } from '../site/ActiveSiteProvider';
+import { SitePicker } from '../site/SitePicker';
 import {
   Body,
   Card,
@@ -25,24 +26,24 @@ import {
 
 export function ReportsScreen() {
   const { t } = useTranslation();
-  const { primarySiteId } = useAuth();
+  const { activeSiteId } = useActiveSite();
   const range = useMemo(currentMonthRange, []);
 
-  const params = { siteId: primarySiteId ?? undefined, from: range.from, to: range.to };
+  const params = { siteId: activeSiteId ?? undefined, from: range.from, to: range.to };
 
   const dashQ = useQuery({
     queryKey: qk.dashboard(params),
     queryFn: () => endpoints.dashboard(params),
-    enabled: Boolean(primarySiteId),
+    enabled: Boolean(activeSiteId),
   });
 
   const countQ = useQuery({
-    queryKey: qk.workerCount(primarySiteId),
-    queryFn: () => endpoints.workerCount({ siteId: primarySiteId ?? undefined }),
-    enabled: Boolean(primarySiteId),
+    queryKey: qk.workerCount(activeSiteId),
+    queryFn: () => endpoints.workerCount({ siteId: activeSiteId ?? undefined }),
+    enabled: Boolean(activeSiteId),
   });
 
-  if (!primarySiteId) {
+  if (!activeSiteId) {
     return (
       <Screen>
         <Title>{t('reports.title')}</Title>
@@ -58,6 +59,7 @@ export function ReportsScreen() {
   return (
     <Screen>
       <Title>{t('reports.title')}</Title>
+      <SitePicker />
 
       {dashQ.isLoading ? (
         <Loading label={t('common.loading')} />

@@ -1,6 +1,7 @@
 /**
- * Site Dashboard (FR-FOR-2). Consumes GET /dashboard?siteId={primarySiteId}&from&to
- * → DashboardRollup, ALWAYS scoped to the Foreman's own site (no site picker).
+ * Site Dashboard (FR-FOR-2). Consumes GET /dashboard?siteId={activeSiteId}&from&to
+ * → DashboardRollup, scoped to the Foreman's ACTIVE selected site (multi-site picker;
+ * the back end validates the id is in the foreman's scope union, else 403).
  * Date filter is a Segmented preset (All / Today / Week / Month). Renders KPI
  * Metrics plus an attendance-split DonutChart and a per-status BarChart.
  * States: no-site-assigned · loading · error · empty · data.
@@ -12,7 +13,8 @@ import { useTranslation } from 'react-i18next';
 import { endpoints } from '../lib/endpoints';
 import { qk } from '../lib/queryKeys';
 import { presetRange, type DatePreset } from '../lib/format';
-import { useAuth } from '../auth/AuthProvider';
+import { useActiveSite } from '../site/ActiveSiteProvider';
+import { SitePicker } from '../site/SitePicker';
 import { useTheme } from '../theme/ThemeProvider';
 import { DonutChart, BarChart } from '../components/charts';
 import {
@@ -32,19 +34,19 @@ import {
 export function DashboardScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
-  const { primarySiteId } = useAuth();
+  const { activeSiteId } = useActiveSite();
   const [preset, setPreset] = useState<DatePreset>('month');
 
   const range = useMemo(() => presetRange(preset), [preset]);
-  const params = { siteId: primarySiteId ?? undefined, from: range.from, to: range.to };
+  const params = { siteId: activeSiteId ?? undefined, from: range.from, to: range.to };
 
   const dashQ = useQuery({
     queryKey: qk.dashboard(params),
     queryFn: () => endpoints.dashboard(params),
-    enabled: Boolean(primarySiteId),
+    enabled: Boolean(activeSiteId),
   });
 
-  if (!primarySiteId) {
+  if (!activeSiteId) {
     return (
       <Screen>
         <Title>{t('dashboard.title')}</Title>
@@ -67,6 +69,7 @@ export function DashboardScreen() {
   return (
     <Screen>
       <Title>{t('dashboard.title')}</Title>
+      <SitePicker />
 
       <SectionHeading>{t('dashboard.dateRange')}</SectionHeading>
       <Segmented

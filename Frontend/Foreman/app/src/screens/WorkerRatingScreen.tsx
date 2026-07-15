@@ -13,7 +13,8 @@ import { endpoints } from '../lib/endpoints';
 import { qk } from '../lib/queryKeys';
 import { shortDate } from '../lib/format';
 import { ApiError } from '../lib/api';
-import { useAuth } from '../auth/AuthProvider';
+import { useActiveSite } from '../site/ActiveSiteProvider';
+import { SitePicker } from '../site/SitePicker';
 import {
   Body,
   Button,
@@ -32,18 +33,18 @@ import {
 export function WorkerRatingScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { primarySiteId } = useAuth();
+  const { activeSiteId } = useActiveSite();
 
   const [workerId, setWorkerId] = useState<string | null>(null);
   const [score, setScore] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
 
-  const siteId = primarySiteId ?? undefined;
+  const siteId = activeSiteId ?? undefined;
 
   const workersQ = useQuery({
     queryKey: qk.workers({ siteId }),
     queryFn: () => endpoints.listWorkers({ siteId }),
-    enabled: Boolean(primarySiteId),
+    enabled: Boolean(activeSiteId),
   });
 
   const ratingsQ = useQuery({
@@ -70,7 +71,14 @@ export function WorkerRatingScreen() {
     onError: (e) => Alert.alert(t('common.error'), e instanceof ApiError ? e.message : String(e)),
   });
 
-  if (!primarySiteId) {
+  // Switching sites invalidates the worker selection (workers are site-specific).
+  React.useEffect(() => {
+    setWorkerId(null);
+    setScore(null);
+    setNotes('');
+  }, [activeSiteId]);
+
+  if (!activeSiteId) {
     return (
       <Screen>
         <Title>{t('rating.title')}</Title>
@@ -89,6 +97,7 @@ export function WorkerRatingScreen() {
   return (
     <Screen>
       <Title>{t('rating.title')}</Title>
+      <SitePicker />
 
       <Card>
         <SectionHeading>{t('rating.worker')}</SectionHeading>

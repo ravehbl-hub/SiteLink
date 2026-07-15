@@ -15,6 +15,7 @@ import { I18nextProvider } from 'react-i18next';
 import i18n from './src/i18n';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import { AuthProvider, useAuth } from './src/auth/AuthProvider';
+import { ActiveSiteProvider } from './src/site/ActiveSiteProvider';
 import { AppDrawer } from './src/navigation/AppDrawer';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { Loading } from './src/components/ui';
@@ -68,7 +69,9 @@ function ThemedApp() {
   if (!ready) return <Loading />;
   return (
     <AuthProvider>
-      <Gate />
+      <ActiveSiteProvider>
+        <Gate />
+      </ActiveSiteProvider>
     </AuthProvider>
   );
 }

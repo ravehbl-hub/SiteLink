@@ -83,6 +83,11 @@ export const tr: TranslationResources = {
     attendanceSummary: 'Devam özeti',
     empty: 'Henüz rapor verisi yok',
   },
+  site: {
+    label: 'Şantiye',
+    select: 'Şantiye seç',
+    primary: 'Birincil şantiye',
+  },
   settings: {
     title: 'Ayarlar',
     theme: 'Tema',

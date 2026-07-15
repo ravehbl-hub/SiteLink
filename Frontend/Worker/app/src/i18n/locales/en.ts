@@ -3,6 +3,7 @@ export const en = {
   common: {
     appName: 'SiteLink Worker',
     cancel: 'Cancel',
+    ok: 'OK',
     error: 'Error',
     loading: 'Loading…',
     loadFailed: 'Failed to load. Please try again.',
@@ -96,7 +97,7 @@ export const en = {
     profile: 'Profile',
     about: 'About',
     aboutBody: 'SiteLink Worker v{{version}}',
-    rtlRestartNote: 'Restart the app to fully apply the new text direction.',
+    rtlRestartNote: 'Changing the text direction will restart the app to apply.',
     disconnect: 'Disconnect',
     disconnectConfirm: 'Disconnect from this account?',
   },

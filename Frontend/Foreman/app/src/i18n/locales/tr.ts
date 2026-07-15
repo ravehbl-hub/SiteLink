@@ -6,6 +6,7 @@ export const tr: TranslationResources = {
     appName: 'SiteLink Şantiye Şefi',
     save: 'Kaydet',
     cancel: 'İptal',
+    ok: 'Tamam',
     loading: 'Yükleniyor…',
     retry: 'Tekrar dene',
     error: 'Bir şeyler ters gitti',
@@ -106,7 +107,7 @@ export const tr: TranslationResources = {
     aboutBody: 'SiteLink Şantiye Şefi — şantiye yönetimi. Sürüm {{version}}.',
     disconnect: 'Bağlantıyı kes',
     disconnectConfirm: 'SiteLink oturumunu kapat?',
-    rtlRestartNote: 'Dil yönü değişti. Tam uygulamak için uygulamayı yeniden başlatın.',
+    rtlRestartNote: 'Metin yönünü değiştirmek, uygulamak için uygulamayı yeniden başlatacak.',
   },
   roles: {
     ADMIN: 'Yönetici',

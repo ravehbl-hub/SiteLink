@@ -5,6 +5,7 @@ export const he: TranslationSchema = {
   common: {
     appName: 'SiteLink עובד',
     cancel: 'ביטול',
+    ok: 'אישור',
     error: 'שגיאה',
     loading: 'טוען…',
     loadFailed: 'הטעינה נכשלה. נסו שוב.',
@@ -98,7 +99,7 @@ export const he: TranslationSchema = {
     profile: 'פרופיל',
     about: 'אודות',
     aboutBody: 'SiteLink עובד גרסה {{version}}',
-    rtlRestartNote: 'הפעילו מחדש את האפליקציה כדי להחיל את כיוון הטקסט החדש.',
+    rtlRestartNote: 'שינוי כיוון הטקסט יפעיל מחדש את האפליקציה כדי להחיל את השינוי.',
     disconnect: 'התנתקות',
     disconnectConfirm: 'להתנתק מחשבון זה?',
   },

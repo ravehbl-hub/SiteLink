@@ -6,6 +6,7 @@ export const he: TranslationResources = {
     appName: 'SiteLink מנהל עבודה',
     save: 'שמירה',
     cancel: 'ביטול',
+    ok: 'אישור',
     loading: 'טוען…',
     retry: 'נסה שוב',
     error: 'משהו השתבש',
@@ -106,7 +107,7 @@ export const he: TranslationResources = {
     aboutBody: 'SiteLink מנהל עבודה — ניהול אתרי בנייה. גרסה {{version}}.',
     disconnect: 'התנתקות',
     disconnectConfirm: 'להתנתק מ-SiteLink?',
-    rtlRestartNote: 'כיוון השפה השתנה. הפעל מחדש את האפליקציה להחלה מלאה.',
+    rtlRestartNote: 'שינוי כיוון הטקסט יפעיל מחדש את האפליקציה כדי להחיל את השינוי.',
   },
   roles: {
     ADMIN: 'מנהל מערכת',

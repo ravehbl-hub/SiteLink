@@ -4,6 +4,7 @@ export const en = {
     appName: 'SiteLink Foreman',
     save: 'Save',
     cancel: 'Cancel',
+    ok: 'OK',
     loading: 'Loading…',
     retry: 'Retry',
     error: 'Something went wrong',
@@ -104,7 +105,7 @@ export const en = {
     aboutBody: 'SiteLink Foreman — construction site management. Version {{version}}.',
     disconnect: 'Disconnect',
     disconnectConfirm: 'Sign out of SiteLink?',
-    rtlRestartNote: 'Language direction changed. Restart the app to apply fully.',
+    rtlRestartNote: 'Changing the text direction will restart the app to apply.',
   },
   roles: {
     ADMIN: 'Admin',

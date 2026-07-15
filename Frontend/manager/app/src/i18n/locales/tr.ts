@@ -6,6 +6,7 @@ export const tr: TranslationResources = {
     appName: 'SiteLink Yönetici',
     save: 'Kaydet',
     cancel: 'İptal',
+    ok: 'Tamam',
     add: 'Ekle',
     edit: 'Düzenle',
     remove: 'Kaldır',
@@ -224,7 +225,7 @@ export const tr: TranslationResources = {
     aboutBody: 'SiteLink Yönetici — inşaat sahası yönetimi. Sürüm {{version}}.',
     disconnect: 'Bağlantıyı kes',
     disconnectConfirm: 'SiteLink oturumu kapatılsın mı?',
-    rtlRestartNote: 'Dil yönü değişti. Tam olarak uygulamak için uygulamayı yeniden başlatın.',
+    rtlRestartNote: 'Metin yönünü değiştirmek, uygulamak için uygulamayı yeniden başlatacak.',
   },
   roles: {
     ADMIN: 'Admin',

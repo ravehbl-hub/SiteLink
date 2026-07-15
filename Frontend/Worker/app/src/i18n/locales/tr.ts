@@ -5,6 +5,7 @@ export const tr: TranslationSchema = {
   common: {
     appName: 'SiteLink İşçi',
     cancel: 'İptal',
+    ok: 'Tamam',
     error: 'Hata',
     loading: 'Yükleniyor…',
     loadFailed: 'Yükleme başarısız. Lütfen tekrar deneyin.',
@@ -98,7 +99,7 @@ export const tr: TranslationSchema = {
     profile: 'Profil',
     about: 'Hakkında',
     aboutBody: 'SiteLink İşçi v{{version}}',
-    rtlRestartNote: 'Yeni metin yönünü tam olarak uygulamak için uygulamayı yeniden başlatın.',
+    rtlRestartNote: 'Metin yönünü değiştirmek, uygulamak için uygulamayı yeniden başlatacak.',
     disconnect: 'Bağlantıyı kes',
     disconnectConfirm: 'Bu hesaptan bağlantı kesilsin mi?',
   },

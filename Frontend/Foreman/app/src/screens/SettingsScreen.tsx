@@ -9,7 +9,6 @@ import { useTranslation } from 'react-i18next';
 import { Language, Theme } from '@sitelink/shared';
 import { useTheme } from '../theme/ThemeProvider';
 import { useAuth } from '../auth/AuthProvider';
-import { applyDirection } from '../i18n/rtl';
 import { isRtlLanguage } from '../i18n';
 import {
   Body,
@@ -30,12 +29,19 @@ export function SettingsScreen() {
   const { user, signOut } = useAuth();
 
   function onLanguage(lang: Language) {
+    if (lang === language) return;
     const directionWillFlip = isRtlLanguage(lang) !== isRtlLanguage(language);
-    setLanguage(lang);
     if (directionWillFlip) {
-      applyDirection(lang);
-      Alert.alert(t('settings.language'), t('settings.rtlRestartNote'));
+      // Direction flips (LTR ↔ RTL): warn the user the app will restart, then
+      // let setLanguage persist the choice and reload so RTL/LTR takes effect.
+      Alert.alert(t('settings.language'), t('settings.rtlRestartNote'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.ok'), onPress: () => void setLanguage(lang) },
+      ]);
+      return;
     }
+    // Same direction (en ↔ tr): no reload needed.
+    void setLanguage(lang);
   }
 
   return (

@@ -9,7 +9,7 @@ import { Appearance } from 'react-native';
 import { lightTheme, darkTheme, type Theme as TokenTheme } from '@sitelink/tokens';
 import { Language, Theme } from '@sitelink/shared';
 import i18n, { toLocale } from '../i18n';
-import { applyDirection } from '../i18n/rtl';
+import { applyDirection, reloadForDirection } from '../i18n/rtl';
 import {
   loadLanguagePref,
   loadThemePref,
@@ -23,7 +23,14 @@ interface ThemeContextValue {
   language: Language;
   toggleTheme: () => void;
   setThemeMode: (mode: Theme) => void;
-  setLanguage: (lang: Language) => void;
+  /**
+   * Change the active language. Persists the choice, then — if the writing
+   * direction actually flips (e.g. en/tr ↔ he) — reloads the app so RTL/LTR
+   * takes visual effect (drawer side + header/title alignment). Resolves to
+   * true when a reload was triggered (the app is on its way down), false for a
+   * same-direction change (en↔tr) where no reload is needed.
+   */
+  setLanguage: (lang: Language) => Promise<boolean>;
   /** True once persisted prefs have been read (avoids a flash). */
   ready: boolean;
 }
@@ -64,11 +71,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const toggleTheme = () =>
     setThemeMode(themeMode === Theme.DARK ? Theme.LIGHT : Theme.DARK);
 
-  const setLanguage = (lang: Language) => {
+  const setLanguage = async (lang: Language): Promise<boolean> => {
     setLanguageState(lang);
-    void saveLanguagePref(lang);
-    void i18n.changeLanguage(toLocale(lang));
-    applyDirection(lang);
+    // Persist FIRST so the choice survives a reload and the app boots back up
+    // in the chosen language + direction.
+    await saveLanguagePref(lang);
+    await i18n.changeLanguage(toLocale(lang));
+    const directionChanged = applyDirection(lang);
+    if (directionChanged) {
+      // I18nManager.forceRTL only re-lays-out the app after a JS reload.
+      await reloadForDirection();
+      return true;
+    }
+    return false;
   };
 
   const value = useMemo<ThemeContextValue>(

@@ -6,6 +6,7 @@ export const he: TranslationResources = {
     appName: 'SiteLink מנהל',
     save: 'שמור',
     cancel: 'ביטול',
+    ok: 'אישור',
     add: 'הוסף',
     edit: 'ערוך',
     remove: 'הסר',
@@ -224,7 +225,7 @@ export const he: TranslationResources = {
     aboutBody: 'SiteLink מנהל — ניהול אתרי בנייה. גרסה {{version}}.',
     disconnect: 'התנתק',
     disconnectConfirm: 'להתנתק מ־SiteLink?',
-    rtlRestartNote: 'כיוון השפה השתנה. הפעל מחדש את האפליקציה כדי להחיל במלואו.',
+    rtlRestartNote: 'שינוי כיוון הטקסט יפעיל מחדש את האפליקציה כדי להחיל את השינוי.',
   },
   roles: {
     ADMIN: 'אדמין',

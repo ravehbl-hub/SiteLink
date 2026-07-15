@@ -98,6 +98,20 @@ async function main() {
     },
   });
 
+  // WORKER-role login for the Worker app's self-scoped endpoints (Phase 05).
+  // This user is LINKED to a Worker row below (Worker.userId) so requireWorkerId /
+  // resolveWorkerId resolve — otherwise self-scoped routes 403 fail-closed.
+  const workerUser = await prisma.user.upsert({
+    where: { email: 'Worker@sitelink.example' },
+    update: {},
+    create: {
+      authUserId: `seed-${randomUUID()}`, // placeholder Supabase identity id
+      role: Role.WORKER,
+      fullName: 'Worker',
+      email: 'Worker@sitelink.example',
+    },
+  });
+
   // ── Profession wage rates (all 9 professions; mix of calc modes) ────────────
   // @@unique([profession, siteId]) — global rows use siteId = null.
   const wageRates: Array<{
@@ -202,6 +216,15 @@ async function main() {
       create: { siteId: w.site.id, workerId: w.id },
     });
   }
+
+  // Link the WORKER login to a Worker row so the Worker app's self-scoped
+  // endpoints resolve (Worker.userId is a UNIQUE FK — one worker per login).
+  // seed-worker-01 has attendance rows, so /working-hours returns data.
+  // Idempotent: re-running just re-sets the same userId on the same worker.
+  await prisma.worker.update({
+    where: { id: 'seed-worker-01' },
+    data: { userId: workerUser.id },
+  });
 
   // A WorkerDoc placeholder (FileRef metadata only — bytes live in Supabase
   // Storage, private `worker-docs` bucket, Architecture §7a).

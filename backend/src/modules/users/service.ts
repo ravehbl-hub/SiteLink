@@ -38,9 +38,13 @@ export class UsersService {
   }
 
   async create(input: CreateInput): Promise<User> {
-    // Guard the app-side unique constraint up front (email is unique).
+    // Guard the app-side unique constraint up front (email is unique). Use the
+    // dedicated USER_EMAIL_EXISTS code so the client shows the friendly message —
+    // same code the Supabase-side duplicate mapping uses (mapCreateAuthError).
     const existing = await prisma.user.findUnique({ where: { email: input.email } });
-    if (existing) throw AppError.conflict('A user with this email already exists');
+    if (existing) {
+      throw new AppError('USER_EMAIL_EXISTS', 'A user with this email already exists');
+    }
 
     // Step 1 — provision the Supabase identity.
     const { authUserId } = await this.supabase.createAuthUser({

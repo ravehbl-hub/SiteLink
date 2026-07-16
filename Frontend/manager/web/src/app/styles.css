@@ -648,46 +648,6 @@ table.data tbody tr:hover {
   font-variant-numeric: tabular-nums;
 }
 
-/* LIVE pulse indicator — success-green dot with a pulsing glow ring. */
-.live-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sl-space-compact-2);
-  font-size: var(--sl-font-size-xs);
-  font-weight: var(--sl-font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: var(--sl-tracking-label);
-  color: var(--sl-color-success);
-}
-html[dir='rtl'] .live-indicator {
-  text-transform: none;
-  letter-spacing: normal;
-}
-.live-dot {
-  inline-size: 8px;
-  block-size: 8px;
-  border-radius: var(--sl-radius-pill);
-  background: var(--sl-glow-live-color);
-  box-shadow: var(--sl-glow-live);
-  animation: sl-live-pulse 1.8s ease-in-out infinite;
-}
-@keyframes sl-live-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.45;
-    transform: scale(0.7);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .live-dot {
-    animation: none;
-  }
-}
-
 /* Glowing teal chart fills (SVG bars, html bar-fill, donut arcs). */
 .deck .svg-bar {
   filter: drop-shadow(0 0 6px var(--sl-glow-accent-color));

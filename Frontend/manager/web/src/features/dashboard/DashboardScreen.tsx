@@ -51,10 +51,6 @@ export function DashboardScreen() {
         <h1 className="section-title" style={{ margin: 0 }}>
           {t('dashboard.title')}
         </h1>
-        <span className="live-indicator" title={t('dashboard.live')}>
-          <span className="live-dot" aria-hidden="true" />
-          {t('dashboard.live')}
-        </span>
         <span className="header-spacer" />
         <div className="segmented" role="group" aria-label={t('dashboard.title')}>
           <button
@@ -309,15 +305,20 @@ function BarChart({
   ariaLabel: string;
 }) {
   const W = 320;
-  const H = 180;
-  const padTop = 8;
-  const padBottom = 40; // room for category labels
-  const plotH = H - padTop - padBottom;
   const n = data.length;
   const slot = W / Math.max(1, n);
+  // Crowd the x-axis? When slots get narrow (many categories, e.g. 12 sites),
+  // upright centered labels overlap — angle them and give more bottom room.
+  const angled = slot < 46;
+  const padTop = 18; // headroom so the top value label never clips the frame/bar
+  const padBottom = angled ? 56 : 34; // more room when labels are rotated
+  const H = 180;
+  const plotH = H - padTop - padBottom;
   const barW = Math.min(48, slot * 0.6);
   const max = Math.max(1, ...data.map((d) => d.value));
   const baseY = padTop + plotH;
+  // Truncate to the space available per slot (~5px/char), angled labels get more.
+  const maxChars = Math.max(4, Math.floor((angled ? slot * 1.6 : slot) / 5.5));
 
   const items = rtl ? [...data].reverse() : data;
 
@@ -336,6 +337,7 @@ function BarChart({
         const cx = slot * i + slot / 2;
         const x = cx - barW / 2;
         const y = baseY - h;
+        const label = truncate(d.label, maxChars);
         return (
           <g key={`${d.label}-${i}`}>
             <rect className="svg-bar" x={x} y={y} width={barW} height={h} rx={3} fill={d.color}>
@@ -343,22 +345,36 @@ function BarChart({
             </rect>
             <text
               x={cx}
-              y={y - 4}
+              y={Math.max(y - 4, 10)}
               textAnchor="middle"
               className="svg-value"
               fill="var(--sl-color-text-primary)"
             >
               {formatValue(d.value)}
             </text>
-            <text
-              x={cx}
-              y={baseY + 14}
-              textAnchor="middle"
-              className="svg-label"
-              fill="var(--sl-color-text-secondary)"
-            >
-              {truncate(d.label, 12)}
-            </text>
+            {angled ? (
+              /* rotate ~40° around the label anchor so long site names don't collide */
+              <text
+                transform={`rotate(-40 ${cx} ${baseY + 12})`}
+                x={cx}
+                y={baseY + 12}
+                textAnchor="end"
+                className="svg-label"
+                fill="var(--sl-color-text-secondary)"
+              >
+                {label}
+              </text>
+            ) : (
+              <text
+                x={cx}
+                y={baseY + 14}
+                textAnchor="middle"
+                className="svg-label"
+                fill="var(--sl-color-text-secondary)"
+              >
+                {label}
+              </text>
+            )}
           </g>
         );
       })}

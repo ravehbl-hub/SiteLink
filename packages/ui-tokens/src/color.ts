@@ -163,6 +163,16 @@ export interface ThemeColors {
   bgGradientTo: string;
 }
 
+/**
+ * LIGHT = the calmer/flatter Operations Deck variant.
+ *
+ * On the near-white ground the fully-saturated brand/semantic ramps read hot, so
+ * the light accent + semantics + the data-viz colors the dashboard charts pick up
+ * (`accent`/`success`/`warning`/`danger`/`info` — see the manager web charts) are
+ * DESATURATED toward the teal-biased slate: pulled toward neutral while keeping
+ * AA contrast on white. Calmer and professional, not washed-out. (DARK keeps its
+ * vivid, glowing values — see `darkColors`.)
+ */
 export const lightColors: ThemeColors = {
   bg: neutral[50],
   surface: "#FFFFFF",
@@ -172,18 +182,23 @@ export const lightColors: ThemeColors = {
   textSecondary: neutral[600],
   textMuted: neutral[400],
 
-  accent: teal[500],
-  accentHover: teal[600],
+  // Accent: muted teal (was teal[500] #1F7A82 / hover teal[600] #1A6A71).
+  // Grayer, less electric on white; still clearly the brand teal + AA on white.
+  accent: "#2C6B71",
+  accentHover: "#245A5F",
   onAccent: "#FFFFFF",
   accentSubtle: teal[50],
 
-  success: green[600],
+  // Semantics: desaturated toward slate. Bases were the fully-saturated *[600];
+  // these keep hue identity + AA contrast on white but drop the neon edge so the
+  // chart bars/donut read calmer in light mode.
+  success: "#2F6B48", // was green[600] #177544
   successSubtle: green[50],
-  warning: amber[600],
+  warning: "#8A5E1E", // was amber[600] #A06408
   warningSubtle: amber[50],
-  danger: red[600],
+  danger: "#9A3838", // was red[600] #A12626
   dangerSubtle: red[50],
-  info: blue[600],
+  info: "#345E88", // was blue[600] #1D5493
   infoSubtle: blue[50],
 
   focusRing: teal[400],

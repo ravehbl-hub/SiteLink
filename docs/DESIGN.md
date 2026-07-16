@@ -57,15 +57,19 @@ command-center: dense, calm and status-forward, like a control room screen.
 `500 #5E7275` · `600 #465759` · `700 #334143` · `800 #212C2E` · `900 #141B1D`
 
 ### Semantic bases
-| Role | Light base | Dark base |
+| Role | Light base (muted) | Dark base |
 |---|---|---|
-| success (green) | `#177544` | `#3ED8A0` (brighter "live" green) |
-| warning (amber) | `#A06408` | `#EAAE43` |
-| danger (red) | `#A12626` | `#E37373` |
-| info (blue) | `#1D5493` | `#639FDB` |
+| success (green) | `#2F6B48` | `#3ED8A0` (brighter "live" green) |
+| warning (amber) | `#8A5E1E` | `#EAAE43` |
+| danger (red) | `#9A3838` | `#E37373` |
+| info (blue) | `#345E88` | `#639FDB` |
 
-Each has a `*Subtle` background variant (light: tint `50`; dark: dark tint) for
-chips, table rows and banners. Full ramps are exported as `ramps` for data-viz.
+The **light** semantic bases are the *desaturated* Deck values (see the light
+variant note below); the raw ramp `*[600]` entries they were derived from
+(`green #177544`, `amber #A06408`, `red #A12626`, `blue #1D5493`) remain in the
+ramps for reference/data-viz. Each role has a `*Subtle` background variant
+(light: tint `50`; dark: dark tint) for chips, table rows and banners. Full ramps
+are exported as `ramps` for data-viz.
 
 ### Resolved theme roles
 `bg, surface, surfaceAlt, border, textPrimary, textSecondary, textMuted, accent,
@@ -96,6 +100,33 @@ focusRing, bgGradientFrom, bgGradientTo`. See `lightColors` / `darkColors` in
 | focusRing | `#5AA0A6` |
 | bgGradientFrom | `#12343B` |
 | bgGradientTo | `#0A1618` |
+
+**Light (Operations Deck) variant — calmer & flatter.**
+
+Dark leads the Deck and keeps its vivid, glowing accent/data colors. The LIGHT
+variant is deliberately restrained so the light dashboard reads professional
+rather than hot/heavy on the near-white ground (`bg #F4F7F7`, white surfaces).
+Two dials were pulled DOWN for light only — dark is frozen/untouched:
+
+- **Flatter elevation.** `lightElevation` (`src/elevation.ts`) is a separate set
+  from `darkElevation`, so light shadows were softened without touching dark.
+  Cards already carry a hairline `--sl-color-border`, which now does the
+  separation work; shadow is only a whisper. Web `box-shadow` before → after:
+  - `sm`: `0 1px 2px/.08 + 0 1px 3px/.06` → `0 1px 1px rgba(18,52,59,.04)`
+  - `md`: `0 2px 6px/.10 + 0 4px 12px/.08` → `0 1px 2px/.05 + 0 2px 6px/.04`
+  - `lg`: `0 8px 24px/.14 + 0 2px 6px/.10` → `0 4px 12px/.08 + 0 1px 3px/.05`
+- **Muted colors.** The light accent + semantics were desaturated toward the
+  teal-biased slate (lower chroma, same lightness, so AA contrast on white is
+  preserved). These are the exact tokens the manager-web dashboard SVG charts
+  read (`--sl-color-accent` for site/salary bars, `--sl-color-success/info/
+  warning/danger` for the finance bars + workforce donut), so charts calm down
+  in light mode automatically. Before → after:
+  - accent `#1F7A82` → `#2C6B71`; accentHover `#1A6A71` → `#245A5F`
+  - success `#177544` → `#2F6B48`; warning `#A06408` → `#8A5E1E`
+  - danger `#A12626` → `#9A3838`; info `#1D5493` → `#345E88`
+
+Light `bg`/surfaces and the (already near-flat) light gradient are unchanged —
+`bgGradientFrom == bgGradientTo == #F4F7F7`, so the light ground stays calm/flat.
 
 ### Operations Deck tokens (glow / gradient / density)
 

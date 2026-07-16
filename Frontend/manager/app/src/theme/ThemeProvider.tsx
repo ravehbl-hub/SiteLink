@@ -5,8 +5,7 @@
  * applied on language change (RTL for Hebrew).
  */
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Appearance } from 'react-native';
-import { lightTheme, darkTheme, type Theme as TokenTheme } from '@sitelink/tokens';
+import { lightTheme, darkTheme, defaultThemeName, type Theme as TokenTheme } from '@sitelink/tokens';
 import { Language, Theme } from '@sitelink/shared';
 import i18n, { toLocale } from '../i18n';
 import { applyDirection, reloadForDirection } from '../i18n/rtl';
@@ -44,7 +43,9 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
  * Settings toggle remains available.
  */
 function seedThemeMode(): Theme {
-  return Appearance.getColorScheme() === 'light' ? Theme.LIGHT : Theme.DARK;
+  // Dark-first from tokens (matches Foreman/Worker apps); a persisted user
+  // override still wins after prefs load, and the Settings toggle remains.
+  return defaultThemeName === 'dark' ? Theme.DARK : Theme.LIGHT;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

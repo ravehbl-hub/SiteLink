@@ -52,8 +52,8 @@ export function RequestsScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const qc = useQueryClient();
-  // Default filter = PENDING (the inbox opens on what needs a decision).
-  const [filter, setFilter] = useState<Filter>(RequestStatus.PENDING);
+  // Default filter = ALL (the inbox opens showing every request status).
+  const [filter, setFilter] = useState<Filter>('ALL');
 
   const statusParam = filter === 'ALL' ? undefined : filter;
   const requestsQ = useQuery({
@@ -104,10 +104,10 @@ export function RequestsScreen() {
     );
 
   const filterOptions: { value: Filter; label: string }[] = [
+    { value: 'ALL', label: t('requests.filterAll') },
     { value: RequestStatus.PENDING, label: t('requests.filterPending') },
     { value: RequestStatus.APPROVED, label: t('requests.filterApproved') },
     { value: RequestStatus.REJECTED, label: t('requests.filterRejected') },
-    { value: 'ALL', label: t('requests.filterAll') },
   ];
 
   const typeLabel = (type: RequestType): string =>

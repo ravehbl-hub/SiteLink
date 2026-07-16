@@ -35,7 +35,7 @@ const STATUS_TONE: Record<RequestStatus, 'warning' | 'success' | 'danger'> = {
 
 export function RequestsScreen() {
   const { t } = useTranslation();
-  const [filter, setFilter] = useState<StatusFilter>(RequestStatus.PENDING);
+  const [filter, setFilter] = useState<StatusFilter>('ALL');
 
   const params = filter === 'ALL' ? {} : { status: filter };
   const query = useQuery({
@@ -56,10 +56,10 @@ export function RequestsScreen() {
   const items = query.data?.items ?? [];
 
   const FILTERS: StatusFilter[] = [
+    'ALL',
     RequestStatus.PENDING,
     RequestStatus.APPROVED,
     RequestStatus.REJECTED,
-    'ALL',
   ];
 
   return (

@@ -7,7 +7,7 @@
  * Drawer tints come from tokens (active accent / accentSubtle background).
  */
 import React from 'react';
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
@@ -17,33 +17,14 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { DrawerParamList } from './types';
 import { useTheme } from '../theme/ThemeProvider';
+import { LogoBadge } from '../components/LogoBadge';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { AttendanceScreen } from '../features/attendance/AttendanceScreen';
 import { WorkerRatingScreen } from '../features/rating/WorkerRatingScreen';
 import { ReportsScreen } from '../features/reports/ReportsScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const logo = require('../../assets/logo.png');
-
 const Drawer = createDrawerNavigator<DrawerParamList>();
-
-/** The logo shown at the header end (right in LTR). */
-function HeaderLogo() {
-  const { theme } = useTheme();
-  return (
-    <Image
-      source={logo}
-      resizeMode="contain"
-      style={{
-        width: 96,
-        height: 32,
-        marginEnd: Number(theme.tokens.spacing['3']),
-      }}
-      accessibilityLabel="SiteLink"
-    />
-  );
-}
 
 /** Custom drawer with the SiteLink logo pinned at the top. */
 function DrawerContent(props: DrawerContentComponentProps) {
@@ -59,7 +40,7 @@ function DrawerContent(props: DrawerContentComponentProps) {
           marginBottom: Number(theme.tokens.spacing['2']),
         }}
       >
-        <Image source={logo} resizeMode="contain" style={{ width: 160, height: 54 }} />
+        <LogoBadge variant="login" />
       </View>
       <DrawerItemList {...props} />
     </DrawerContentScrollView>
@@ -76,7 +57,7 @@ export function AppDrawer() {
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.surface },
         headerTintColor: theme.colors.textPrimary,
-        headerRight: () => <HeaderLogo />,
+        headerRight: () => <LogoBadge variant="header" />,
         drawerStyle: { backgroundColor: theme.colors.surface },
         drawerActiveTintColor: theme.colors.accent,
         drawerInactiveTintColor: theme.colors.textSecondary,

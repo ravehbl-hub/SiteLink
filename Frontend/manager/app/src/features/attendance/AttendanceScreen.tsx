@@ -82,7 +82,7 @@ export function AttendanceScreen() {
     <Screen>
       <Title>{t('attendance.title')}</Title>
 
-      <Card>
+      <Card glow>
         <SectionHeading>{t('attendance.logEntry')}</SectionHeading>
         <SectionHeading>{t('attendance.worker')}</SectionHeading>
         <Segmented options={workerOptions} value={workerId} onChange={(v) => setWorkerId(v)} />
@@ -124,7 +124,7 @@ export function AttendanceScreen() {
             <Row style={{ justifyContent: 'space-between' }}>
               <View>
                 <Body>{shortDate(r.date)}</Body>
-                <Body muted>
+                <Body muted tabular>
                   {r.hours != null ? `${r.hours} ${t('attendance.hours')}` : '—'}
                 </Body>
               </View>

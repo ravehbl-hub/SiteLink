@@ -90,7 +90,7 @@ export function PaymentScreen() {
             <Row style={{ justifyContent: 'space-between' }}>
               <View>
                 <Body>{t(`professions.${r.profession}`)}</Body>
-                <Body muted>{money(r.wage, r.currency)}</Body>
+                <Body muted tabular>{money(r.wage, r.currency)}</Body>
               </View>
               <StatusPill
                 label={

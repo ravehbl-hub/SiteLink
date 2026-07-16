@@ -76,7 +76,7 @@ export function FinanceScreen() {
         onChange={(v) => setKind(v)}
       />
 
-      <Card>
+      <Card glow>
         <SectionHeading>
           {kind === 'loans' ? t('finance.addLoan') : t('finance.addAdvance')}
         </SectionHeading>
@@ -104,12 +104,12 @@ export function FinanceScreen() {
           <Card key={item.id}>
             <Row style={{ justifyContent: 'space-between' }}>
               <View>
-                <Body>{money(item.amount, item.currency)}</Body>
+                <Body tabular>{money(item.amount, item.currency)}</Body>
                 <Body muted>{shortDate(item.date)}</Body>
               </View>
               <View>
                 <Body muted>{t('finance.outstanding')}</Body>
-                <Body>{money(item.outstanding, item.currency)}</Body>
+                <Body tabular>{money(item.outstanding, item.currency)}</Body>
               </View>
             </Row>
           </Card>

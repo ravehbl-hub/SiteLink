@@ -101,31 +101,37 @@ export function DashboardScreen() {
           <GraphicsView data={dashQ.data} t={t} theme={theme} />
         ) : (
         <>
-          <Card>
+          <Card glow>
             <SectionHeading>{t('dashboard.workforce')}</SectionHeading>
             <Row style={{ justifyContent: 'space-between' }}>
-              <Metric label={t('dashboard.workers')} value={dashQ.data.workers.amountOfWorkers} />
+              <Metric glow label={t('dashboard.workers')} value={dashQ.data.workers.amountOfWorkers} />
               <Metric
+                glow
                 label={t('dashboard.totalHours')}
                 value={dashQ.data.workers.totalWorkHours}
               />
               <Metric
+                glow
                 label={t('dashboard.attendanceDays')}
                 value={dashQ.data.workers.attendanceDays}
               />
               <Metric
+                glow
                 label={t('dashboard.vacationDays')}
                 value={dashQ.data.workers.vacationDays}
               />
               <Metric
+                glow
                 label={t('dashboard.diseaseDays')}
                 value={dashQ.data.workers.diseaseDays}
               />
               <Metric
+                glow
                 label={t('dashboard.loans')}
                 value={money(dashQ.data.workers.loansTotal, dashQ.data.finance.currency)}
               />
               <Metric
+                glow
                 label={t('dashboard.advances')}
                 value={money(
                   dashQ.data.workers.advancePaymentsTotal,
@@ -135,14 +141,16 @@ export function DashboardScreen() {
             </Row>
           </Card>
 
-          <Card>
+          <Card glow>
             <SectionHeading>{t('dashboard.finance')}</SectionHeading>
             <Row style={{ justifyContent: 'space-between' }}>
               <Metric
+                glow
                 label={t('dashboard.salaryTotal')}
                 value={money(dashQ.data.finance.salaryTotal, dashQ.data.finance.currency)}
               />
               <Metric
+                glow
                 label={t('dashboard.revenue')}
                 value={money(
                   dashQ.data.finance.profitAndLoss.revenue,
@@ -150,6 +158,7 @@ export function DashboardScreen() {
                 )}
               />
               <Metric
+                glow
                 label={t('dashboard.netProfit')}
                 value={money(
                   dashQ.data.finance.profitAndLoss.netProfit,
@@ -167,7 +176,7 @@ export function DashboardScreen() {
               dashQ.data.workers.workersPerSite.map((w) => (
                 <Row key={w.siteId} style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
                   <Body>{w.siteName}</Body>
-                  <Body muted>{w.workerCount}</Body>
+                  <Body muted tabular>{w.workerCount}</Body>
                 </Row>
               ))
             )}

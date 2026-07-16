@@ -14,6 +14,15 @@ import Svg, { Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../theme/ThemeProvider';
 import { Body } from './ui';
 
+/**
+ * Operations Deck "glow" for data marks. react-native-svg has no cross-platform
+ * blur filter, so we approximate the web dashboard's glowing fills with a soft
+ * translucent halo drawn BEHIND the mark (a slightly larger, low-opacity copy in
+ * the same color). Only in dark mode — light is the calm/flat variant. The 0.28
+ * factor is an opacity, not a color, so this stays token-only (no hard-coded hex).
+ */
+const GLOW_OPACITY = 0.28;
+
 export interface Datum {
   label: string;
   value: number;
@@ -38,14 +47,20 @@ export function BarChart({
   const { theme } = useTheme();
   const W = 320;
   const H = 190;
-  const padTop = 14;
-  const padBottom = 44; // room for category labels
-  const plotH = H - padTop - padBottom;
   const n = Math.max(1, data.length);
   const slot = W / n;
+  // Crowd the x-axis? When slots get narrow (many categories, e.g. 12 sites),
+  // upright centered labels overlap — angle them and give more bottom room
+  // (mirrors the manager WEB BarChart).
+  const angled = slot < 46;
+  const padTop = 18; // headroom so the top value label never clips the frame/bar
+  const padBottom = angled ? 56 : 40; // more room when labels are rotated
+  const plotH = H - padTop - padBottom;
   const barW = Math.min(48, slot * 0.6);
   const max = Math.max(1, ...data.map((d) => d.value));
   const baseY = padTop + plotH;
+  // Truncate to the space available per slot (~5.5px/char); angled labels get more.
+  const maxChars = Math.max(4, Math.floor((angled ? slot * 1.6 : slot) / 5.5));
 
   const items = I18nManager.isRTL ? [...data].reverse() : data;
 
@@ -59,10 +74,25 @@ export function BarChart({
         const y = baseY - h;
         return (
           <React.Fragment key={`${d.label}-${i}`}>
+            {theme.isDark && h > 0 ? (
+              // Teal-glow halo behind the bar (Operations Deck) — a wider, softer
+              // copy of the bar in its own color at low opacity.
+              <Rect
+                x={x - 3}
+                y={y - 3}
+                width={barW + 6}
+                height={h + 3}
+                rx={5}
+                fill={d.color}
+                opacity={GLOW_OPACITY}
+              />
+            ) : null}
             <Rect x={x} y={y} width={barW} height={h} rx={3} fill={d.color} />
             <SvgText
               x={cx}
-              y={y - 4}
+              // Floor the value-label y so a max-height bar's label stays inside
+              // the viewBox (prevents top clipping on tall bars).
+              y={Math.max(y - 4, 10)}
               fontSize={10}
               fontWeight="600"
               textAnchor="middle"
@@ -70,15 +100,29 @@ export function BarChart({
             >
               {formatValue(d.value)}
             </SvgText>
-            <SvgText
-              x={cx}
-              y={baseY + 16}
-              fontSize={9}
-              textAnchor="middle"
-              fill={theme.colors.textSecondary}
-            >
-              {truncate(d.label, 12)}
-            </SvgText>
+            {angled ? (
+              // Rotate ~40° around the label anchor so long site names don't collide.
+              <SvgText
+                x={cx}
+                y={baseY + 12}
+                fontSize={9}
+                textAnchor="end"
+                fill={theme.colors.textSecondary}
+                transform={`rotate(-40 ${cx} ${baseY + 12})`}
+              >
+                {truncate(d.label, maxChars)}
+              </SvgText>
+            ) : (
+              <SvgText
+                x={cx}
+                y={baseY + 16}
+                fontSize={9}
+                textAnchor="middle"
+                fill={theme.colors.textSecondary}
+              >
+                {truncate(d.label, maxChars)}
+              </SvgText>
+            )}
           </React.Fragment>
         );
       })}
@@ -133,6 +177,24 @@ export function DonutChart({
           stroke={theme.colors.surfaceAlt}
           strokeWidth={stroke}
         />
+        {theme.isDark
+          ? arcs.map((a, i) => (
+              // Teal-glow halo behind each arc (Operations Deck): a thicker, softer
+              // stroke of the same slice color at low opacity.
+              <Circle
+                key={`glow-${i}`}
+                cx={cx}
+                cy={cy}
+                r={r}
+                fill="none"
+                stroke={a.color}
+                strokeWidth={stroke + 8}
+                strokeDasharray={`${a.dash} ${a.gap}`}
+                opacity={GLOW_OPACITY}
+                transform={`rotate(${-90 + a.rotate} ${cx} ${cy})`}
+              />
+            ))
+          : null}
         {arcs.map((a, i) => (
           <Circle
             key={i}

@@ -37,8 +37,32 @@ export function ScreenPlain({ children }: { children: React.ReactNode }) {
   return <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>{children}</View>;
 }
 
-export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+/**
+ * Operations Deck panel. `glow` lifts the card to the active/data treatment: a
+ * teal accent border + teal-tinted shadow (theme.glow.accent), matching the
+ * Requests inbox PENDING cards and the web dashboard KPI tiles. Token-only.
+ */
+export function Card({
+  children,
+  style,
+  glow,
+}: {
+  children: React.ReactNode;
+  style?: ViewStyle;
+  glow?: boolean;
+}) {
   const { theme } = useTheme();
+  const glowStyle: ViewStyle = glow
+    ? {
+        borderColor: theme.glow.accent.color,
+        borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+        shadowColor: theme.glow.accent.color,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: theme.isDark ? 0.55 : 0.25,
+        shadowRadius: Number(theme.tokens.spacing['3']),
+        elevation: 6,
+      }
+    : {};
   return (
     <View
       style={[
@@ -51,6 +75,7 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
           marginBottom: Number(theme.tokens.spacing['3']),
           ...theme.elevation.sm.native,
         },
+        glowStyle,
         style,
       ]}
     >
@@ -94,13 +119,21 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
 export function Body({
   children,
   muted,
+  tabular,
 }: {
   children: React.ReactNode;
   muted?: boolean;
+  /** Aligned figures (tabular-nums) for money/counts on Operations Deck rows. */
+  tabular?: boolean;
 }) {
   const { theme } = useTheme();
   return (
-    <Text style={{ color: muted ? theme.colors.textMuted : theme.colors.textPrimary }}>
+    <Text
+      style={{
+        color: muted ? theme.colors.textMuted : theme.colors.textPrimary,
+        ...(tabular ? { fontVariant: ['tabular-nums' as const] } : null),
+      }}
+    >
       {children}
     </Text>
   );
@@ -214,16 +247,45 @@ export function StatusPill({ label, tone }: { label: string; tone: Semantic }) {
   );
 }
 
-/** Labeled metric for dashboard cards. */
-export function Metric({ label, value }: { label: string; value: string | number }) {
+/**
+ * Labeled KPI tile for dashboard cards. Operations Deck: the value uses
+ * tabular-nums (aligned figures) and, when `glow`, the tile becomes a bordered
+ * teal-glow panel on the inset surface (mirrors the web dashboard KPI tiles).
+ * Token-only — the glow color is theme.glow.accent.
+ */
+export function Metric({
+  label,
+  value,
+  glow,
+}: {
+  label: string;
+  value: string | number;
+  glow?: boolean;
+}) {
   const { theme } = useTheme();
+  const glowStyle: ViewStyle = glow
+    ? {
+        backgroundColor: theme.colors.surfaceAlt,
+        borderColor: theme.glow.accent.color,
+        borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+        borderRadius: Number(theme.tokens.radii.md),
+        paddingVertical: Number(theme.tokens.spacing['2']),
+        paddingHorizontal: Number(theme.tokens.spacing['3']),
+        shadowColor: theme.glow.accent.color,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: theme.isDark ? 0.5 : 0.22,
+        shadowRadius: Number(theme.tokens.spacing['2']),
+        elevation: 4,
+      }
+    : {};
   return (
-    <View style={{ flexBasis: '48%', marginBottom: Number(theme.tokens.spacing['3']) }}>
+    <View style={[{ flexBasis: '48%', marginBottom: Number(theme.tokens.spacing['3']) }, glowStyle]}>
       <Text
         style={{
           color: theme.colors.accent,
           fontSize: Number(theme.tokens.fontSize.xl ?? 22),
           fontWeight: '700',
+          fontVariant: ['tabular-nums'],
         }}
       >
         {value}

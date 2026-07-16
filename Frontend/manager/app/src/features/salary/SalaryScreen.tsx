@@ -66,16 +66,16 @@ export function SalaryScreen() {
       </Card>
 
       {result ? (
-        <Card>
+        <Card glow>
           <Row style={{ justifyContent: 'space-between' }}>
             <SectionHeading>{t('salary.gross')}</SectionHeading>
-            <Body>{money(result.gross, result.currency)}</Body>
+            <Body tabular>{money(result.gross, result.currency)}</Body>
           </Row>
           <SectionHeading>{t('salary.breakdown')}</SectionHeading>
           {result.breakdown.map((line, i) => (
             <Row key={`${line.label}-${i}`} style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
               <Body muted>{line.label}</Body>
-              <Body>{money(line.amount, result.currency)}</Body>
+              <Body tabular>{money(line.amount, result.currency)}</Body>
             </Row>
           ))}
           <View style={{ height: 8 }} />

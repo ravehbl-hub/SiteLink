@@ -8,11 +8,11 @@
  * worker picker anywhere.
  */
 import React from 'react';
-import { Image, View } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useTranslation } from 'react-i18next';
 import type { DrawerParamList } from './types';
 import { useTheme } from '../theme/ThemeProvider';
+import { LogoBadge } from '../components/LogoBadge';
 import { WorkingHoursScreen } from '../features/hours/WorkingHoursScreen';
 import { SalaryScreen } from '../features/salary/SalaryScreen';
 import { NewRequestScreen } from '../features/requests/NewRequestScreen';
@@ -20,23 +20,6 @@ import { MyRequestsScreen } from '../features/requests/MyRequestsScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const LOGO = require('../../assets/logo.png');
-
-function HeaderLogo() {
-  const { theme } = useTheme();
-  return (
-    <View style={{ paddingHorizontal: Number(theme.tokens.spacing['3']) }}>
-      <Image
-        source={LOGO}
-        resizeMode="contain"
-        style={{ width: 96, height: 28, tintColor: theme.colors.textPrimary }}
-        accessibilityLabel="SiteLink"
-      />
-    </View>
-  );
-}
 
 export function AppDrawer() {
   const { t } = useTranslation();
@@ -48,7 +31,7 @@ export function AppDrawer() {
         headerStyle: { backgroundColor: theme.colors.surface },
         headerTintColor: theme.colors.textPrimary,
         headerTitleAlign: 'center',
-        headerRight: () => <HeaderLogo />,
+        headerRight: () => <LogoBadge variant="header" />,
         drawerStyle: { backgroundColor: theme.colors.surface },
         drawerActiveTintColor: theme.colors.accent,
         drawerInactiveTintColor: theme.colors.textSecondary,

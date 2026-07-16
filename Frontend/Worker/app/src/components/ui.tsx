@@ -164,7 +164,8 @@ export function Field({
           borderColor: theme.colors.border,
           borderWidth: 1,
           borderRadius: Number(theme.tokens.radii.sm),
-          paddingVertical: Number(theme.tokens.spacing['2']),
+          // Compact density to match the language Segmented control height.
+          paddingVertical: Number(theme.tokens.spacingCompact['2']),
           paddingHorizontal: Number(theme.tokens.spacing['3']),
           color: theme.colors.textPrimary,
           backgroundColor: theme.colors.surface,
@@ -204,7 +205,8 @@ export function Button({
         backgroundColor: bg,
         opacity: disabled ? 0.5 : 1,
         borderRadius: Number(theme.tokens.radii.sm),
-        paddingVertical: Number(theme.tokens.spacing['3']),
+        // Compact density to match the language Segmented control height.
+        paddingVertical: Number(theme.tokens.spacingCompact['2']),
         paddingHorizontal: Number(theme.tokens.spacing['4']),
         alignItems: 'center',
         marginBottom: Number(theme.tokens.spacing['2']),

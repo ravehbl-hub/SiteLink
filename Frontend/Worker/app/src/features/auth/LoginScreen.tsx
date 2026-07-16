@@ -4,15 +4,13 @@
  * banner (auth.notWorker) when a verified identity is not a Worker.
  */
 import React, { useState } from 'react';
-import { Image, View } from 'react-native';
+import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthProvider';
 import { ApiError } from '../../lib/api';
 import { Body, Button, Card, Field, ScreenPlain, Title } from '../../components/ui';
+import { LogoBadge } from '../../components/LogoBadge';
 import { useTheme } from '../../theme/ThemeProvider';
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const LOGO = require('../../../assets/logo.png');
 
 export function LoginScreen() {
   const { t } = useTranslation();
@@ -41,12 +39,7 @@ export function LoginScreen() {
     <ScreenPlain>
       <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
         <View style={{ alignItems: 'center', marginBottom: Number(theme.tokens.spacing['4']) }}>
-          <Image
-            source={LOGO}
-            resizeMode="contain"
-            style={{ width: 200, height: 60, tintColor: theme.colors.textPrimary }}
-            accessibilityLabel="SiteLink"
-          />
+          <LogoBadge variant="login" />
         </View>
         <Title>{t('common.appName')}</Title>
         {unconfigured ? (

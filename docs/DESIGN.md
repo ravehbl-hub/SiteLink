@@ -6,12 +6,35 @@ ends import it — the Manager **web** app (React/Vite) and the Manager **app**
 read a token. This keeps light/dark, i18n/RTL and semantic status colors
 consistent across platforms.
 
-## Brand
+## Brand — Direction 03 "Operations Deck"
 
 Derived from the SiteLink logo — a single-teal wordmark with a crane and
 construction workers. Industrial, professional, restrained. Teal is the identity;
 neutrals are teal-biased slate (not pure grey); status colors are deliberately
 outside the teal family so they read as meaning, not decoration.
+
+**The product now leads with DARK.** Direction 03 "Operations Deck" makes dark a
+command-center: dense, calm and status-forward, like a control room screen.
+
+- **Dark-first.** Dark is the PRIMARY theme (`defaultThemeName = "dark"`,
+  `defaultTheme`). Light still ships and works; the product just defaults to dark.
+- **Deep teal-black ground.** The background reads as a radial
+  "command-center" gradient — `#12343B` center → `#0A1618` edges
+  (`--sl-bg-gradient`, `bgGradientFrom`/`bgGradientTo`). Panels are
+  `#0e1e22` / `#12262b` with teal hairline borders `#21454c`, 9–12px radius.
+- **Teal is the single accent, used only for data/active state.** Charts,
+  sparklines, active tiles, selected KPI cards, focus. Give it a glow rather than
+  a flat fill (`--sl-glow-accent` / `theme.glow.accent`). Teal never encodes a
+  status.
+- **Status lives OUTSIDE teal and is encoded in FORM.** success/"live" green
+  `#3ED8A0`, amber warning, red critical — carried as pills, dots and stripes
+  (shape + color), never color alone. A "live" glow (`--sl-glow-live`) marks
+  online/healthy indicators.
+- **Text.** primary `#EAF2F2`, secondary `#7F9BA0`, muted `#8FA6A9`. Use
+  `tabular-nums` (`font-variant-numeric`) for aligned digits in tables/KPIs.
+- **Density.** Dense + calm. Deck surfaces opt into the compact spacing scale
+  (`spacingCompact` / `--sl-space-compact-*`) for packed grids, tiles and data
+  rows; the base `spacing` scale is unchanged for everything else.
 
 ## Palette (named hex)
 
@@ -36,7 +59,7 @@ outside the teal family so they read as meaning, not decoration.
 ### Semantic bases
 | Role | Light base | Dark base |
 |---|---|---|
-| success (green) | `#177544` | `#5FC088` |
+| success (green) | `#177544` | `#3ED8A0` (brighter "live" green) |
 | warning (amber) | `#A06408` | `#EAAE43` |
 | danger (red) | `#A12626` | `#E37373` |
 | info (blue) | `#1D5493` | `#639FDB` |
@@ -47,8 +70,60 @@ chips, table rows and banners. Full ramps are exported as `ramps` for data-viz.
 ### Resolved theme roles
 `bg, surface, surfaceAlt, border, textPrimary, textSecondary, textMuted, accent,
 accentHover, onAccent, accentSubtle, success/warning/danger/info (+ *Subtle),
-focusRing`. See `lightColors` / `darkColors` in `src/color.ts` (bundled into the
-`lightTheme` / `darkTheme` `Theme` objects in `src/theme.ts`).
+focusRing, bgGradientFrom, bgGradientTo`. See `lightColors` / `darkColors` in
+`src/color.ts` (bundled into the `lightTheme` / `darkTheme` `Theme` objects in
+`src/theme.ts`).
+
+**Dark (Operations Deck) resolved values:**
+
+| Role | Dark value |
+|---|---|
+| bg | `#0A1618` |
+| surface | `#0e1e22` |
+| surfaceAlt | `#12262b` |
+| border | `#21454c` |
+| textPrimary | `#EAF2F2` |
+| textSecondary | `#7F9BA0` |
+| textMuted | `#8FA6A9` |
+| accent | `#5AA0A6` |
+| accentHover | `#3A8B92` |
+| onAccent | `#0C2429` |
+| accentSubtle | `#12262b` |
+| success | `#3ED8A0` |
+| warning | `#EAAE43` |
+| danger | `#E37373` |
+| info | `#639FDB` |
+| focusRing | `#5AA0A6` |
+| bgGradientFrom | `#12343B` |
+| bgGradientTo | `#0A1618` |
+
+### Operations Deck tokens (glow / gradient / density)
+
+Additive — no existing key was renamed or removed.
+
+**Glow** (`glow` in `src/color.ts`; on the theme as `theme.glow`; CSS vars). Teal
+accent glow is for data/active state; live glow marks online/healthy status.
+
+| Token | CSS var | Value |
+|---|---|---|
+| glow.accent.web | `--sl-glow-accent` | `0 0 0 1px #2f5b5c, 0 8px 24px -8px rgba(58,139,146,.5)` |
+| glow.accent.color | `--sl-glow-accent-color` | `#3A8B92` |
+| glow.live.web | `--sl-glow-live` | `0 0 0 1px #1c5a45, 0 6px 20px -8px rgba(62,216,160,.45)` |
+| glow.live.color | `--sl-glow-live-color` | `#3ED8A0` |
+
+**Gradient** (per-theme; the radial command-center ground).
+
+| Token | CSS var |
+|---|---|
+| colors.bgGradientFrom | `--sl-color-bg-gradient-from` |
+| colors.bgGradientTo | `--sl-color-bg-gradient-to` |
+| (ready-to-use) | `--sl-bg-gradient` = `radial-gradient(120% 120% at 50% 0%, from 0%, to 60%)` |
+
+**Density** — `spacingCompact` (`tokens.spacingCompact`, `--sl-space-compact-*`).
+An ADDITIVE, one-notch-denser scale on the same 4px grid; the base `spacing`
+scale is untouched so no layout breaks. Deck surfaces opt in for gutters/padding
+in packed grids, tiles and data rows. Steps: `1`=3, `2`=6, `3`=10, `4`=12, `5`=16,
+`6`=20, `8`=28, `10`=36, `12`=44 (px).
 
 ## Typography
 
@@ -90,12 +165,18 @@ Use `theme.colors.accent`, `theme.tokens.spacing["4"]`,
 ## Theming approach
 
 - **Shared:** `lightTheme` / `darkTheme` (`Theme` type) bundle `colors` +
-  `elevation` + mode-agnostic `tokens`. `isDark` flag for status bars / imagery.
-- **Web:** set `data-theme="dark"` on `<html>` (default = light on `:root`).
-  Toggle the attribute to switch; all `var(--sl-*)` update instantly. Respect
-  `prefers-color-scheme` for the initial value, persist the user choice.
-- **Native:** a `ThemeProvider` + `useTheme()` context holding `light`/`dark`.
-  Seed from `Appearance.getColorScheme()`, allow override, persist.
+  `elevation` + `glow` + mode-agnostic `tokens`. `isDark` flag for status bars /
+  imagery. **`defaultTheme` / `defaultThemeName` = dark** — the primary theme;
+  seed initial state from these (an explicit user/system choice still overrides).
+- **Web:** **DARK is the default on `:root`** (Operations Deck). Light opts in
+  under `[data-theme="light"]`; `[data-theme="dark"]` restates the default so an
+  explicit dark attribute resolves identically. Set `data-theme` on `<html>` to
+  pin a theme; all `var(--sl-*)` update instantly. Respect `prefers-color-scheme`
+  for the initial value and persist the user choice.
+- **Native:** a `ThemeProvider` + `useTheme()` context holding `light`/`dark`,
+  seeded from `defaultTheme` (dark) / `Appearance.getColorScheme()`, override +
+  persist. Read the teal-glow via `theme.glow.accent.color` and the compact scale
+  via `theme.tokens.spacingCompact`.
 
 ## RTL guidance (FR-X-I18N)
 

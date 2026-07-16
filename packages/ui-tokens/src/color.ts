@@ -153,6 +153,14 @@ export interface ThemeColors {
 
   /** Focus ring color (accessible outline). */
   focusRing: string;
+
+  /**
+   * Operations Deck ground. The app background reads as a radial "command-center"
+   * gradient from `bgGradientFrom` (center/top) to `bgGradientTo` (edges). In
+   * flat contexts fall back to `bg`. In light mode these can equal `bg`.
+   */
+  bgGradientFrom: string;
+  bgGradientTo: string;
 }
 
 export const lightColors: ThemeColors = {
@@ -179,32 +187,80 @@ export const lightColors: ThemeColors = {
   infoSubtle: blue[50],
 
   focusRing: teal[400],
+
+  // Light mode is flat — the gradient collapses onto the base bg.
+  bgGradientFrom: neutral[50],
+  bgGradientTo: neutral[50],
 };
 
+/**
+ * DARK = the primary theme (Direction 03 "Operations Deck").
+ *
+ * A dark-first command center: a deep teal-black ground with a radial gradient
+ * (#12343B center -> #0A1618 edges), teal-bordered panels, teal used ONLY for
+ * accent/data/active state (see `glowAccent`), and a brighter "live" green.
+ * Status colors stay outside teal and are expected to be encoded in FORM
+ * (pills/dots/stripes) as well as color.
+ */
 export const darkColors: ThemeColors = {
-  bg: neutral[900],
-  surface: neutral[800],
-  surfaceAlt: neutral[700],
-  border: neutral[700],
-  textPrimary: neutral[50],
-  textSecondary: neutral[300],
-  textMuted: neutral[500],
+  bg: "#0A1618", // deep teal-black ground
+  surface: "#0e1e22", // panel
+  surfaceAlt: "#12262b", // raised / inset panel
+  border: "#21454c", // teal hairline border
+  textPrimary: "#EAF2F2",
+  textSecondary: "#7F9BA0",
+  textMuted: "#8FA6A9",
 
-  accent: teal[300],
-  accentHover: teal[200],
-  onAccent: teal[900],
-  accentSubtle: "#173238",
+  accent: "#5AA0A6", // teal glow accent
+  accentHover: "#3A8B92",
+  onAccent: teal[900], // #0C2429 — dark ink on the teal fill
+  accentSubtle: "#12262b", // teal-tinted panel wash for selected/active surfaces
 
-  success: green[300],
+  success: "#3ED8A0", // brighter "live" green
   successSubtle: "#0E2A1C",
-  warning: amber[300],
+  warning: amber[300], // #EAAE43 — bright amber on dark
   warningSubtle: "#2E220C",
-  danger: red[300],
+  danger: red[300], // #E37373 — bright red on dark
   dangerSubtle: "#2E1414",
-  info: blue[300],
+  info: blue[300], // #639FDB
   infoSubtle: "#12233A",
 
-  focusRing: teal[300],
+  focusRing: "#5AA0A6",
+
+  // Radial command-center ground: #12343B center -> #0A1618 edges.
+  bgGradientFrom: "#12343B",
+  bgGradientTo: "#0A1618",
+};
+
+/**
+ * Operations Deck glow tokens — the teal accent glow used ONLY for
+ * data/charts/active state, plus a "live"/status glow (green). Both ship as web
+ * `box-shadow` strings and RN-friendly primitives (color + radius) so native can
+ * approximate the glow. Emitted as CSS vars (`--sl-glow-*`) for web.
+ */
+export interface GlowToken {
+  /** Web `box-shadow` value (a 1px teal ring + soft outer glow). */
+  web: string;
+  /** The core glow color (for RN shadowColor / borderColor tints). */
+  color: string;
+}
+
+export interface GlowSet {
+  /** Teal accent glow — active tiles, focused charts, selected KPI cards. */
+  accent: GlowToken;
+  /** "Live" / healthy status glow (green) — live indicators, online pills. */
+  live: GlowToken;
+}
+
+export const glow: GlowSet = {
+  accent: {
+    web: "0 0 0 1px #2f5b5c, 0 8px 24px -8px rgba(58, 139, 146, 0.5)",
+    color: "#3A8B92",
+  },
+  live: {
+    web: "0 0 0 1px #1c5a45, 0 6px 20px -8px rgba(62, 216, 160, 0.45)",
+    color: "#3ED8A0",
+  },
 };
 
 /** Raw ramps, exported for edge cases (charts, data-viz) that need scale access. */

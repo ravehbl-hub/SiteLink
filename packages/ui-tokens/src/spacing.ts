@@ -29,6 +29,34 @@ export const spacing = {
   "24": 96,
 } as const;
 
+/**
+ * Compact spacing scale — the Operations Deck "dense + calm" density.
+ *
+ * ADDITIVE: the base `spacing` scale is unchanged so existing layouts on all
+ * surfaces keep building. Deck-style surfaces (sparkline tiles, packed KPI grids,
+ * data rows) opt into these tighter steps for gutters/padding where the base grid
+ * feels too airy. Same 4px-derived grid, one notch denser. Direction-agnostic —
+ * apply with logical properties (see file header).
+ */
+export const spacingCompact = {
+  "0": 0,
+  px: 1,
+  "0.5": 2,
+  "1": 3,
+  "1.5": 5,
+  "2": 6,
+  "3": 10,
+  "4": 12,
+  "5": 16,
+  "6": 20,
+  "8": 28,
+  "10": 36,
+  "12": 44,
+  "16": 56,
+  "20": 72,
+  "24": 88,
+} as const;
+
 export const radii = {
   none: 0,
   sm: 4,
@@ -58,4 +86,5 @@ export const sizing = {
 } as const;
 
 export type SpacingToken = keyof typeof spacing;
+export type SpacingCompactToken = keyof typeof spacingCompact;
 export type RadiusToken = keyof typeof radii;

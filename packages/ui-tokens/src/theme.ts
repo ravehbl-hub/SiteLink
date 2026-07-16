@@ -7,7 +7,14 @@
  * resolves it via a theme context/provider (see docs/DESIGN.md).
  */
 
-import { lightColors, darkColors, type ThemeColors, ramps } from "./color.js";
+import {
+  lightColors,
+  darkColors,
+  glow,
+  type ThemeColors,
+  type GlowSet,
+  ramps,
+} from "./color.js";
 import {
   fontFamily,
   fontFamilyNative,
@@ -17,7 +24,7 @@ import {
   letterSpacing,
   textStyles,
 } from "./typography.js";
-import { spacing, radii, borderWidth, sizing } from "./spacing.js";
+import { spacing, spacingCompact, radii, borderWidth, sizing } from "./spacing.js";
 import {
   lightElevation,
   darkElevation,
@@ -27,6 +34,7 @@ import {
 /** Mode-agnostic tokens — the same in every theme. */
 export const tokens = {
   spacing,
+  spacingCompact,
   radii,
   borderWidth,
   sizing,
@@ -50,6 +58,8 @@ export interface Theme {
   isDark: boolean;
   colors: ThemeColors;
   elevation: ElevationSet;
+  /** Operations Deck teal-glow / live-status glow (shared across themes). */
+  glow: GlowSet;
   tokens: Tokens;
 }
 
@@ -58,6 +68,7 @@ export const lightTheme: Theme = {
   isDark: false,
   colors: lightColors,
   elevation: lightElevation,
+  glow,
   tokens,
 };
 
@@ -66,6 +77,7 @@ export const darkTheme: Theme = {
   isDark: true,
   colors: darkColors,
   elevation: darkElevation,
+  glow,
   tokens,
 };
 
@@ -74,6 +86,14 @@ export const themes: Record<ThemeName, Theme> = {
   dark: darkTheme,
 };
 
-export function getTheme(name: ThemeName): Theme {
+/**
+ * The PRIMARY theme for the product. Direction 03 "Operations Deck" is
+ * dark-first: SiteLink now LEADS with dark. Surfaces should seed their initial
+ * theme from this (still honoring an explicit user/system override).
+ */
+export const defaultThemeName: ThemeName = "dark";
+export const defaultTheme: Theme = themes[defaultThemeName];
+
+export function getTheme(name: ThemeName = defaultThemeName): Theme {
   return themes[name];
 }

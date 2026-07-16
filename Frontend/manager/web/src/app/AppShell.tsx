@@ -9,6 +9,7 @@ const TABS: { to: string; key: string }[] = [
   { to: '/', key: 'nav.dashboard' },
   { to: '/workers', key: 'nav.workers' },
   { to: '/attendance', key: 'nav.attendance' },
+  { to: '/requests', key: 'nav.requests' },
   { to: '/finance', key: 'nav.finance' },
   { to: '/pnl', key: 'nav.pnl' },
   { to: '/payment', key: 'nav.payment' },
@@ -31,7 +32,7 @@ export function AppShell() {
         <div className="header-spacer" />
         <div className="header-controls">
           <select
-            className="select"
+            className="select select--compact"
             style={{ width: 'auto' }}
             value={i18n.language}
             onChange={(e) => setLocale(e.target.value as Locale)}

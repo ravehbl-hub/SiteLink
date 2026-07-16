@@ -37,7 +37,7 @@ export function LoginScreen() {
           </span>
           <div className="header-spacer" />
           <select
-            className="select"
+            className="select select--compact"
             style={{ width: 'auto' }}
             value={i18n.language}
             onChange={(e) => setLocale(e.target.value as Locale)}

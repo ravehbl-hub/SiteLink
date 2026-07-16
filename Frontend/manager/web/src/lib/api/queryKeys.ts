@@ -9,6 +9,7 @@ export const qk = {
   workerDocs: (id: string) => ['workers', id, 'docs'] as const,
   attendance: (params: unknown) => ['attendance', params] as const,
   workingHours: (params: unknown) => ['working-hours', params] as const,
+  requests: (params: unknown) => ['requests', params] as const,
   loans: (params: unknown) => ['loans', params] as const,
   advances: (params: unknown) => ['advances', params] as const,
   wageRates: ['wage-rates'] as const,

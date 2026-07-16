@@ -46,11 +46,15 @@ export function DashboardScreen() {
   const currency = data?.finance.currency ?? 'ILS';
 
   return (
-    <div>
+    <div className="deck">
       <div className="page-header">
         <h1 className="section-title" style={{ margin: 0 }}>
           {t('dashboard.title')}
         </h1>
+        <span className="live-indicator" title={t('dashboard.live')}>
+          <span className="live-dot" aria-hidden="true" />
+          {t('dashboard.live')}
+        </span>
         <span className="header-spacer" />
         <div className="segmented" role="group" aria-label={t('dashboard.title')}>
           <button
@@ -334,7 +338,7 @@ function BarChart({
         const y = baseY - h;
         return (
           <g key={`${d.label}-${i}`}>
-            <rect x={x} y={y} width={barW} height={h} rx={3} fill={d.color}>
+            <rect className="svg-bar" x={x} y={y} width={barW} height={h} rx={3} fill={d.color}>
               <title>{`${d.label}: ${formatValue(d.value)}`}</title>
             </rect>
             <text
@@ -406,6 +410,7 @@ function DonutChart({
           arcs.map((a, i) => (
             <circle
               key={i}
+              className="svg-arc"
               cx={cx}
               cy={cy}
               r={r}

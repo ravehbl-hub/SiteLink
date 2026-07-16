@@ -29,6 +29,7 @@ import type {
   UpdateWorkerInput,
   User,
   Worker,
+  WorkerRequest,
   WorkerDoc,
   WorkerDocType,
   WorkerSalaryData,
@@ -36,6 +37,7 @@ import type {
   WorkingHours,
   WorkingHoursGrain,
 } from '@sitelink/shared';
+import { RequestStatus } from '@sitelink/shared';
 import { http, type Query } from './client';
 
 /* ── Auth ─────────────────────────────────────────────────────────────── */
@@ -168,6 +170,18 @@ export const financeApi = {
     revenue?: number;
     currency?: string;
   }) => http.get<ProfitLoss>('/profit-loss', params as Query),
+};
+
+/* ── Requests: worker-submission inbox (approve / reject) ─────────────────
+ * Worker-initiated LOAN / ADVANCE / VACATION submissions awaiting an
+ * ADMIN/MANAGER decision. `approve` triggers back-end side-effects
+ * transactionally (VACATION→attendance, LOAN→Loan, ADVANCE→AdvancePayment).
+ * Approved records are then MANAGED on the Finance screen. */
+export const requestsApi = {
+  list: (params?: { status?: RequestStatus; workerId?: string }) =>
+    http.get<Paginated<WorkerRequest>>('/requests', params as Query),
+  approve: (id: string) => http.patch<WorkerRequest>(`/requests/${id}/approve`),
+  reject: (id: string) => http.patch<WorkerRequest>(`/requests/${id}/reject`),
 };
 
 /* ── Payment: profession wage rates ───────────────────────────────────── */

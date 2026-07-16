@@ -263,7 +263,7 @@ html[dir='rtl'] .kpi-label {
   align-items: center;
   justify-content: center;
   gap: var(--sl-space-2);
-  height: var(--sl-size-controlMd);
+  height: var(--sl-size-controlSm);
   padding: 0 var(--sl-space-4);
   border-radius: var(--sl-radius-md);
   border: var(--sl-border-hairline) solid var(--sl-color-border);
@@ -319,7 +319,7 @@ html[dir='rtl'] .kpi-label {
 
 .input,
 .select {
-  height: var(--sl-size-controlMd);
+  height: var(--sl-size-controlSm);
   padding: 0 var(--sl-space-3);
   border-radius: var(--sl-radius-md);
   border: var(--sl-border-hairline) solid var(--sl-color-border);

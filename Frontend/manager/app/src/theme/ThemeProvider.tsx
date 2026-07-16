@@ -37,8 +37,14 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/**
+ * Operations Deck is dark-first (tokens `defaultThemeName === 'dark'`): SiteLink
+ * LEADS with dark. Seed DARK unless the system explicitly asks for light; an
+ * explicit persisted user override still wins (applied after prefs load) and the
+ * Settings toggle remains available.
+ */
 function seedThemeMode(): Theme {
-  return Appearance.getColorScheme() === 'dark' ? Theme.DARK : Theme.LIGHT;
+  return Appearance.getColorScheme() === 'light' ? Theme.LIGHT : Theme.DARK;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

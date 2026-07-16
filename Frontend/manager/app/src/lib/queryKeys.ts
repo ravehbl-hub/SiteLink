@@ -13,6 +13,7 @@ export const qk = {
   wageRates: ['wageRates'] as const,
   loans: (p?: Record<string, unknown>) => ['loans', p ?? {}] as const,
   advances: (p?: Record<string, unknown>) => ['advances', p ?? {}] as const,
+  requests: (p?: Record<string, unknown>) => ['requests', p ?? {}] as const,
   users: ['users'] as const,
   salary: (p: SalaryCalcParams) => ['salary', p] as const,
 };

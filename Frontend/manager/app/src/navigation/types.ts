@@ -7,6 +7,7 @@ export type WorkersStackParamList = {
 
 export type DrawerParamList = {
   Dashboard: undefined;
+  Requests: undefined;
   Workers: undefined;
   Attendance: undefined;
   Finance: undefined;

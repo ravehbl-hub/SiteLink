@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import type { DrawerParamList } from './types';
 import { useTheme } from '../theme/ThemeProvider';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
+import { RequestsScreen } from '../features/requests/RequestsScreen';
 import { AttendanceScreen } from '../features/attendance/AttendanceScreen';
 import { FinanceScreen } from '../features/finance/FinanceScreen';
 import { PaymentScreen } from '../features/payment/PaymentScreen';
@@ -38,6 +39,11 @@ export function AppDrawer() {
         name="Dashboard"
         component={DashboardScreen}
         options={{ title: t('nav.dashboard') }}
+      />
+      <Drawer.Screen
+        name="Requests"
+        component={RequestsScreen}
+        options={{ title: t('nav.requests') }}
       />
       <Drawer.Screen
         name="Workers"

@@ -19,6 +19,7 @@ import type {
   Paginated,
   ProfessionWageRate,
   ProfitLoss,
+  RequestStatus,
   SalaryResult,
   Site,
   UpdateSiteInput,
@@ -28,11 +29,20 @@ import type {
   Worker,
   WorkerDoc,
   WorkerDocType,
+  WorkerRequest,
   WorkerSalaryData,
   WorkerWithDetails,
   WorkingHours,
 } from '@sitelink/shared';
 import { api } from './api';
+
+/**
+ * Unwrap a list response that may arrive as a bare array or a `Paginated`
+ * envelope. Consume this (or `.items`) rather than `.map`-ing the envelope.
+ */
+export function toArray<T>(res: T[] | Paginated<T>): T[] {
+  return Array.isArray(res) ? res : res.items;
+}
 
 /** Back-end signed-URL response shapes (backend/src/modules/workers/dto.ts). */
 export interface SignedUploadResponse {
@@ -179,6 +189,14 @@ export const endpoints = {
   removeAdvance: (id: string) => api.del<void>(`/advances/${id}`),
   profitLoss: (params: { siteId?: string; from?: string; to?: string }) =>
     api.get<ProfitLoss>('/profit-loss', params),
+
+  // Requests — worker-submission inbox (FR-REQ). Manager LISTS all in-scope and
+  // resolves; response may be a bare array or Paginated envelope (unwrap with
+  // toArray). approve/reject are ADMIN/MANAGER-only PATCH transitions.
+  listRequests: (params?: { status?: RequestStatus; workerId?: string }) =>
+    api.get<WorkerRequest[] | Paginated<WorkerRequest>>('/requests', params).then(toArray),
+  approveRequest: (id: string) => api.patch<WorkerRequest>(`/requests/${id}/approve`),
+  rejectRequest: (id: string) => api.patch<WorkerRequest>(`/requests/${id}/reject`),
 
   // Users
   listUsers: () => api.get<Paginated<User>>('/users'),

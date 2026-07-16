@@ -13,12 +13,31 @@ import {
   TextInput,
   View,
   type TextInputProps,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 import type { Theme as TokenTheme } from '@sitelink/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
 type Semantic = 'success' | 'warning' | 'danger' | 'info';
+
+/**
+ * Operations Deck teal glow for active/data surfaces, approximated on native as a
+ * colored shadow (theme.glow.accent). Softer in light mode where the ground is
+ * flat. Token-only — the color comes from the shared glow token.
+ */
+function accentGlow(theme: TokenTheme): ViewStyle {
+  return {
+    shadowColor: theme.glow.accent.color,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: theme.isDark ? 0.7 : 0.25,
+    shadowRadius: Number(theme.tokens.spacing['2']),
+    elevation: theme.isDark ? 4 : 0,
+  };
+}
+
+/** Tabular figures so numeric columns/amounts align (Operations Deck data feel). */
+const TABULAR: Pick<TextStyle, 'fontVariant'> = { fontVariant: ['tabular-nums'] };
 
 export function Screen({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme();
@@ -37,19 +56,32 @@ export function ScreenPlain({ children }: { children: React.ReactNode }) {
   return <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>{children}</View>;
 }
 
-export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+/**
+ * Deck panel. Dense (compact spacing) surface on a dark ground, with a teal
+ * hairline border (theme.colors.border reads teal in dark). `glow` opts a panel
+ * into the teal accent glow for active/data-forward cards (theme.glow.accent).
+ */
+export function Card({
+  children,
+  style,
+  glow,
+}: {
+  children: React.ReactNode;
+  style?: ViewStyle;
+  glow?: boolean;
+}) {
   const { theme } = useTheme();
   return (
     <View
       style={[
         {
           backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
+          borderColor: glow ? theme.glow.accent.color : theme.colors.border,
           borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
           borderRadius: Number(theme.tokens.radii.md),
-          padding: Number(theme.tokens.spacing['4']),
-          marginBottom: Number(theme.tokens.spacing['3']),
-          ...theme.elevation.sm.native,
+          padding: Number(theme.tokens.spacingCompact['4']),
+          marginBottom: Number(theme.tokens.spacingCompact['3']),
+          ...(glow ? accentGlow(theme) : theme.elevation.sm.native),
         },
         style,
       ]}
@@ -94,16 +126,19 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
 export function Body({
   children,
   muted,
+  numeric,
 }: {
   children: React.ReactNode;
   muted?: boolean;
+  /** Render with tabular figures so numbers/amounts align across rows. */
+  numeric?: boolean;
 }) {
   const { theme } = useTheme();
-  return (
-    <Text style={{ color: muted ? theme.colors.textMuted : theme.colors.textPrimary }}>
-      {children}
-    </Text>
-  );
+  const style: TextStyle = {
+    color: muted ? theme.colors.textMuted : theme.colors.textPrimary,
+    ...(numeric ? TABULAR : null),
+  };
+  return <Text style={style}>{children}</Text>;
 }
 
 export function Field({
@@ -203,9 +238,12 @@ export function StatusPill({ label, tone }: { label: string; tone: Semantic }) {
     <View
       style={{
         backgroundColor: bgMap[tone],
+        // Encode state in FORM as well as color: a tone-matched hairline ring.
+        borderColor: fgMap[tone],
+        borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
         borderRadius: Number(theme.tokens.radii.pill ?? 999),
-        paddingVertical: Number(theme.tokens.spacing['1']),
-        paddingHorizontal: Number(theme.tokens.spacing['3']),
+        paddingVertical: Number(theme.tokens.spacingCompact['1']),
+        paddingHorizontal: Number(theme.tokens.spacingCompact['3']),
         alignSelf: 'flex-start',
       }}
     >
@@ -214,16 +252,17 @@ export function StatusPill({ label, tone }: { label: string; tone: Semantic }) {
   );
 }
 
-/** Labeled metric for dashboard cards. */
+/** Labeled metric for dashboard cards. Deck: teal value + tabular figures. */
 export function Metric({ label, value }: { label: string; value: string | number }) {
   const { theme } = useTheme();
   return (
-    <View style={{ flexBasis: '48%', marginBottom: Number(theme.tokens.spacing['3']) }}>
+    <View style={{ flexBasis: '48%', marginBottom: Number(theme.tokens.spacingCompact['3']) }}>
       <Text
         style={{
           color: theme.colors.accent,
           fontSize: Number(theme.tokens.fontSize.xl ?? 22),
           fontWeight: '700',
+          ...TABULAR,
         }}
       >
         {value}
@@ -283,10 +322,12 @@ export function Segmented<T extends string>({
             style={{
               backgroundColor: active ? theme.colors.accent : theme.colors.surfaceAlt,
               borderRadius: Number(theme.tokens.radii.sm),
-              paddingVertical: Number(theme.tokens.spacing['2']),
-              paddingHorizontal: Number(theme.tokens.spacing['3']),
-              marginEnd: Number(theme.tokens.spacing['2']),
-              marginBottom: Number(theme.tokens.spacing['2']),
+              paddingVertical: Number(theme.tokens.spacingCompact['2']),
+              paddingHorizontal: Number(theme.tokens.spacingCompact['3']),
+              marginEnd: Number(theme.tokens.spacingCompact['2']),
+              marginBottom: Number(theme.tokens.spacingCompact['2']),
+              // Active selection reads as a live/data element: teal glow.
+              ...(active ? accentGlow(theme) : null),
             }}
           >
             <Text style={{ color: active ? theme.colors.onAccent : theme.colors.textSecondary }}>

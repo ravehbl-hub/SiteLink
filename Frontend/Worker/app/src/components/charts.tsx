@@ -33,14 +33,16 @@ export function BarChart({ data, height = 140 }: { data: BarDatum[]; height?: nu
             <View key={`${d.label}-${i}`} style={{ flex: 1, alignItems: 'center' }}>
               <Text
                 style={{
-                  color: theme.colors.textMuted,
+                  color: theme.colors.accent,
                   fontSize: 10,
+                  fontVariant: ['tabular-nums'],
                   marginBottom: Number(theme.tokens.spacing['1']),
                 }}
                 numberOfLines={1}
               >
                 {d.value}
               </Text>
+              {/* Operations Deck: teal-glowing data fill (theme.glow.accent). */}
               <View
                 style={{
                   width: '100%',
@@ -48,6 +50,11 @@ export function BarChart({ data, height = 140 }: { data: BarDatum[]; height?: nu
                   backgroundColor: theme.colors.accent,
                   borderTopStartRadius: Number(theme.tokens.radii.sm),
                   borderTopEndRadius: Number(theme.tokens.radii.sm),
+                  shadowColor: theme.glow.accent.color,
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: theme.isDark ? 0.9 : 0.35,
+                  shadowRadius: Number(theme.tokens.spacing['2']),
+                  elevation: theme.isDark ? 4 : 0,
                 }}
               />
             </View>

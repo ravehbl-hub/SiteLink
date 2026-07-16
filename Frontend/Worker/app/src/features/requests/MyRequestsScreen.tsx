@@ -64,7 +64,7 @@ export function MyRequestsScreen() {
             {r.startDate || r.endDate ? (
               <Row style={{ justifyContent: 'space-between', paddingVertical: 2 }}>
                 <Body muted>{t('myRequests.dates')}</Body>
-                <Body muted>
+                <Body muted numeric>
                   {shortDate(r.startDate)} – {shortDate(r.endDate)}
                 </Body>
               </Row>
@@ -72,7 +72,7 @@ export function MyRequestsScreen() {
             {r.amount != null ? (
               <Row style={{ justifyContent: 'space-between', paddingVertical: 2 }}>
                 <Body muted>{t('myRequests.amount')}</Body>
-                <Body muted>{money(r.amount, r.currency ?? 'ILS')}</Body>
+                <Body muted numeric>{money(r.amount, r.currency ?? 'ILS')}</Body>
               </Row>
             ) : null}
             {r.notes ? (
@@ -83,7 +83,7 @@ export function MyRequestsScreen() {
             ) : null}
             <Row style={{ justifyContent: 'space-between', paddingVertical: 2 }}>
               <Body muted>{t('myRequests.submittedOn')}</Body>
-              <Body muted>{shortDate(r.createdAt)}</Body>
+              <Body muted numeric>{shortDate(r.createdAt)}</Body>
             </Row>
           </Card>
         ))

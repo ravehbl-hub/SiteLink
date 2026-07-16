@@ -104,7 +104,7 @@ export function WorkingHoursScreen() {
       ) : (
         <>
           {chartData.length > 0 ? (
-            <Card>
+            <Card glow>
               <SectionHeading>{t('workingHours.chartTitle')}</SectionHeading>
               <BarChart data={chartData} />
             </Card>
@@ -113,22 +113,24 @@ export function WorkingHoursScreen() {
           {rows.map((r, i) => (
             <Card key={`${r.periodStart}-${i}`}>
               <Row style={{ justifyContent: 'space-between' }}>
-                <Body>
+                <Body numeric>
                   {shortDate(r.periodStart)} – {shortDate(r.periodEnd)}
                 </Body>
-                <Body>{t('workingHours.hoursValue', { hours: Math.round(r.totalHours) })}</Body>
+                <Body numeric>
+                  {t('workingHours.hoursValue', { hours: Math.round(r.totalHours) })}
+                </Body>
               </Row>
               <Row style={{ justifyContent: 'space-between', paddingVertical: 2 }}>
                 <Body muted>{t('workingHours.attendanceDays')}</Body>
-                <Body muted>{r.attendanceDays}</Body>
+                <Body muted numeric>{r.attendanceDays}</Body>
               </Row>
               <Row style={{ justifyContent: 'space-between', paddingVertical: 2 }}>
                 <Body muted>{t('workingHours.vacationDays')}</Body>
-                <Body muted>{r.vacationDays}</Body>
+                <Body muted numeric>{r.vacationDays}</Body>
               </Row>
               <Row style={{ justifyContent: 'space-between', paddingVertical: 2 }}>
                 <Body muted>{t('workingHours.diseaseDays')}</Body>
-                <Body muted>{r.diseaseDays}</Body>
+                <Body muted numeric>{r.diseaseDays}</Body>
               </Row>
             </Card>
           ))}

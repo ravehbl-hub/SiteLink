@@ -85,7 +85,7 @@ export function SalaryScreen() {
 
       {result ? (
         <>
-          <Card>
+          <Card glow>
             <Row style={{ justifyContent: 'space-between' }}>
               <Metric label={t('salary.gross')} value={money(result.gross, result.currency)} />
               <Metric
@@ -107,7 +107,7 @@ export function SalaryScreen() {
                 style={{ justifyContent: 'space-between', paddingVertical: 4 }}
               >
                 <Body muted>{line.label}</Body>
-                <Body>{money(line.amount, result.currency)}</Body>
+                <Body numeric>{money(line.amount, result.currency)}</Body>
               </Row>
             ))}
             <View style={{ height: 8 }} />

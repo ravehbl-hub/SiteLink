@@ -116,7 +116,7 @@ export function UsersActivityScreen() {
             <div className="empty-state">{t('usersActivity.noMatches')}</div>
           ) : (
             <div className="table-wrap">
-              <table className="data">
+              <table className="data data-compact">
                 <thead>
                   <tr>
                     <th>{t('usersActivity.fullName')}</th>

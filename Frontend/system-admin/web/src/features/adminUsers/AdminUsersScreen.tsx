@@ -59,7 +59,7 @@ export function AdminUsersScreen() {
       <div className="card">
         <DataState isLoading={list.isLoading} error={list.error} isEmpty={items.length === 0}>
           <div className="table-wrap">
-            <table className="data">
+            <table className="data data-compact">
               <thead>
                 <tr>
                   <th>{t('adminUsers.fullName')}</th>

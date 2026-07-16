@@ -91,7 +91,7 @@ export function UsageScreen() {
           isEmpty={items.length === 0}
         >
           <div className="table-wrap">
-            <table className="data">
+            <table className="data data-compact">
               <thead>
                 <tr>
                   <th>{t('usage.customer')}</th>

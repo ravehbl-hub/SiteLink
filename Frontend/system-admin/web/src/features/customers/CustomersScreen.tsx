@@ -70,7 +70,7 @@ export function CustomersScreen() {
           isEmpty={items.length === 0}
         >
           <div className="table-wrap">
-            <table className="data">
+            <table className="data data-compact">
               <thead>
                 <tr>
                   <th>{t('customers.name')}</th>

@@ -18,7 +18,10 @@ body {
   font-family: var(--sl-font-body);
   font-size: var(--sl-font-size-base);
   color: var(--sl-color-text-primary);
-  background: var(--sl-color-bg);
+  /* Operations Deck ground: radial teal-black gradient (token-driven; in light the
+     token resolves to a flat surface tint). Fixed so it stays behind scroll. */
+  background: var(--sl-bg-gradient);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -138,6 +141,8 @@ button {
   background: var(--sl-color-accent-subtle);
   border-inline-start-color: var(--sl-color-accent);
   font-weight: var(--sl-font-weight-semibold);
+  /* Deck: subtle teal glow on the active rail item. */
+  box-shadow: var(--sl-glow-accent);
 }
 
 .nav-label {
@@ -652,4 +657,50 @@ table.data tbody tr:hover {
   background: var(--sl-color-accent-subtle);
   color: var(--sl-color-accent);
   border-color: var(--sl-color-accent);
+}
+
+/* ══ Operations Deck skin ══════════════════════════════════════════════════
+   Dark-first command-center treatment. The dashboard root carries `.deck` so
+   glow tiles / glowing charts are scoped there; panel + compact-table styling
+   is shared. Tokens only; logical props for RTL. Mirrors the manager-web deck. */
+
+/* Radial teal-black ground behind the dashboard content area. */
+.deck {
+  background: var(--sl-bg-gradient);
+  background-attachment: fixed;
+  margin: calc(-1 * var(--sl-space-6));
+  padding: var(--sl-space-6);
+  min-block-size: 100%;
+}
+
+/* KPI stat tiles: denser + panel bg + teal glow on data tiles. */
+.deck .grid-kpi {
+  gap: var(--sl-space-compact-4);
+}
+.deck .kpi {
+  background: var(--sl-color-surface);
+  border-color: var(--sl-color-border);
+  padding: var(--sl-space-compact-4);
+  box-shadow: var(--sl-glow-accent);
+}
+.kpi-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glowing teal chart fills (SVG bars, donut arcs). */
+.deck .svg-bar {
+  filter: drop-shadow(0 0 6px var(--sl-glow-accent-color));
+}
+.deck .svg-arc {
+  filter: drop-shadow(0 0 5px var(--sl-glow-accent-color));
+}
+
+/* Compact, status-forward tables with tabular digits (shared across screens). */
+.data-compact th,
+.data-compact td {
+  padding: var(--sl-space-compact-2) var(--sl-space-compact-3);
+}
+table.data .num,
+table.data td.num {
+  font-variant-numeric: tabular-nums;
 }

@@ -9,8 +9,9 @@
       // to avoid a flash of the wrong theme or layout direction (FR-X-THEME-2).
       (function () {
         try {
+          // Operations Deck is dark-first: no persisted choice → DARK.
           var t = localStorage.getItem('sitelink.theme');
-          if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          if (t !== 'light' && t !== 'dark') t = 'dark';
           document.documentElement.setAttribute('data-theme', t);
           var l = localStorage.getItem('sitelink.language');
           if (l) {

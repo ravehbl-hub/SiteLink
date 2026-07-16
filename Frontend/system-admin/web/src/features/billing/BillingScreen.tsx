@@ -90,7 +90,7 @@ export function BillingScreen() {
           isEmpty={items.length === 0}
         >
           <div className="table-wrap">
-            <table className="data">
+            <table className="data data-compact">
               <thead>
                 <tr>
                   <th>{t('billing.customer')}</th>

@@ -1,7 +1,9 @@
 /**
  * Theme provider (DESIGN "Theming approach", FR-X-THEME). Sets data-theme on
- * <html>; all --sl-* CSS variables update instantly. Seeds from prefers-color-scheme,
- * persists the user choice, and applies before paint to avoid a flash (FR-X-THEME-2).
+ * <html>; all --sl-* CSS variables update instantly. Operations Deck is DARK-FIRST:
+ * with no persisted choice the app seeds to DARK (matching the token default on
+ * :root). Persists the user choice and applies before paint to avoid a flash
+ * (FR-X-THEME-2). The toggle + persisted choice keep working.
  */
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -20,7 +22,8 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 function initialMode(): Mode {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored === 'light' || stored === 'dark') return stored;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // Dark-first default (Operations Deck). No persisted choice → DARK.
+  return 'dark';
 }
 
 function applyMode(mode: Mode): void {

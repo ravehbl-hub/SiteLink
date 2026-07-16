@@ -76,7 +76,7 @@ export function ReportsScreen() {
         <ErrorState label={t('common.error')} onRetry={() => dashQ.refetch()} />
       ) : w ? (
         <>
-          <Card>
+          <Card glow>
             <SectionHeading>{t('reports.workerCount')}</SectionHeading>
             <Row style={{ justifyContent: 'space-between' }}>
               <Metric label={t('reports.totalWorkers')} value={w.amountOfWorkers} />
@@ -90,19 +90,19 @@ export function ReportsScreen() {
             <SectionHeading>{t('reports.attendanceSummary')}</SectionHeading>
             <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
               <Body muted>{t('attendance.present')}</Body>
-              <Body>{w.attendanceDays}</Body>
+              <Body numeric>{w.attendanceDays}</Body>
             </Row>
             <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
               <Body muted>{t('attendance.vacation')}</Body>
-              <Body>{w.vacationDays}</Body>
+              <Body numeric>{w.vacationDays}</Body>
             </Row>
             <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
               <Body muted>{t('attendance.disease')}</Body>
-              <Body>{w.diseaseDays}</Body>
+              <Body numeric>{w.diseaseDays}</Body>
             </Row>
             <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
               <Body muted>{t('dashboard.totalHours')}</Body>
-              <Body>{w.totalWorkHours}</Body>
+              <Body numeric>{w.totalWorkHours}</Body>
             </Row>
           </Card>
         </>

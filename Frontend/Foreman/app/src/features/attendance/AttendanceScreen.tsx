@@ -167,8 +167,8 @@ export function AttendanceScreen() {
           <Card key={r.id}>
             <Row style={{ justifyContent: 'space-between' }}>
               <View>
-                <Body>{shortDate(r.date)}</Body>
-                <Body muted>{r.hours != null ? `${r.hours} ${t('attendance.hours')}` : '—'}</Body>
+                <Body numeric>{shortDate(r.date)}</Body>
+                <Body muted numeric>{r.hours != null ? `${r.hours} ${t('attendance.hours')}` : '—'}</Body>
               </View>
               <StatusPill label={t(TYPE_LABEL_KEY[r.type])} tone={TONE[r.type]} />
             </Row>

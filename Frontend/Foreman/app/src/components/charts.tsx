@@ -34,7 +34,9 @@ export function DonutChart({ data }: { data: ChartDatum[] }) {
           borderRadius: Number(theme.tokens.radii.pill ?? 999),
           overflow: 'hidden',
           backgroundColor: theme.colors.surfaceAlt,
-          marginBottom: Number(theme.tokens.spacing['3']),
+          borderColor: theme.colors.border,
+          borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+          marginBottom: Number(theme.tokens.spacingCompact['3']),
         }}
       >
         {total > 0
@@ -63,7 +65,7 @@ export function DonutChart({ data }: { data: ChartDatum[] }) {
             />
             <Body muted>{d.label}</Body>
           </Row>
-          <Body>
+          <Body numeric>
             {d.value}
             {total > 0 ? `  (${Math.round((d.value / total) * 100)}%)` : ''}
           </Body>
@@ -81,24 +83,38 @@ export function BarChart({ data }: { data: ChartDatum[] }) {
   return (
     <View>
       {data.map((d, i) => (
-        <View key={i} style={{ marginBottom: Number(theme.tokens.spacing['2']) }}>
+        <View key={i} style={{ marginBottom: Number(theme.tokens.spacingCompact['2']) }}>
           <Row style={{ justifyContent: 'space-between', marginBottom: 2 }}>
             <Body muted>{d.label}</Body>
-            <Body>{d.value}</Body>
+            <Body numeric>{d.value}</Body>
           </Row>
           <View
             style={{
               height: 10,
               borderRadius: Number(theme.tokens.radii.sm),
               backgroundColor: theme.colors.surfaceAlt,
+              borderColor: theme.colors.border,
+              borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
               overflow: 'hidden',
             }}
           >
+            {/* Glowing data fill. In dark (Operations Deck) the bar carries a soft
+                glow in its own hue; light mode stays flat/calm. Container clips the
+                bar so the glow reads as an inner luminance, not an outer halo. */}
             <View
               style={{
                 width: `${Math.max(2, (d.value / max) * 100)}%`,
                 height: '100%',
                 backgroundColor: d.color,
+                ...(theme.isDark
+                  ? {
+                      shadowColor: d.color,
+                      shadowOpacity: 0.9,
+                      shadowRadius: 6,
+                      shadowOffset: { width: 0, height: 0 },
+                      elevation: 4,
+                    }
+                  : null),
               }}
             />
           </View>

@@ -29,17 +29,24 @@ export function SitePicker() {
   const label = activeSite?.name ?? t('site.select');
 
   const pill = (
+    // Active-site chip is a "data/active" element on the Deck: teal-tinted ground,
+    // teal accent border and a soft teal glow.
     <View
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         alignSelf: 'flex-start',
-        backgroundColor: theme.colors.surfaceAlt,
-        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.accentSubtle,
+        borderColor: theme.colors.accent,
         borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
         borderRadius: Number(theme.tokens.radii.pill ?? 999),
-        paddingVertical: Number(theme.tokens.spacing['2']),
-        paddingHorizontal: Number(theme.tokens.spacing['3']),
+        paddingVertical: Number(theme.tokens.spacingCompact['2']),
+        paddingHorizontal: Number(theme.tokens.spacingCompact['3']),
+        shadowColor: theme.glow.accent.color,
+        shadowOpacity: 0.25,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 3,
       }}
     >
       <Text

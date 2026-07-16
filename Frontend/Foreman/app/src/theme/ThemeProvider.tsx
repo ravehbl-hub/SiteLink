@@ -5,8 +5,7 @@
  * applied on language change (RTL for Hebrew).
  */
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Appearance } from 'react-native';
-import { lightTheme, darkTheme, type Theme as TokenTheme } from '@sitelink/tokens';
+import { lightTheme, darkTheme, defaultThemeName, type Theme as TokenTheme } from '@sitelink/tokens';
 import { Language, Theme } from '@sitelink/shared';
 import i18n, { toLocale } from '../i18n';
 import { applyDirection, reloadForDirection } from '../i18n/rtl';
@@ -37,8 +36,15 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/**
+ * Seed DARK-FIRST (Operations Deck, Direction 03). SiteLink now LEADS with dark,
+ * so the app boots into the dark command-center ground rather than mirroring the
+ * OS scheme. The tokens package is the single source of truth for the default via
+ * `defaultThemeName`. A persisted user choice (loaded in the effect below) still
+ * overrides this, and the Settings toggle remains fully in effect.
+ */
 function seedThemeMode(): Theme {
-  return Appearance.getColorScheme() === 'dark' ? Theme.DARK : Theme.LIGHT;
+  return defaultThemeName === 'dark' ? Theme.DARK : Theme.LIGHT;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

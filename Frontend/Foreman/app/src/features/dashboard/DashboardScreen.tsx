@@ -98,7 +98,7 @@ export function DashboardScreen() {
         <ErrorState label={t('common.error')} onRetry={() => dashQ.refetch()} />
       ) : w ? (
         <>
-          <Card>
+          <Card glow>
             <SectionHeading>{t('dashboard.workforce')}</SectionHeading>
             <Row style={{ justifyContent: 'space-between' }}>
               <Metric label={t('dashboard.workers')} value={w.amountOfWorkers} />
@@ -109,12 +109,12 @@ export function DashboardScreen() {
             </Row>
           </Card>
 
-          <Card>
+          <Card glow>
             <SectionHeading>{t('dashboard.attendanceSplit')}</SectionHeading>
             <DonutChart data={attendanceSplit} />
           </Card>
 
-          <Card>
+          <Card glow>
             <SectionHeading>{t('dashboard.attendanceBars')}</SectionHeading>
             <BarChart data={attendanceSplit} />
           </Card>

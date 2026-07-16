@@ -37,8 +37,32 @@ export function ScreenPlain({ children }: { children: React.ReactNode }) {
   return <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>{children}</View>;
 }
 
-export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+/**
+ * Operations Deck panel. A dense card on a teal-bordered dark surface. When
+ * `glow` is set it becomes an "active/data" tile: a brighter teal accent border
+ * plus a soft teal shadow (theme.glow.accent) — the native approximation of the
+ * web deck glow. Padding uses the COMPACT spacing scale (Deck "dense + calm").
+ */
+export function Card({
+  children,
+  style,
+  glow,
+}: {
+  children: React.ReactNode;
+  style?: ViewStyle;
+  glow?: boolean;
+}) {
   const { theme } = useTheme();
+  const glowStyle: ViewStyle = glow
+    ? {
+        borderColor: theme.colors.accent,
+        shadowColor: theme.glow.accent.color,
+        shadowOpacity: 0.35,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 6,
+      }
+    : {};
   return (
     <View
       style={[
@@ -47,10 +71,11 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
           borderColor: theme.colors.border,
           borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
           borderRadius: Number(theme.tokens.radii.md),
-          padding: Number(theme.tokens.spacing['4']),
-          marginBottom: Number(theme.tokens.spacing['3']),
+          padding: Number(theme.tokens.spacingCompact['4']),
+          marginBottom: Number(theme.tokens.spacingCompact['3']),
           ...theme.elevation.sm.native,
         },
+        glowStyle,
         style,
       ]}
     >
@@ -94,13 +119,21 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
 export function Body({
   children,
   muted,
+  numeric,
 }: {
   children: React.ReactNode;
   muted?: boolean;
+  /** Align digits with tabular-nums for data columns (Operations Deck). */
+  numeric?: boolean;
 }) {
   const { theme } = useTheme();
   return (
-    <Text style={{ color: muted ? theme.colors.textMuted : theme.colors.textPrimary }}>
+    <Text
+      style={{
+        color: muted ? theme.colors.textMuted : theme.colors.textPrimary,
+        ...(numeric ? { fontVariant: ['tabular-nums' as const] } : null),
+      }}
+    >
       {children}
     </Text>
   );
@@ -184,7 +217,12 @@ export function Button({
   );
 }
 
-/** A semantic status pill (DESIGN.md status color mapping). */
+/**
+ * A semantic status pill (DESIGN.md status color mapping). Operations Deck form:
+ * a subtle-tinted fill PLUS a hairline border in the status hue and a small
+ * leading status dot, so state is encoded in FORM as well as color (color-blind
+ * safe). Compact padding.
+ */
 export function StatusPill({ label, tone }: { label: string; tone: Semantic }) {
   const { theme } = useTheme();
   const bgMap: Record<Semantic, string> = {
@@ -202,28 +240,62 @@ export function StatusPill({ label, tone }: { label: string; tone: Semantic }) {
   return (
     <View
       style={{
+        flexDirection: 'row',
+        alignItems: 'center',
         backgroundColor: bgMap[tone],
+        borderColor: fgMap[tone],
+        borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
         borderRadius: Number(theme.tokens.radii.pill ?? 999),
-        paddingVertical: Number(theme.tokens.spacing['1']),
-        paddingHorizontal: Number(theme.tokens.spacing['3']),
+        paddingVertical: Number(theme.tokens.spacingCompact['1']),
+        paddingHorizontal: Number(theme.tokens.spacingCompact['3']),
         alignSelf: 'flex-start',
       }}
     >
+      <View
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: fgMap[tone],
+          marginEnd: Number(theme.tokens.spacingCompact['2']),
+        }}
+      />
       <Text style={{ color: fgMap[tone], fontSize: 12, fontWeight: '600' }}>{label}</Text>
     </View>
   );
 }
 
-/** Labeled metric for dashboard cards. */
+/**
+ * Operations Deck KPI tile. A dense inset panel (teal-tinted `accentSubtle`
+ * ground, teal hairline border, soft teal glow) with a big tabular-nums accent
+ * value and a muted label — the "glow KPI tile" of the dashboard grid.
+ */
 export function Metric({ label, value }: { label: string; value: string | number }) {
   const { theme } = useTheme();
   return (
-    <View style={{ flexBasis: '48%', marginBottom: Number(theme.tokens.spacing['3']) }}>
+    <View
+      style={{
+        flexBasis: '48%',
+        marginBottom: Number(theme.tokens.spacingCompact['2']),
+        backgroundColor: theme.colors.accentSubtle,
+        borderColor: theme.colors.border,
+        borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+        borderRadius: Number(theme.tokens.radii.md),
+        paddingVertical: Number(theme.tokens.spacingCompact['3']),
+        paddingHorizontal: Number(theme.tokens.spacingCompact['3']),
+        shadowColor: theme.glow.accent.color,
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 3,
+      }}
+    >
       <Text
         style={{
           color: theme.colors.accent,
           fontSize: Number(theme.tokens.fontSize.xl ?? 22),
           fontWeight: '700',
+          fontVariant: ['tabular-nums'],
         }}
       >
         {value}

@@ -28,7 +28,7 @@ import {
   Segmented,
   Title,
 } from '../../components/ui';
-import { BarChart, DonutChart, type Datum } from '../../components/charts';
+import { BarChart, HBarChart, DonutChart, type Datum } from '../../components/charts';
 import {
   loadDashboardViewPref,
   saveDashboardViewPref,
@@ -251,7 +251,9 @@ function GraphicsView({
       {siteBars.length > 0 ? (
         <Card>
           <SectionHeading>{t('dashboard.workersPerSite')}</SectionHeading>
-          <BarChart data={siteBars} formatValue={(v) => String(v)} />
+          {/* Horizontal: one row per site so long/RTL Hebrew site names read in
+              full (no fragment truncation/overlap). Mirrors manager WEB. */}
+          <HBarChart data={siteBars} formatValue={(v) => String(v)} />
         </Card>
       ) : null}
 

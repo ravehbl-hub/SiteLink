@@ -9,7 +9,7 @@
  * the donut legend flows with the row direction which RN already flips under RTL.
  */
 import React from 'react';
-import { I18nManager, View } from 'react-native';
+import { I18nManager, Text, View } from 'react-native';
 import Svg, { Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../theme/ThemeProvider';
 import { Body } from './ui';
@@ -127,6 +127,93 @@ export function BarChart({
         );
       })}
     </Svg>
+  );
+}
+
+/**
+ * Horizontal bar chart — one ROW per datum. Full category name reads on its own
+ * row (numberOfLines=1 + tail ellipsis, NO manual char truncation, NO rotation),
+ * a track View holds a fill View whose width = value/max, and the value sits at
+ * the row end. This is the right choice for many long/RTL names (construction
+ * sites), mirroring the manager WEB `HBarChart` (.hbar-* CSS).
+ *
+ * RTL: the row is a flexDirection:'row', which React Native FLIPS to visually
+ * right-to-left under I18nManager.isRTL — so the label lands start-aligned (right
+ * in Hebrew) and, because the fill is start-anchored inside the track (the track
+ * is a plain row container and the fill is its first/only child at flex-start),
+ * the bar grows from the inline-start edge (right in he, left in en). A
+ * percentage width alone does not carry a direction, so anchoring the fill at the
+ * row's start via the flex flow is what makes it mirror correctly.
+ */
+export function HBarChart({
+  data,
+  formatValue,
+}: {
+  data: Datum[];
+  formatValue: (v: number) => string;
+}) {
+  const { theme } = useTheme();
+  const max = Math.max(1, ...data.map((d) => d.value));
+  const gap2 = Number(theme.tokens.spacing['2']);
+  const gap1 = Number(theme.tokens.spacing['1']);
+
+  return (
+    <View style={{ alignSelf: 'stretch', gap: gap1 }}>
+      {data.map((d, i) => (
+        <View
+          key={`${d.label}-${i}`}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: gap2 }}
+        >
+          {/* Full site name — start-aligned, single line, tail ellipsis only if
+              genuinely too long. No fragment truncation, no rotation. */}
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={{
+              width: 116,
+              fontSize: 12,
+              color: theme.colors.textSecondary,
+              textAlign: 'left',
+            }}
+          >
+            {d.label}
+          </Text>
+          {/* Track: a row container so the fill anchors at the inline-start and,
+              under RTL, RN flips the row so it grows from the right. */}
+          <View
+            style={{
+              flex: 1,
+              height: 10,
+              borderRadius: 999,
+              backgroundColor: theme.colors.surfaceAlt,
+              overflow: 'hidden',
+              flexDirection: 'row',
+            }}
+          >
+            <View
+              style={{
+                width: `${(d.value / max) * 100}%`,
+                minWidth: 2,
+                height: '100%',
+                borderRadius: 999,
+                backgroundColor: d.color,
+              }}
+            />
+          </View>
+          <Text
+            style={{
+              fontSize: 12,
+              color: theme.colors.textPrimary,
+              fontVariant: ['tabular-nums'],
+              textAlign: 'right',
+              minWidth: 24,
+            }}
+          >
+            {formatValue(d.value)}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
 }
 

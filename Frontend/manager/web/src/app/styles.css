@@ -648,6 +648,48 @@ table.data tbody tr:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* Horizontal bar chart — full category names on their own row (site labels),
+   RTL-safe via logical properties. Bars grow from the inline-start. */
+.hbar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sl-space-compact-2);
+  inline-size: 100%;
+}
+.hbar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 8.5rem) 1fr auto;
+  align-items: center;
+  gap: var(--sl-space-2);
+}
+.hbar-label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--sl-font-size-xs);
+  color: var(--sl-color-text-secondary);
+  text-align: start;
+}
+.hbar-track {
+  block-size: 10px;
+  border-radius: var(--sl-radius-pill);
+  background: var(--sl-color-surface-alt);
+  overflow: hidden;
+}
+.hbar-fill {
+  display: block;
+  block-size: 100%;
+  border-radius: var(--sl-radius-pill);
+  min-inline-size: 2px;
+}
+.hbar-value {
+  font-size: var(--sl-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--sl-color-text-primary);
+  text-align: end;
+}
+
 /* Glowing teal chart fills (SVG bars, html bar-fill, donut arcs). */
 .deck .svg-bar {
   filter: drop-shadow(0 0 6px var(--sl-glow-accent-color));

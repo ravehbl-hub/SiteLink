@@ -251,7 +251,7 @@ function GraphicsView({
       {siteBars.length > 0 ? (
         <div className="card">
           <h3 className="subsection-title">{t('dashboard.workersPerSite')}</h3>
-          <BarChart
+          <HBarChart
             data={siteBars}
             rtl={rtl}
             formatValue={(v) => formatNumber(v)}
@@ -379,6 +379,43 @@ function BarChart({
         );
       })}
     </svg>
+  );
+}
+
+/** Horizontal bar chart (HTML/CSS, no dependency). Category names sit on their
+ *  own row and read in full (no rotation, no aggressive truncation) — the right
+ *  choice for many long/RTL names like construction-site labels. Bars grow from
+ *  the inline-start (right under RTL) via logical properties, so it mirrors
+ *  correctly for Hebrew. Value sits at the row end. */
+function HBarChart({
+  data,
+  rtl: _rtl,
+  formatValue,
+  ariaLabel,
+}: {
+  data: Datum[];
+  rtl: boolean;
+  formatValue: (v: number) => string;
+  ariaLabel: string;
+}) {
+  const max = Math.max(1, ...data.map((d) => d.value));
+  return (
+    <div className="hbar-chart" role="img" aria-label={ariaLabel}>
+      {data.map((d, i) => (
+        <div className="hbar-row" key={`${d.label}-${i}`}>
+          <span className="hbar-label" title={d.label}>
+            {d.label}
+          </span>
+          <span className="hbar-track">
+            <span
+              className="hbar-fill"
+              style={{ inlineSize: `${(d.value / max) * 100}%`, background: d.color }}
+            />
+          </span>
+          <span className="hbar-value">{formatValue(d.value)}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

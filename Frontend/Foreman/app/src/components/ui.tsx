@@ -202,7 +202,8 @@ export function Button({
         backgroundColor: bg,
         opacity: disabled ? 0.5 : 1,
         borderRadius: Number(theme.tokens.radii.sm),
-        paddingVertical: Number(theme.tokens.spacing['3']),
+        // Match the language Segmented control height (less tall).
+        paddingVertical: Number(theme.tokens.spacing['2']),
         paddingHorizontal: Number(theme.tokens.spacing['4']),
         alignItems: 'center',
         marginBottom: Number(theme.tokens.spacing['2']),

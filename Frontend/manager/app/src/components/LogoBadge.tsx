@@ -23,8 +23,8 @@ const LOGO = require('../../assets/logo.png');
 type Variant = 'header' | 'login';
 
 const SIZES: Record<Variant, { width: number; height: number; padding: number; radius: number }> = {
-  header: { width: 96, height: 30, padding: 6, radius: 8 },
-  login: { width: 190, height: 58, padding: 10, radius: 12 },
+  header: { width: 112, height: 40, padding: 6, radius: 8 },
+  login: { width: 220, height: 84, padding: 10, radius: 12 },
 };
 
 export function LogoBadge({ variant = 'header' }: { variant?: Variant }) {

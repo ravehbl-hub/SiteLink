@@ -88,6 +88,8 @@ export function SitePicker() {
           accessibilityRole="button"
           accessibilityLabel={t('site.select')}
           onPress={() => setOpen(true)}
+          // Compact pill trigger, but preserve a ~44px accessible tap area.
+          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
         >
           {pill}
         </Pressable>

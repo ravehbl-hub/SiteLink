@@ -198,6 +198,10 @@ export function Button({
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      // Compact VISUAL chrome (matches the Segmented) but keep a ~44px accessible
+      // tap area: the vertical hitSlop expands the touch region above/below.
+      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
       style={{
         backgroundColor: bg,
         opacity: disabled ? 0.5 : 1,
@@ -206,6 +210,7 @@ export function Button({
         paddingVertical: Number(theme.tokens.spacing['2']),
         paddingHorizontal: Number(theme.tokens.spacing['4']),
         alignItems: 'center',
+        justifyContent: 'center',
         marginBottom: Number(theme.tokens.spacing['2']),
       }}
     >
@@ -353,6 +358,9 @@ export function Segmented<T extends string>({
           <Pressable
             key={opt.value}
             onPress={() => onChange(opt.value)}
+            accessibilityRole="button"
+            // Compact select trigger, but preserve a ~44px accessible tap area.
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
             style={{
               backgroundColor: active ? theme.colors.accent : theme.colors.surfaceAlt,
               borderRadius: Number(theme.tokens.radii.sm),

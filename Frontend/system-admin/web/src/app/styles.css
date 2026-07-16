@@ -324,6 +324,15 @@ html[dir='rtl'] .kpi-label {
   width: 100%;
 }
 
+/* Compact variant for header/inline controls (e.g. the language picker) —
+   normal dropdown height, sized to content, aligned with the theme toggle. */
+.select--compact {
+  height: var(--sl-size-controlSm);
+  line-height: 1;
+  padding: 0 var(--sl-space-2);
+  width: auto;
+}
+
 .form-row {
   display: flex;
   gap: var(--sl-space-3);

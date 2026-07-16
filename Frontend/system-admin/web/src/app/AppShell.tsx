@@ -42,7 +42,7 @@ export function AppShell() {
         <div className="header-spacer" />
         <div className="header-controls">
           <select
-            className="select"
+            className="select select--compact"
             style={{ width: 'auto' }}
             value={i18n.language}
             onChange={(e) => setLocale(e.target.value as Locale)}

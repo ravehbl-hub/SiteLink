@@ -7,6 +7,7 @@ import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useTranslation } from 'react-i18next';
 import type { DrawerParamList } from './types';
 import { useTheme } from '../theme/ThemeProvider';
+import { LogoBadge } from '../components/LogoBadge';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { RequestsScreen } from '../features/requests/RequestsScreen';
 import { AttendanceScreen } from '../features/attendance/AttendanceScreen';
@@ -29,6 +30,7 @@ export function AppDrawer() {
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.surface },
         headerTintColor: theme.colors.textPrimary,
+        headerRight: () => <LogoBadge variant="header" />,
         drawerStyle: { backgroundColor: theme.colors.surface },
         drawerActiveTintColor: theme.colors.accent,
         drawerInactiveTintColor: theme.colors.textSecondary,

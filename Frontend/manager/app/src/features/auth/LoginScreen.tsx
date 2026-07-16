@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthProvider';
 import { ApiError } from '../../lib/api';
 import { Body, Button, Card, Field, ScreenPlain, Title } from '../../components/ui';
+import { LogoBadge } from '../../components/LogoBadge';
 import { useTheme } from '../../theme/ThemeProvider';
 
 export function LoginScreen() {
@@ -36,6 +37,9 @@ export function LoginScreen() {
   return (
     <ScreenPlain>
       <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
+        <View style={{ alignItems: 'center', marginBottom: Number(theme.tokens.spacing['4']) }}>
+          <LogoBadge variant="login" />
+        </View>
         <Title>{t('common.appName')}</Title>
         {unconfigured ? (
           <Card>

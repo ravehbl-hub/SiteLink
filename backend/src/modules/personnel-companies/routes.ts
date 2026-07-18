@@ -13,6 +13,11 @@
  *   PATCH  /personnel-companies/:id         update (MANAGER; partial; name unique → 409)
  *   POST   /personnel-companies/:id/archive     (MANAGER) set isArchived true
  *   POST   /personnel-companies/:id/unarchive   (MANAGER) set isArchived false
+ *   DELETE /personnel-companies/:id         HARD delete (MANAGER; 204; 404 if missing)
+ *
+ * DELETE is a HARD delete: the row is gone. Workers linked via personnelCompanyId are
+ * automatically un-linked by the FK (onDelete: SetNull) — not deleted — and keep their
+ * free-text `personnelCompany` mirror value. Deletion is never blocked on linked workers.
  */
 import type { FastifyInstance } from 'fastify';
 import { FOREMAN_ROLES, MANAGER_ROLES } from '../../plugins/auth.js';
@@ -61,5 +66,13 @@ export async function personnelCompanyRoutes(app: FastifyInstance): Promise<void
   app.post('/personnel-companies/:id/unarchive', guard, async (req) => {
     const { id } = idParam.parse(req.params);
     return service.unarchive(id);
+  });
+
+  // HARD delete (MANAGER-only `guard`). 204 on success (workers DELETE convention).
+  // Linked workers are un-linked by the FK (onDelete: SetNull), never deleted.
+  app.delete('/personnel-companies/:id', guard, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    await service.remove(id);
+    return reply.status(204).send();
   });
 }

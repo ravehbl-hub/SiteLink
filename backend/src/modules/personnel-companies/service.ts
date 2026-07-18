@@ -8,6 +8,13 @@
  * `name` is unique (schema @unique). Duplicate names surface as a friendly 409 via a
  * pre-check plus a P2002 backstop (a race between the pre-check and the write still
  * maps to a clean CONFLICT, never a raw Prisma error).
+ *
+ * REMOVE is a HARD delete (prisma.personnelCompany.delete). The Worker.personnelCompanyId
+ * FK is declared `onDelete: SetNull`, so any workers linked to a deleted company are
+ * automatically UN-LINKED by the database (their personnelCompanyId becomes NULL) — no
+ * orphan rows, no FK crash, and the worker itself is NOT deleted. Those workers retain
+ * their legacy free-text `personnelCompany` mirror value, which is fine (that column is
+ * an independent free-text field, not the FK). Deletion is never blocked on linked workers.
  */
 import type { Paginated, PersonnelCompany } from '@sitelink/shared';
 import type { z } from 'zod';
@@ -153,6 +160,17 @@ export class PersonnelCompaniesService {
       data: { isArchived: false },
     });
     return mapPersonnelCompany(row);
+  }
+
+  /**
+   * HARD delete a personnel company (FR: manager removes a company from the list).
+   * 404 if it does not exist. Linked workers are automatically un-linked by the FK
+   * (Worker.personnelCompanyId onDelete:SetNull) — they are NOT deleted and keep their
+   * free-text `personnelCompany` mirror. Deletion is never blocked on linked workers.
+   */
+  async remove(id: string): Promise<void> {
+    await this.ensureExists(id);
+    await prisma.personnelCompany.delete({ where: { id } });
   }
 
   private async ensureExists(id: string): Promise<void> {

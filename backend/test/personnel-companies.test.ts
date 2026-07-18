@@ -49,6 +49,7 @@ const IDS = {
 const tokens: Record<keyof typeof IDS, string> = {} as never;
 const createdUserIds: string[] = [];
 const createdCompanyIds: string[] = [];
+const createdWorkerIds: string[] = [];
 
 async function makeUser(authUserId: string, role: Role): Promise<void> {
   const u = await prisma.user.upsert({
@@ -80,6 +81,10 @@ beforeAll(async () => {
 }, 30_000);
 
 afterAll(async () => {
+  // Workers first (they may reference companies via the FK).
+  for (const id of createdWorkerIds) {
+    await prisma.worker.delete({ where: { id } }).catch(() => undefined);
+  }
   for (const id of createdCompanyIds) {
     await prisma.personnelCompany.delete({ where: { id } }).catch(() => undefined);
   }
@@ -237,13 +242,129 @@ describe('PersonnelCompany CRUD — ADMIN/MANAGER (org-wide, Manager-only)', () 
   });
 });
 
+describe('PersonnelCompany REMOVE — HARD delete (MANAGER-only) + SetNull unlinks workers', () => {
+  it('MANAGER DELETE → 204 and the company is gone (GET → 404)', async () => {
+    const name = `Del Co ${randomUUID().slice(0, 8)}`;
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/personnel-companies',
+      headers: auth(tokens.manager),
+      payload: { name },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id;
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/personnel-companies/${id}`,
+      headers: auth(tokens.manager),
+    });
+    expect(del.statusCode).toBe(204);
+    expect(del.body).toBe('');
+
+    // Gone: GET the same id → 404.
+    const got = await app.inject({
+      method: 'GET',
+      url: `/api/v1/personnel-companies/${id}`,
+      headers: auth(tokens.manager),
+    });
+    expect(got.statusCode).toBe(404);
+    expect(got.json().error.code).toBe('NOT_FOUND');
+  });
+
+  it('ADMIN can DELETE too → 204', async () => {
+    const name = `Admin Del Co ${randomUUID().slice(0, 8)}`;
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/personnel-companies',
+      headers: auth(tokens.manager),
+      payload: { name },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id;
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/personnel-companies/${id}`,
+      headers: auth(tokens.admin),
+    });
+    expect(del.statusCode).toBe(204);
+  });
+
+  it('DELETE a company LINKED to a worker → 204; worker survives, its personnelCompanyId is NULLed (SetNull)', async () => {
+    // Company + a worker directly linked via the FK.
+    const name = `Linked Co ${randomUUID().slice(0, 8)}`;
+    const company = await prisma.personnelCompany.create({ data: { name } });
+
+    const worker = await prisma.worker.create({
+      data: {
+        firstName: 'Link',
+        lastName: 'Tester',
+        profession: 'GENERAL_LABORER',
+        personnelCompany: name, // free-text mirror (independent column)
+        personnelCompanyId: company.id, // managed FK
+      },
+    });
+    createdWorkerIds.push(worker.id);
+
+    // Sanity: the link exists before delete.
+    const before = await prisma.worker.findUnique({
+      where: { id: worker.id },
+      select: { personnelCompanyId: true, personnelCompany: true },
+    });
+    expect(before!.personnelCompanyId).toBe(company.id);
+
+    // Delete the company (MANAGER).
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/personnel-companies/${company.id}`,
+      headers: auth(tokens.manager),
+    });
+    expect(del.statusCode).toBe(204);
+
+    // Company is gone.
+    const got = await app.inject({
+      method: 'GET',
+      url: `/api/v1/personnel-companies/${company.id}`,
+      headers: auth(tokens.manager),
+    });
+    expect(got.statusCode).toBe(404);
+
+    // Worker STILL exists; FK was SET NULL; free-text mirror is untouched.
+    const after = await prisma.worker.findUnique({
+      where: { id: worker.id },
+      select: { id: true, personnelCompanyId: true, personnelCompany: true },
+    });
+    expect(after).not.toBeNull();
+    expect(after!.id).toBe(worker.id);
+    expect(after!.personnelCompanyId).toBeNull(); // SetNull worked
+    expect(after!.personnelCompany).toBe(name); // free-text mirror preserved
+  });
+
+  it('DELETE nonexistent id → 404', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/personnel-companies/does-not-exist-${randomUUID().slice(0, 8)}`,
+      headers: auth(tokens.manager),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('NOT_FOUND');
+  });
+});
+
 describe('PersonnelCompany authz — WRITE MANAGER-only; READ also FOREMAN; WORKER 403', () => {
   // WRITE surfaces stay MANAGER-only: a FOREMAN (read-only) and a WORKER get 403.
-  const writeRoutes: Array<{ method: 'POST' | 'PATCH'; url: string; payload?: unknown }> = [
+  const writeRoutes: Array<{
+    method: 'POST' | 'PATCH' | 'DELETE';
+    url: string;
+    payload?: unknown;
+  }> = [
     { method: 'POST', url: '/api/v1/personnel-companies', payload: { name: 'X' } },
     { method: 'PATCH', url: '/api/v1/personnel-companies/some-id', payload: { name: 'Y' } },
     { method: 'POST', url: '/api/v1/personnel-companies/some-id/archive' },
     { method: 'POST', url: '/api/v1/personnel-companies/some-id/unarchive' },
+    // DELETE is on the MANAGER-only `guard` (not `readGuard`): foreman + worker get 403.
+    { method: 'DELETE', url: '/api/v1/personnel-companies/some-id' },
   ];
   // READ surfaces: FOREMAN is now allowed (picker); WORKER is still 403.
   const readRoutes: Array<{ method: 'GET'; url: string }> = [

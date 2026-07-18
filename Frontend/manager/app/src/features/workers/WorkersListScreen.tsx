@@ -5,7 +5,7 @@
  * open details; the + button starts the Worker Wizard.
  */
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, TextInput, View } from 'react-native';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -22,7 +22,6 @@ import {
   Loading,
   Row,
   Screen,
-  Segmented,
   StatusPill,
   Title,
 } from '../../components/ui';
@@ -98,14 +97,38 @@ export function WorkersListScreen({ navigation }: Props) {
           textAlign: 'auto',
         }}
       />
-      <Segmented
-        options={[
-          { value: 'active', label: t('workers.viewActive') },
-          { value: 'archived', label: t('workers.viewArchived') },
-        ]}
-        value={archived ? 'archived' : 'active'}
-        onChange={(v) => setArchived(v === 'archived')}
-      />
+      {/* Checkbox: when checked, display ONLY archived records (server ?archivedOnly). */}
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: archived }}
+        onPress={() => setArchived((v) => !v)}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: Number(theme.tokens.spacing['2']),
+          marginBottom: Number(theme.tokens.spacing['2']),
+        }}
+      >
+        <View
+          style={{
+            width: 20,
+            height: 20,
+            borderRadius: Number(theme.tokens.radii.sm),
+            borderWidth: 1.5,
+            borderColor: archived ? theme.colors.accent : theme.colors.border,
+            backgroundColor: archived ? theme.colors.accent : 'transparent',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginEnd: Number(theme.tokens.spacing['2']),
+          }}
+        >
+          {archived ? (
+            <Text style={{ color: theme.colors.onAccent, fontWeight: '700' }}>✓</Text>
+          ) : null}
+        </View>
+        <Body>{t('workers.viewArchived')}</Body>
+      </Pressable>
 
       {q.isLoading ? (
         <Loading label={t('common.loading')} />
@@ -114,11 +137,10 @@ export function WorkersListScreen({ navigation }: Props) {
       ) : !q.data || q.data.items.length === 0 ? (
         <EmptyState label={archived ? t('workers.noArchived') : t('common.empty')} />
       ) : (
-        q.data.items.map((w) => (
-          <Pressable
-            key={w.id}
-            onPress={() => navigation.navigate('WorkerDetails', { workerId: w.id })}
-          >
+        q.data.items.map((w) => {
+          // Archived rows are NOT editable: a plain (non-pressable) card with a
+          // Restore action only. Active rows tap through to the editable detail.
+          const card = (
             <Card>
               <Row style={{ justifyContent: 'space-between' }}>
                 <View>
@@ -139,7 +161,7 @@ export function WorkersListScreen({ navigation }: Props) {
                   )}
                 </Row>
               </Row>
-              {archived ? (
+              {w.isArchived ? (
                 <Button
                   title={t('workers.restore')}
                   variant="secondary"
@@ -148,8 +170,18 @@ export function WorkersListScreen({ navigation }: Props) {
                 />
               ) : null}
             </Card>
-          </Pressable>
-        ))
+          );
+          return w.isArchived ? (
+            <View key={w.id}>{card}</View>
+          ) : (
+            <Pressable
+              key={w.id}
+              onPress={() => navigation.navigate('WorkerDetails', { workerId: w.id })}
+            >
+              {card}
+            </Pressable>
+          );
+        })
       )}
     </Screen>
   );

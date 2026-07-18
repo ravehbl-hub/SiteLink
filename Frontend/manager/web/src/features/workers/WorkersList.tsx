@@ -90,32 +90,19 @@ export function WorkersList() {
             </option>
           ))}
         </select>
-        <div className="inline" role="group" aria-label={t('workers.showArchived')}>
-          <button
-            type="button"
-            className={`btn btn-sm${archived ? '' : ' btn-primary'}`}
-            aria-pressed={!archived}
-            onClick={() => {
-              if (!archived) return;
-              setArchived(false);
+        {/* Checkbox: when checked, display ONLY archived records (server ?archivedOnly).
+            Unchecked = active workers. */}
+        <label className="inline">
+          <input
+            type="checkbox"
+            checked={archived}
+            onChange={(e) => {
+              setArchived(e.target.checked);
               setPage(1);
             }}
-          >
-            {t('workers.viewActive')}
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm${archived ? ' btn-primary' : ''}`}
-            aria-pressed={archived}
-            onClick={() => {
-              if (archived) return;
-              setArchived(true);
-              setPage(1);
-            }}
-          >
-            {t('workers.viewArchived')}
-          </button>
-        </div>
+          />
+          {t('workers.viewArchived')}
+        </label>
         <button className="btn btn-primary" onClick={() => navigate('/workers/new')}>
           {t('workers.newWorker')}
         </button>
@@ -146,7 +133,13 @@ export function WorkersList() {
                 {list.data?.items.map((w) => (
                   <tr key={w.id}>
                     <td>
-                      <Link to={`/workers/${w.id}`}>{w.firstName}</Link>
+                      {/* Archived rows are NOT editable — plain name, no detail link.
+                          Active rows link to the editable detail. */}
+                      {w.isArchived ? (
+                        w.firstName
+                      ) : (
+                        <Link to={`/workers/${w.id}`}>{w.firstName}</Link>
+                      )}
                     </td>
                     <td>{w.lastName}</td>
                     <td>{t(`profession.${w.profession}`)}</td>
@@ -166,10 +159,8 @@ export function WorkersList() {
                     </td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn btn-sm" onClick={() => navigate(`/workers/${w.id}`)}>
-                          {t('common.view')}
-                        </button>
                         {w.isArchived ? (
+                          /* Archived: RESTORE only — no view/edit/archive/delete. */
                           <button
                             className="btn btn-sm"
                             onClick={() => {
@@ -179,23 +170,31 @@ export function WorkersList() {
                             {t('workers.restore')}
                           </button>
                         ) : (
-                          <button
-                            className="btn btn-sm"
-                            onClick={() => {
-                              if (confirm(t('workers.confirmArchive'))) archiveMut.mutate(w.id);
-                            }}
-                          >
-                            {t('common.archive')}
-                          </button>
+                          <>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => navigate(`/workers/${w.id}`)}
+                            >
+                              {t('common.view')}
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => {
+                                if (confirm(t('workers.confirmArchive'))) archiveMut.mutate(w.id);
+                              }}
+                            >
+                              {t('common.archive')}
+                            </button>
+                            <button
+                              className="btn btn-sm btn-danger"
+                              onClick={() => {
+                                if (confirm(t('workers.confirmDelete'))) removeMut.mutate(w.id);
+                              }}
+                            >
+                              {t('common.delete')}
+                            </button>
+                          </>
                         )}
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => {
-                            if (confirm(t('workers.confirmDelete'))) removeMut.mutate(w.id);
-                          }}
-                        >
-                          {t('common.delete')}
-                        </button>
                       </div>
                     </td>
                   </tr>

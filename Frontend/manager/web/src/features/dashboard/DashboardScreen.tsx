@@ -51,25 +51,9 @@ export function DashboardScreen() {
         <h1 className="section-title" style={{ margin: 0 }}>
           {t('dashboard.title')}
         </h1>
-        <span className="header-spacer" />
-        <div className="segmented" role="group" aria-label={t('dashboard.title')}>
-          <button
-            type="button"
-            aria-pressed={view === 'data'}
-            onClick={() => setView('data')}
-          >
-            {t('dashboard.viewData')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={view === 'graphics'}
-            onClick={() => setView('graphics')}
-          >
-            {t('dashboard.viewGraphics')}
-          </button>
-        </div>
       </div>
 
+      {/* Filter first (top), then the Data/Graphics toggle + its content below it. */}
       <div className="card">
         <div className="form-row">
           <div className="field" style={{ minWidth: 200 }}>
@@ -112,6 +96,24 @@ export function DashboardScreen() {
             />
           </div>
         </div>
+      </div>
+
+      <div
+        className="segmented"
+        role="group"
+        aria-label={t('dashboard.title')}
+        style={{ marginBlockStart: 'var(--sl-space-3)' }}
+      >
+        <button type="button" aria-pressed={view === 'data'} onClick={() => setView('data')}>
+          {t('dashboard.viewData')}
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === 'graphics'}
+          onClick={() => setView('graphics')}
+        >
+          {t('dashboard.viewGraphics')}
+        </button>
       </div>
 
       <DataState isLoading={query.isLoading} error={query.error}>

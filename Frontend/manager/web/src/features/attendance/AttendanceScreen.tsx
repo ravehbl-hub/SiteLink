@@ -33,22 +33,39 @@ export function AttendanceScreen() {
   const [creating, setCreating] = useState(false);
 
   const listParams = { workerId: workerId || undefined, from, to, pageSize: 200 };
+  // Live attendance: entries can land while the manager watches, so poll every 20s
+  // (medium cadence) while mounted+visible, never in the background. `enabled`
+  // already pauses it until a worker is picked, and refetchInterval auto-pauses
+  // when the query unmounts. Short staleTime so focus/mount within the interval
+  // still shows fresh rows.
   const list = useQuery({
     queryKey: qk.attendance(listParams),
     queryFn: () => attendanceApi.list(listParams),
     enabled: Boolean(workerId),
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
+    staleTime: 5_000,
   });
 
+  // Working-hours is a DERIVED rollup of the same records — it refreshes on focus
+  // and is invalidated whenever attendance mutates, so it doesn't need its own
+  // background poll (avoids doubling the request rate on this screen).
   const whParams = { workerId: workerId || undefined, from, to, grain };
   const workingHours = useQuery({
     queryKey: qk.workingHours(whParams),
     queryFn: () => attendanceApi.workingHours(whParams),
     enabled: Boolean(workerId),
+    staleTime: 5_000,
   });
 
   const removeMut = useMutation({
     mutationFn: (id: string) => attendanceApi.remove(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['attendance'] });
+      // Attendance drives the working-hours + dashboard workforce rollups.
+      qc.invalidateQueries({ queryKey: ['working-hours'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
   });
 
   return (
@@ -235,6 +252,8 @@ function AttendanceForm({ workerId, onClose }: { workerId: string; onClose: () =
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['attendance'] });
       qc.invalidateQueries({ queryKey: ['working-hours'] });
+      // A new attendance/vacation/disease entry also moves the dashboard rollup.
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       onClose();
     },
     onError: (e) => setError(e instanceof Error ? e.message : String(e)),

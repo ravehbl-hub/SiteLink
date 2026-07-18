@@ -40,24 +40,36 @@ export function DashboardScreen() {
     setViewState(next);
   }, []);
 
+  // Health checks are the only genuinely live signal on this screen: poll every
+  // 30s while mounted+visible, but NOT in the background (a hidden ops tab
+  // shouldn't ping health forever — the focus refetch catches up on return).
   const liveness = useQuery({
     queryKey: [...qk.health, 'live'],
     queryFn: ({ signal }) => healthApi.liveness(signal),
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
   const db = useQuery({
     queryKey: [...qk.health, 'db'],
     queryFn: ({ signal }) => healthApi.db(signal),
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
   const pnlParams = { from: range.from, to: range.to, revenue: 0, currency: CURRENCY };
+  // P&L + user rollups aren't real-time — refresh on focus, no background poll,
+  // 60s staleTime so a re-mount within a minute reuses cache.
   const pnl = useQuery({
     queryKey: qk.boProfitLoss(pnlParams),
     queryFn: () => backOfficeApi.profitLoss(pnlParams),
+    staleTime: 60_000,
   });
 
-  const users = useQuery({ queryKey: qk.boUsers, queryFn: () => backOfficeApi.users() });
+  const users = useQuery({
+    queryKey: qk.boUsers,
+    queryFn: () => backOfficeApi.users(),
+    staleTime: 60_000,
+  });
 
   // Liveness: any 2xx body means the API answered. Errors → offline.
   const apiOnline = liveness.data?.status === 200 && !liveness.isError;

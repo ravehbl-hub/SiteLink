@@ -37,9 +37,16 @@ export function DashboardScreen() {
   }, []);
 
   const params = { siteId: siteId || undefined, from, to, revenue, currency: 'ILS' };
+  // Dashboard rollup is the HEAVY query (~4.9s after the Part 1 optimisation), so
+  // it gets the LONGEST cadence: poll every 30s while mounted+visible, never in
+  // the background. staleTime 10s so a mount/focus within the interval reuses the
+  // cache instead of re-running the expensive rollup.
   const query = useQuery({
     queryKey: qk.dashboard(params),
     queryFn: () => dashboardApi.get(params),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    staleTime: 10_000,
   });
 
   const data = query.data;

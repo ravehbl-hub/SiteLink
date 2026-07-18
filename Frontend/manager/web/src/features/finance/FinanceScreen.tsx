@@ -67,8 +67,13 @@ function LedgerTable({ kind, workerId }: { kind: Kind; workerId: string }) {
       kind === 'loan' ? financeApi.listLoans(params) : financeApi.listAdvances(params),
   });
 
-  const invalidate = () =>
+  // A loan/advance write moves the dashboard finance rollup (loansTotal /
+  // advancePaymentsTotal → netProfit), so invalidate the dashboard too — matches
+  // the re-decide path in RequestsScreen.
+  const invalidate = () => {
     qc.invalidateQueries({ queryKey: [kind === 'loan' ? 'loans' : 'advances'] });
+    qc.invalidateQueries({ queryKey: ['dashboard'] });
+  };
   const removeMut = useMutation({
     mutationFn: (id: string) =>
       kind === 'loan' ? financeApi.removeLoan(id) : financeApi.removeAdvance(id),
@@ -160,6 +165,8 @@ function LedgerForm({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [kind === 'loan' ? 'loans' : 'advances'] });
+      // Creating a loan/advance changes the dashboard finance rollup too.
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       onClose();
     },
     onError: (e) => setError(e instanceof Error ? e.message : String(e)),

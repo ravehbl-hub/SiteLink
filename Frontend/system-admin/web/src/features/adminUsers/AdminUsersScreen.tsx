@@ -24,9 +24,12 @@ const LIST_PARAMS: ListUsersParams = { role: Role.ADMIN, page: 1, pageSize: 100 
 export function AdminUsersScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  // Admin CRUD list — not real-time. Focus refetch (global) + mutation
+  // invalidation keep it current; 60s staleTime avoids refetch on every mount.
   const list = useQuery({
     queryKey: qk.users(LIST_PARAMS),
     queryFn: () => usersApi.list(LIST_PARAMS),
+    staleTime: 60_000,
   });
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);

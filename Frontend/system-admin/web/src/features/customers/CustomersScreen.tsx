@@ -28,9 +28,12 @@ export function CustomersScreen() {
   const [editing, setEditing] = useState<Customer | null>(null);
 
   const params = { includeArchived };
+  // Admin CRUD list — not real-time. Focus refetch (global) + mutation
+  // invalidation keep it current; 60s staleTime avoids refetch on every mount.
   const list = useQuery({
     queryKey: qk.customers(params),
     queryFn: () => customersApi.list(params),
+    staleTime: 60_000,
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['customers'] });

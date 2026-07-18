@@ -29,7 +29,12 @@ function roleLabelKey(role: string): string {
 
 export function UsersActivityScreen() {
   const { t } = useTranslation();
-  const list = useQuery({ queryKey: qk.boUsers, queryFn: () => backOfficeApi.users() });
+  // Activity list — not real-time; refresh on focus, 60s staleTime, no polling.
+  const list = useQuery({
+    queryKey: qk.boUsers,
+    queryFn: () => backOfficeApi.users(),
+    staleTime: 60_000,
+  });
   const [term, setTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('ALL');
 

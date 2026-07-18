@@ -20,9 +20,13 @@ const LIST_ROOT = ['personnel-companies'];
 
 export function usePersonnelCompaniesList(includeArchived: boolean) {
   const params = { includeArchived, pageSize: 200 };
+  // Personnel companies are slow-changing reference data (also used as a picker on
+  // the worker form), so a long 5-minute staleTime avoids needless refetches;
+  // focus refetch + CRUD invalidation (below) keep it fresh. No polling.
   return useQuery({
     queryKey: qk.personnelCompanies(params),
     queryFn: () => personnelCompaniesApi.list(params),
+    staleTime: 5 * 60_000,
   });
 }
 

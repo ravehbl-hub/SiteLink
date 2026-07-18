@@ -39,9 +39,15 @@ export function RequestsScreen() {
   const [filter, setFilter] = useState<StatusFilter>('ALL');
 
   const params = filter === 'ALL' ? {} : { status: filter };
+  // Requests inbox is the most action-sensitive live screen — managers act on
+  // pending submissions quickly — so it polls on the SHORTEST cadence (15s) while
+  // mounted+visible, never in the background. Short staleTime keeps rows fresh.
   const query = useQuery({
     queryKey: qk.requests(params),
     queryFn: () => requestsApi.list(params),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    staleTime: 5_000,
   });
 
   // Resolve worker names (DTO carries only workerId) via the shared workers list.

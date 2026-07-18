@@ -19,7 +19,13 @@ import { formatCurrency } from '../../lib/format';
 export function PaymentScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const list = useQuery({ queryKey: qk.wageRates, queryFn: () => paymentApi.list() });
+  // Profession wage rates are rarely-changing reference data — long staleTime, no
+  // polling; focus refetch + mutation invalidation keep it current.
+  const list = useQuery({
+    queryKey: qk.wageRates,
+    queryFn: () => paymentApi.list(),
+    staleTime: 5 * 60_000,
+  });
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ProfessionWageRate | null>(null);
 

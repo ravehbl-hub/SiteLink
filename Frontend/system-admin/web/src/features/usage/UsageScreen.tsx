@@ -20,9 +20,12 @@ export function UsageScreen() {
   const [metric, setMetric] = useState('');
   const [creating, setCreating] = useState(false);
 
+  // Customers picker is reference data reused across admin screens — long
+  // staleTime, no poll (shares cache with the Customers screen list).
   const customers = useQuery({
     queryKey: qk.customers({ includeArchived: true }),
     queryFn: () => customersApi.list({ includeArchived: true }),
+    staleTime: 5 * 60_000,
   });
   const customerItems = customers.data?.items ?? [];
 
@@ -30,9 +33,11 @@ export function UsageScreen() {
     ...(customerId ? { customerId } : {}),
     ...(metric.trim() ? { metric: metric.trim() } : {}),
   };
+  // Usage records aren't real-time — focus refetch + invalidation, 60s stale.
   const list = useQuery({
     queryKey: qk.usage(params),
     queryFn: () => usageApi.list(params),
+    staleTime: 60_000,
   });
   // Consume the Paginated envelope: `.items`, never a bare array.
   const items = list.data?.items ?? [];

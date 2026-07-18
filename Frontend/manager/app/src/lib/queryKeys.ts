@@ -6,7 +6,8 @@ export const qk = {
   dashboard: (p: DashboardParams) => ['dashboard', p] as const,
   sites: (includeArchived: boolean) => ['sites', includeArchived] as const,
   site: (id: string) => ['site', id] as const,
-  workers: (p?: { includeArchived?: boolean; siteId?: string }) => ['workers', p ?? {}] as const,
+  workers: (p?: { includeArchived?: boolean; siteId?: string; search?: string }) =>
+    ['workers', p ?? {}] as const,
   worker: (id: string) => ['worker', id] as const,
   workerDocs: (id: string) => ['worker', id, 'docs'] as const,
   attendance: (p: Record<string, unknown>) => ['attendance', p] as const,

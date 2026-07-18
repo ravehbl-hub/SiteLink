@@ -129,7 +129,7 @@ export const endpoints = {
   removeSite: (id: string) => api.del<void>(`/sites/${id}`),
 
   // Workers
-  listWorkers: (params?: { includeArchived?: boolean; siteId?: string }) =>
+  listWorkers: (params?: { includeArchived?: boolean; siteId?: string; search?: string }) =>
     api.get<Paginated<Worker>>('/workers', params),
   getWorker: (id: string) => api.get<WorkerWithDetails>(`/workers/${id}`),
   createWorker: (body: CreateWorkerInput) => api.post<Worker>('/workers', body),

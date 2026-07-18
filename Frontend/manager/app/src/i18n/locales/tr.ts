@@ -116,6 +116,7 @@ export const tr: TranslationResources = {
   workers: {
     title: 'İşçiler',
     add: 'İşçi ekle',
+    searchPlaceholder: 'İsim veya telefona göre ara',
     includeArchived: 'Arşivi göster',
     details: 'Ayrıntılar',
     docs: 'Belgeler',

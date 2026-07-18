@@ -2,13 +2,14 @@
  * Workers list (FR-MGR-EMP). Lists active workers with an archived toggle; taps
  * open details; the + button starts the Worker Wizard.
  */
-import React, { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
+import { useTheme } from '../../theme/ThemeProvider';
 import type { WorkersStackParamList } from '../../navigation/types';
 import {
   Body,
@@ -24,15 +25,30 @@ import {
   Title,
 } from '../../components/ui';
 
+/** Debounce a value by `delay` ms (used for the search box → server-side ?search). */
+function useDebounced<T>(value: T, delay = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
+
 type Props = NativeStackScreenProps<WorkersStackParamList, 'WorkersList'>;
 
 export function WorkersListScreen({ navigation }: Props) {
   const { t } = useTranslation();
+  const { theme } = useTheme();
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounced(searchInput.trim(), 300);
+  // Only send `search` when a term is present; undefined keeps the full scoped list.
+  const search = debouncedSearch.length > 0 ? debouncedSearch : undefined;
 
   const q = useQuery({
-    queryKey: qk.workers({ includeArchived }),
-    queryFn: () => endpoints.listWorkers({ includeArchived }),
+    queryKey: qk.workers({ includeArchived, search }),
+    queryFn: () => endpoints.listWorkers({ includeArchived, search }),
   });
 
   return (
@@ -41,6 +57,26 @@ export function WorkersListScreen({ navigation }: Props) {
         <Title>{t('workers.title')}</Title>
       </Row>
       <Button title={t('workers.add')} onPress={() => navigation.navigate('WorkerWizard')} />
+      <TextInput
+        value={searchInput}
+        onChangeText={setSearchInput}
+        placeholder={t('workers.searchPlaceholder')}
+        placeholderTextColor={theme.colors.textMuted}
+        autoCorrect={false}
+        returnKeyType="search"
+        clearButtonMode="while-editing"
+        style={{
+          borderColor: theme.colors.border,
+          borderWidth: 1,
+          borderRadius: Number(theme.tokens.radii.sm),
+          paddingVertical: Number(theme.tokens.spacing['2']),
+          paddingHorizontal: Number(theme.tokens.spacing['3']),
+          marginBottom: Number(theme.tokens.spacing['3']),
+          color: theme.colors.textPrimary,
+          backgroundColor: theme.colors.surface,
+          textAlign: 'auto',
+        }}
+      />
       <Segmented
         options={[
           { value: 'active', label: t('sites.active') },

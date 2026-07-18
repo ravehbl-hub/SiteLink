@@ -98,6 +98,7 @@ export const workersApi = {
   list: (params?: {
     includeArchived?: boolean;
     siteId?: string;
+    search?: string;
     page?: number;
     pageSize?: number;
   }) => http.get<Paginated<Worker>>('/workers', params as Query),

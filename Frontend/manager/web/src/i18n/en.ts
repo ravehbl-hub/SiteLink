@@ -96,6 +96,7 @@ export const en = {
     title: 'Employees',
     newWorker: 'New employee',
     showArchived: 'Show archived',
+    searchPlaceholder: 'Search by name or phone',
     firstName: 'First name',
     lastName: 'Last name',
     country: 'Country',

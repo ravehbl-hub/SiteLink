@@ -98,6 +98,7 @@ export const he: Resources = {
     title: 'עובדים',
     newWorker: 'עובד חדש',
     showArchived: 'הצג ארכיון',
+    searchPlaceholder: 'חיפוש לפי שם או טלפון',
     firstName: 'שם פרטי',
     lastName: 'שם משפחה',
     country: 'מדינה',

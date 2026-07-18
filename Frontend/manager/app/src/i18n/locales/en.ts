@@ -114,6 +114,7 @@ export const en = {
   workers: {
     title: 'Workers',
     add: 'Add worker',
+    searchPlaceholder: 'Search by name or phone',
     includeArchived: 'Show archived',
     details: 'Details',
     docs: 'Documents',

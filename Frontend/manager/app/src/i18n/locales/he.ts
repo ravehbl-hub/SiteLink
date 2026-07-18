@@ -116,6 +116,7 @@ export const he: TranslationResources = {
   workers: {
     title: 'עובדים',
     add: 'הוסף עובד',
+    searchPlaceholder: 'חיפוש לפי שם או טלפון',
     includeArchived: 'הצג ארכיון',
     details: 'פרטים',
     docs: 'מסמכים',

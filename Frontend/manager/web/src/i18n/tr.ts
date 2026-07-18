@@ -98,6 +98,7 @@ export const tr: Resources = {
     title: 'Çalışanlar',
     newWorker: 'Yeni çalışan',
     showArchived: 'Arşivi göster',
+    searchPlaceholder: 'Ada veya telefona göre ara',
     firstName: 'Ad',
     lastName: 'Soyad',
     country: 'Ülke',

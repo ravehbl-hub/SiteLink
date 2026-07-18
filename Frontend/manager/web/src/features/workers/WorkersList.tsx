@@ -1,6 +1,6 @@
 /** Worker list (FR-MGR-EMP-5/6): active + archives toggle, per-site filter,
  *  archive/remove, link to details, and a launcher for the Worker Wizard. */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -16,8 +16,30 @@ export function WorkersList() {
   const sites = useSitesList();
   const [includeArchived, setIncludeArchived] = useState(false);
   const [siteId, setSiteId] = useState('');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
 
-  const params = { includeArchived, siteId: siteId || undefined, pageSize: 200 };
+  // Debounce the raw search input (~300ms) so we don't refetch per keystroke.
+  useEffect(() => {
+    const term = search.trim();
+    const h = setTimeout(() => setDebouncedSearch(term), 300);
+    return () => clearTimeout(h);
+  }, [search]);
+
+  // Reset to page 1 whenever the effective search term changes, so we never
+  // land on an out-of-range page for a narrower result set.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  const params = {
+    includeArchived,
+    siteId: siteId || undefined,
+    search: debouncedSearch || undefined,
+    page,
+    pageSize: 200,
+  };
   const list = useQuery({ queryKey: qk.workers(params), queryFn: () => workersApi.list(params) });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['workers'] });
@@ -37,6 +59,14 @@ export function WorkersList() {
           {t('workers.title')}
         </h1>
         <div className="header-spacer" />
+        <input
+          className="input"
+          type="search"
+          style={{ width: 'auto' }}
+          value={search}
+          placeholder={t('workers.searchPlaceholder')}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         <select
           className="select"
           style={{ width: 'auto' }}

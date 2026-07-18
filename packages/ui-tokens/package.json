@@ -10,7 +10,8 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./css/tokens.css": "./css/tokens.css"
+    "./css/tokens.css": "./css/tokens.css",
+    "./css/neumorphic.css": "./css/neumorphic.css"
   },
   "files": [
     "dist",

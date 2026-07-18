@@ -10,5 +10,6 @@ export * from "./color.js";
 export * from "./typography.js";
 export * from "./spacing.js";
 export * from "./elevation.js";
+export * from "./neumorphic.js";
 export * from "./theme.js";
-export { emitCss } from "./css.js";
+export { emitCss, emitNeumorphicCss } from "./css.js";

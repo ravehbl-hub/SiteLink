@@ -537,11 +537,17 @@ export class WorkersService {
   /**
    * Step 1: authorize + validate intent (image/* allow-list), then mint a
    * short-lived signed upload URL scoped to a SERVER-chosen key on worker-images.
+   *
+   * FOREMAN-scoped (SECURITY BOUNDARY): `assertWorkerInScope` runs FIRST — BEFORE any
+   * URL is minted — so a FOREMAN can only request an upload for a worker on one of
+   * their union sites (403 otherwise). ADMIN/MANAGER (or no caller) → no-op / unscoped.
    */
   async requestImageUpload(
     workerId: string,
     input: ImageUploadInput,
+    caller?: AuthUser,
   ): Promise<SignedUploadResponse> {
+    if (caller) await assertWorkerInScope(caller, workerId);
     await this.ensureExists(workerId);
     this.supabase.assertAllowedMime(input.mimeType);
     const storageKey = `${workerId}/image/${randomUUID()}.${extFor(input.mimeType)}`;
@@ -558,8 +564,18 @@ export class WorkersService {
    * Step 2: persist the FileRef onto Worker.image after the client confirms a
    * completed upload. Re-checks the key belongs to this worker (traversal guard).
    * If an image already existed, purge the old object to avoid orphaned bytes.
+   *
+   * FOREMAN-scoped (SECURITY BOUNDARY): `assertWorkerInScope` runs FIRST — BEFORE any
+   * persistence — so a FOREMAN can only confirm an image for a worker on one of their
+   * union sites (403 otherwise). ADMIN/MANAGER (or no caller) → no-op / unscoped. The
+   * server-key traversal guard (`startsWith`) still applies for all callers.
    */
-  async confirmImage(workerId: string, input: ImageConfirmInput): Promise<Worker> {
+  async confirmImage(
+    workerId: string,
+    input: ImageConfirmInput,
+    caller?: AuthUser,
+  ): Promise<Worker> {
+    if (caller) await assertWorkerInScope(caller, workerId);
     const worker = await prisma.worker.findUnique({ where: { id: workerId } });
     if (!worker) throw AppError.notFound('Worker not found');
     this.supabase.assertAllowedMime(input.mimeType);
@@ -584,8 +600,15 @@ export class WorkersService {
     return mapWorker(row);
   }
 
-  /** Mint a short-lived signed READ URL for the worker's profile image. */
-  async getImageReadUrl(workerId: string): Promise<SignedReadResponse> {
+  /**
+   * Mint a short-lived signed READ URL for the worker's profile image.
+   *
+   * FOREMAN-scoped (SECURITY BOUNDARY): `assertWorkerInScope` runs FIRST — BEFORE any
+   * URL is minted — so a FOREMAN can only read the image of a worker on one of their
+   * union sites (403 otherwise). ADMIN/MANAGER (or no caller) → no-op / unscoped.
+   */
+  async getImageReadUrl(workerId: string, caller?: AuthUser): Promise<SignedReadResponse> {
+    if (caller) await assertWorkerInScope(caller, workerId);
     const worker = await prisma.worker.findUnique({
       where: { id: workerId },
       select: { imageStorageKey: true },

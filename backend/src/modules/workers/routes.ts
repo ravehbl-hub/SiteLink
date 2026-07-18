@@ -113,20 +113,25 @@ export async function workerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── Profile image (symmetric to docs) ───────────────────────────────────
-  app.post('/workers/:id/image/upload-url', guard, async (req) => {
+  // FOREMAN-eligible (site-scoped), mirroring VIEW/EDIT: FOREMAN_ROLES is the coarse
+  // gate; each handler passes req.appUser! so the SERVICE applies assertWorkerInScope
+  // (a FOREMAN may only touch images for a worker on one of their union sites; 403
+  // otherwise). ADMIN/MANAGER stay UNSCOPED. Only these 3 image routes are widened —
+  // archive/remove/salary/docs remain MANAGER-only.
+  app.post('/workers/:id/image/upload-url', foremanGuard, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = requestImageUploadSchema.parse(req.body);
-    return service.requestImageUpload(id, body);
+    return service.requestImageUpload(id, body, req.appUser!);
   });
 
-  app.post('/workers/:id/image', guard, async (req) => {
+  app.post('/workers/:id/image', foremanGuard, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = confirmImageSchema.parse(req.body);
-    return service.confirmImage(id, body);
+    return service.confirmImage(id, body, req.appUser!);
   });
 
-  app.get('/workers/:id/image/url', guard, async (req) => {
+  app.get('/workers/:id/image/url', foremanGuard, async (req) => {
     const { id } = idParam.parse(req.params);
-    return service.getImageReadUrl(id);
+    return service.getImageReadUrl(id, req.appUser!);
   });
 }

@@ -187,12 +187,16 @@ describe('FOREMAN image ops on an IN-SCOPE worker (SITE_A) → work', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.uploadUrl).toBeTruthy();
-    // Server-generated key, always prefixed with the worker id (traversal-safe).
-    expect(body.storageKey.startsWith(`${workerA}/image/`)).toBe(true);
+    // Server-generated key: human-browsable `<slug>__<workerId>/image/...` (the
+    // `__<id>/` anchor is stable + traversal-safe; the slug is a sanitized name).
+    expect(body.storageKey).toMatch(
+      new RegExp(`^[a-z0-9-]+__${workerA}/image/[0-9a-f-]+\\.png$`),
+    );
+    expect(body.storageKey.startsWith('__')).toBe(false);
   });
 
   it('confirmImage → 200 + persists the Worker.image FileRef', async () => {
-    const storageKey = `${workerA}/image/${randomUUID()}.png`;
+    const storageKey = `fwi-worker__${workerA}/image/${randomUUID()}.png`;
     const res = await app.inject({
       method: 'POST',
       url: `/api/v1/workers/${workerA}/image`,
@@ -317,20 +321,166 @@ describe('EMPTY-union foreman → 403 on all image ops', () => {
 // confirmImage server-key traversal guard still holds for a FOREMAN
 // ════════════════════════════════════════════════════════════════════════════
 describe('confirmImage traversal guard (FOREMAN, in-scope worker)', () => {
-  it('CRITICAL: a key NOT prefixed with the worker id → 400 (rejected)', async () => {
-    // In scope (SITE_A), so the scope gate passes — but the key belongs to another
-    // worker id, so the startsWith guard must reject it (400), never persist.
+  it('CRITICAL: a key whose `__<id>/` anchor is ANOTHER worker → 400 (rejected)', async () => {
+    // In scope (SITE_A), so the scope gate passes — but the key's stable anchor is
+    // `__<workerC>/`, not `__<workerA>/`, so the traversal guard must reject it (400).
     const res = await app.inject({
       method: 'POST',
       url: `/api/v1/workers/${workerA}/image`,
       headers: auth(foremanToken),
       payload: {
-        storageKey: `${workerC}/image/${randomUUID()}.png`, // wrong worker prefix
+        storageKey: `fwi-worker__${workerC}/image/${randomUUID()}.png`, // wrong anchor
         fileName: 'x.png',
         mimeType: 'image/png',
       },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('CRITICAL: a path-traversal key (`..`) → 400 (rejected)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workers/${workerA}/image`,
+      headers: auth(foremanToken),
+      payload: {
+        // Contains this worker's anchor but ALSO `..` — must still reject.
+        storageKey: `fwi-worker__${workerA}/image/../../etc/passwd`,
+        fileName: 'x.png',
+        mimeType: 'image/png',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('CRITICAL: a leading-slash key → 400 (rejected)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workers/${workerA}/image`,
+      headers: auth(foremanToken),
+      payload: {
+        storageKey: `/fwi-worker__${workerA}/image/${randomUUID()}.png`,
+        fileName: 'x.png',
+        mimeType: 'image/png',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// New-format key: human-browsable slug from the worker name + non-latin fallback
+// ════════════════════════════════════════════════════════════════════════════
+describe('new-format storage key — slug from worker name', () => {
+  let latinWorker: string;
+  let hebrewWorker: string;
+
+  beforeAll(async () => {
+    const latin = await prisma.worker.create({
+      data: {
+        firstName: 'Yossi',
+        lastName: 'Cohen',
+        profession: 'PLUMBER',
+        assignments: { create: [{ siteId: SITE_A }] },
+      },
+    });
+    createdWorkerIds.push(latin.id);
+    latinWorker = latin.id;
+
+    const hebrew = await prisma.worker.create({
+      data: {
+        firstName: 'יוסי',
+        lastName: 'כהן',
+        profession: 'PLUMBER',
+        assignments: { create: [{ siteId: SITE_A }] },
+      },
+    });
+    createdWorkerIds.push(hebrew.id);
+    hebrewWorker = hebrew.id;
+  });
+
+  it('latin name "Yossi Cohen" → key `yossi-cohen__<id>/image/...`; confirm + read', async () => {
+    const up = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workers/${latinWorker}/image/upload-url`,
+      headers: auth(mgrToken),
+      payload: { fileName: 'me.png', mimeType: 'image/png' },
+    });
+    expect(up.statusCode).toBe(200);
+    const key: string = up.json().storageKey;
+    expect(key).toMatch(
+      new RegExp(`^yossi-cohen__${latinWorker}/image/[0-9a-f-]+\\.png$`),
+    );
+
+    const conf = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workers/${latinWorker}/image`,
+      headers: auth(mgrToken),
+      payload: { storageKey: key, fileName: 'me.png', mimeType: 'image/png' },
+    });
+    expect(conf.statusCode).toBe(200);
+    const row = await prisma.worker.findUnique({
+      where: { id: latinWorker },
+      select: { imageStorageKey: true },
+    });
+    expect(row!.imageStorageKey).toBe(key);
+
+    const read = await app.inject({
+      method: 'GET',
+      url: `/api/v1/workers/${latinWorker}/image/url`,
+      headers: auth(mgrToken),
+    });
+    expect([200, 404]).toContain(read.statusCode);
+  });
+
+  it('non-latin (Hebrew) name → slug falls back to `worker` (never empty/unicode/space)', async () => {
+    const up = await app.inject({
+      method: 'POST',
+      url: `/api/v1/workers/${hebrewWorker}/image/upload-url`,
+      headers: auth(mgrToken),
+      payload: { fileName: 'me.png', mimeType: 'image/png' },
+    });
+    expect(up.statusCode).toBe(200);
+    const key: string = up.json().storageKey;
+    expect(key.startsWith(`worker__${hebrewWorker}/image/`)).toBe(true);
+    // No raw unicode / spaces / slashes in the slug segment.
+    const slug = key.split('__')[0];
+    expect(slug).toMatch(/^[a-z0-9-]+$/);
+    expect(slug).not.toBe('');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Back-compat: an OLD-format key (`<id>/image/...`) still reads
+// ════════════════════════════════════════════════════════════════════════════
+describe('back-compat — old-format imageStorageKey still readable', () => {
+  it('a worker with a legacy `<id>/image/...` key → getImageReadUrl NOT 403 (signs it)', async () => {
+    const legacy = await prisma.worker.create({
+      data: {
+        firstName: 'Legacy',
+        lastName: 'Worker',
+        profession: 'PLUMBER',
+        imageStorageKey: `${MGR_AUTH}/image/${randomUUID()}.jpg`,
+        imageFileName: 'old.jpg',
+        imageMimeType: 'image/jpeg',
+        imageUploadedAt: new Date(),
+        assignments: { create: [{ siteId: SITE_A }] },
+      },
+    });
+    createdWorkerIds.push(legacy.id);
+    // Fix the key to be `<id>/image/...` (self-referential legacy shape).
+    await prisma.worker.update({
+      where: { id: legacy.id },
+      data: { imageStorageKey: `${legacy.id}/image/legacy.jpg` },
+    });
+
+    const read = await app.inject({
+      method: 'GET',
+      url: `/api/v1/workers/${legacy.id}/image/url`,
+      headers: auth(mgrToken),
+    });
+    // getImageReadUrl signs whatever is stored — old shape is fine; never 403.
+    expect(read.statusCode).not.toBe(403);
+    expect([200, 404]).toContain(read.statusCode);
   });
 });
 
@@ -384,7 +534,7 @@ describe('ADMIN/MANAGER image ops still work unscoped (regression)', () => {
   });
 
   it('ADMIN confirmImage on the SITE_C worker → 200 + FileRef persisted (unscoped)', async () => {
-    const storageKey = `${workerC}/image/${randomUUID()}.png`;
+    const storageKey = `fwi-worker__${workerC}/image/${randomUUID()}.png`;
     const res = await app.inject({
       method: 'POST',
       url: `/api/v1/workers/${workerC}/image`,

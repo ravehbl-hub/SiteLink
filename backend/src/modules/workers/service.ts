@@ -64,6 +64,31 @@ function extFor(mimeType: string): string {
   return map[mimeType] ?? 'bin';
 }
 
+/**
+ * Build a filesystem-safe, human-browsable folder slug from a worker's name.
+ *
+ * SECURITY (traversal-safe): the result can ONLY contain [a-z0-9-]. Every run of
+ * anything else — spaces, punctuation, dots, slashes, unicode/RTL/Hebrew, path
+ * separators — collapses to a single '-'. This makes '/', '..', '.' and leading
+ * '/' structurally impossible in the slug. The slug is COSMETIC; the stable,
+ * un-spoofable anchor is always the `__${workerId}` segment appended by callers.
+ *
+ * Rules: lowercase; non-[a-z0-9-] → '-'; collapse repeats; strip leading/trailing
+ * '-'; cap at 40 chars (then re-strip a trailing '-'). Empty result (e.g. a purely
+ * non-latin name) falls back to 'worker' so a key never starts with '__'.
+ */
+function nameSlug(firstName?: string | null, lastName?: string | null): string {
+  const raw = `${firstName ?? ''} ${lastName ?? ''}`;
+  const slug = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/g, '');
+  return slug || 'worker';
+}
+
 export class WorkersService {
   constructor(private readonly supabase: SupabaseService) {}
 
@@ -548,9 +573,16 @@ export class WorkersService {
     caller?: AuthUser,
   ): Promise<SignedUploadResponse> {
     if (caller) await assertWorkerInScope(caller, workerId);
-    await this.ensureExists(workerId);
+    const worker = await prisma.worker.findUnique({
+      where: { id: workerId },
+      select: { firstName: true, lastName: true },
+    });
+    if (!worker) throw AppError.notFound('Worker not found');
     this.supabase.assertAllowedMime(input.mimeType);
-    const storageKey = `${workerId}/image/${randomUUID()}.${extFor(input.mimeType)}`;
+    // Human-browsable folder `<slug>__<workerId>`: the slug is a sanitized name
+    // (cosmetic, traversal-safe) and `__<workerId>` is the stable, unique anchor.
+    const slug = nameSlug(worker.firstName, worker.lastName);
+    const storageKey = `${slug}__${workerId}/image/${randomUUID()}.${extFor(input.mimeType)}`;
     const signed = await this.supabase.createSignedUpload({ kind: 'image', storageKey });
     return {
       storageKey: signed.storageKey,
@@ -579,7 +611,16 @@ export class WorkersService {
     const worker = await prisma.worker.findUnique({ where: { id: workerId } });
     if (!worker) throw AppError.notFound('Worker not found');
     this.supabase.assertAllowedMime(input.mimeType);
-    if (!input.storageKey.startsWith(`${workerId}/`)) {
+    // Traversal guard. The key is `<slug>__<workerId>/image/<uuid>.<ext>`, so the
+    // stable, un-spoofable anchor `__<workerId>/` now sits MID-PATH (not a prefix).
+    // Require that exact anchor and reject any path-traversal shape. A foreman can't
+    // confirm another worker's key: it must contain THIS worker's `__<id>/` AND the
+    // :id-scoped assertWorkerInScope already ran above.
+    if (
+      !input.storageKey.includes(`__${workerId}/`) ||
+      input.storageKey.includes('..') ||
+      input.storageKey.startsWith('/')
+    ) {
       throw AppError.validation('storageKey does not belong to this worker');
     }
     // Purge a superseded image object (best-effort) so storage stays in sync.

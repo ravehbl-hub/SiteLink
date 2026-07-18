@@ -332,12 +332,21 @@ model AttendanceRecord {
   hours    Decimal?       @db.Decimal(6, 2) // hours when type = ATTENDANCE
   notes    String?
 
+  // Back-link to the WorkerRequest whose APPROVAL created this record (VACATION effect).
+  // NULLABLE — manually-created attendance has no source request; only approval-created
+  // rows are tagged. onDelete: SetNull keeps financial/attendance history if the request
+  // is deleted. Enables SAFE, precise reversal on re-decide (APPROVED→REJECTED) without
+  // matching by workerId+date. (Servio sets/queries requestId; schema only.)
+  sourceRequest WorkerRequest? @relation("RequestEffect", fields: [requestId], references: [id], onDelete: SetNull)
+  requestId     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([workerId, date]) // exclusivity guard (FR-MGR-ATT-4)
   @@index([siteId, date])
   @@index([date])
+  @@index([requestId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -377,11 +386,18 @@ model Loan {
   notes       String?
   outstanding Decimal  @db.Decimal(12, 2)
 
+  // Back-link to the WorkerRequest whose APPROVAL created this loan (LOAN effect).
+  // NULLABLE — manually-created loans have no source request. onDelete: SetNull keeps
+  // financial history if the request is deleted. Enables SAFE reversal by requestId.
+  sourceRequest WorkerRequest? @relation("RequestEffect", fields: [requestId], references: [id], onDelete: SetNull)
+  requestId     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([workerId])
   @@index([date])
+  @@index([requestId])
 }
 
 model AdvancePayment {
@@ -394,11 +410,18 @@ model AdvancePayment {
   notes       String?
   outstanding Decimal  @db.Decimal(12, 2)
 
+  // Back-link to the WorkerRequest whose APPROVAL created this advance (ADVANCE effect).
+  // NULLABLE — manually-created advances have no source request. onDelete: SetNull keeps
+  // financial history if the request is deleted. Enables SAFE reversal by requestId.
+  sourceRequest WorkerRequest? @relation("RequestEffect", fields: [requestId], references: [id], onDelete: SetNull)
+  requestId     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([workerId])
   @@index([date])
+  @@index([requestId])
 }
 
 // Site-level P&L snapshot (FR-MGR-PNL). May be computed on-demand or persisted.
@@ -443,6 +466,15 @@ model WorkerRequest {
   resolvedById    String?
   resolvedAt      DateTime?
   resolutionNotes String?
+
+  // Side-effect records created when THIS request was APPROVED (applyApprovalEffect):
+  // VACATION → AttendanceRecord(s), LOAN → Loan, ADVANCE → AdvancePayment. Back-relations
+  // named "RequestEffect" (distinct from "worker"/"RequestResolvedBy") so a re-decide
+  // (APPROVED→REJECTED) can reverse EXACTLY these tagged rows — no unsafe workerId+amount+date
+  // matching. Servio owns the tag-on-create + reverse-by-requestId logic (service/endpoint).
+  createdLoans      Loan[]             @relation("RequestEffect")
+  createdAdvances   AdvancePayment[]   @relation("RequestEffect")
+  createdAttendance AttendanceRecord[] @relation("RequestEffect")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

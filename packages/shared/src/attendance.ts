@@ -20,6 +20,12 @@ export interface AttendanceRecord extends Timestamped {
   /** Hours worked on this date when type === ATTENDANCE (feeds salary + rollups). */
   hours?: number | null;
   notes?: string | null;
+  /**
+   * Back-link to the WorkerRequest whose approval created this record (VACATION effect).
+   * Null for manually-created attendance; set only on approval-created rows, enabling
+   * safe reversal on re-decide. Read-only tag owned by the request-approval flow.
+   */
+  requestId?: ID | null;
 }
 
 /** Aggregation grain for derived Working Hours views (FR-MGR-ATT-2). */

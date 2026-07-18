@@ -14,6 +14,12 @@ export interface Loan extends Timestamped {
   notes?: string | null;
   /** Outstanding amount not yet repaid; contributes to dashboard rollups (FR-MGR-LOAN-3). */
   outstanding: number;
+  /**
+   * Back-link to the WorkerRequest whose approval created this loan (LOAN effect).
+   * Null for manually-created loans; set only on approval-created rows, enabling
+   * safe reversal on re-decide. Read-only tag owned by the request-approval flow.
+   */
+  requestId?: ID | null;
 }
 
 /** An advance payment recorded for a worker (FR-MGR-ADV-1). */
@@ -26,6 +32,12 @@ export interface AdvancePayment extends Timestamped {
   notes?: string | null;
   /** Outstanding amount not yet reconciled; feeds finance/workforce rollup (FR-MGR-ADV-3). */
   outstanding: number;
+  /**
+   * Back-link to the WorkerRequest whose approval created this advance (ADVANCE effect).
+   * Null for manually-created advances; set only on approval-created rows, enabling
+   * safe reversal on re-decide. Read-only tag owned by the request-approval flow.
+   */
+  requestId?: ID | null;
 }
 
 export interface CreateLoanInput {

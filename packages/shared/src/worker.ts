@@ -22,8 +22,18 @@ export interface Worker extends Timestamped, Archivable {
   qualityOfWorks?: string | null;
   phone?: string | null;
   email?: string | null;
-  /** Personnel / staffing company the worker belongs to (FR-MGR-EMP-2). */
+  /**
+   * Legacy free-text personnel / staffing company (FR-MGR-EMP-2). TRANSITIONAL — kept
+   * one migration step alongside the managed FK below. When `personnelCompanyId` is
+   * set, the service MIRRORS the linked company NAME here so legacy readers stay
+   * consistent; a later migration drops this column once every reader uses the FK.
+   */
   personnelCompany?: string | null;
+  /**
+   * Managed personnel-company link (nullable FK → PersonnelCompany). This is the
+   * forward path; the free-text `personnelCompany` above is the transitional mirror.
+   */
+  personnelCompanyId?: ID | null;
   /** Residence (FR-MGR-EMP-2). */
   residence?: string | null;
   /** Date of starting work (FR-MGR-EMP-2). */
@@ -71,6 +81,12 @@ export interface WorkerWithDetails extends Worker {
   docs: WorkerDoc[];
   salaryData?: WorkerSalaryData | null;
   siteIds: ID[];
+  /**
+   * Display name resolved from the managed personnel-company relation
+   * (`personnelCompanyRef.name`), or null when the worker has no FK link. Read-only
+   * convenience for the picker/detail view — the FK id is `personnelCompanyId`.
+   */
+  personnelCompanyName?: string | null;
 }
 
 export interface CreateWorkerInput {
@@ -94,7 +110,10 @@ export interface CreateWorkerInput {
    * the worker sets their own password (the default, matching the Users Manager flow).
    */
   password?: string;
+  /** Legacy free-text company (transitional). Prefer `personnelCompanyId`. */
   personnelCompany?: string | null;
+  /** Managed personnel-company FK. When set, the free-text name is mirrored server-side. */
+  personnelCompanyId?: ID | null;
   residence?: string | null;
   startDate?: ISODate | null;
   siteIds?: ID[];

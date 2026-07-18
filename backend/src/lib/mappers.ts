@@ -113,6 +113,7 @@ export function mapWorker(w: PWorker): Worker {
     phone: w.phone ?? null,
     email: w.email ?? null,
     personnelCompany: w.personnelCompany ?? null,
+    personnelCompanyId: w.personnelCompanyId ?? null,
     residence: w.residence ?? null,
     startDate: toISO(w.startDate),
     isArchived: w.isArchived,

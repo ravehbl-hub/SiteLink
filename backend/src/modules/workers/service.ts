@@ -136,7 +136,13 @@ export class WorkersService {
     if (caller) await assertWorkerInScope(caller, id);
     const row = await prisma.worker.findUnique({
       where: { id },
-      include: { docs: true, salaryData: true, assignments: true },
+      include: {
+        docs: true,
+        salaryData: true,
+        assignments: true,
+        // Managed personnel-company relation → resolve the display name below.
+        personnelCompanyRef: { select: { name: true } },
+      },
     });
     if (!row) throw AppError.notFound('Worker not found');
 
@@ -156,6 +162,8 @@ export class WorkersService {
       docs: row.docs.map(mapWorkerDoc),
       salaryData: row.salaryData ? mapSalaryData(row.salaryData) : null,
       siteIds,
+      // Resolved from the managed FK relation (null when unlinked).
+      personnelCompanyName: row.personnelCompanyRef?.name ?? null,
     };
   }
 
@@ -177,6 +185,12 @@ export class WorkersService {
     if (caller && isForeman(caller)) {
       await this.assertForemanCreateScope(caller, input.siteIds);
     }
+    // Resolve/validate the managed personnel-company FK (if the field was supplied) and
+    // derive the mirrored free-text name. See `resolvePersonnelCompany` for the policy.
+    const pc = await this.resolvePersonnelCompany(
+      input.personnelCompanyId,
+      input.personnelCompany,
+    );
     const created = await prisma.worker.create({
       data: {
         firstName: input.firstName,
@@ -188,7 +202,8 @@ export class WorkersService {
         qualityOfWorks: input.qualityOfWorks ?? null,
         phone: input.phone ?? null,
         email: input.email,
-        personnelCompany: input.personnelCompany ?? null,
+        personnelCompanyId: pc.id,
+        personnelCompany: pc.name,
         residence: input.residence ?? null,
         startDate: input.startDate ? new Date(input.startDate) : null,
         ...(input.siteIds && input.siteIds.length > 0
@@ -335,6 +350,21 @@ export class WorkersService {
       });
     }
 
+    // Managed personnel-company FK on EDIT. Precedence: if `personnelCompanyId` is
+    // present in the patch it OWNS both columns (validated FK + mirrored name, or both
+    // cleared on null). Only when `personnelCompanyId` is ABSENT do we honour a bare
+    // legacy `personnelCompany` free-text patch (backward compatibility).
+    let companyData: Record<string, unknown> = {};
+    if (input.personnelCompanyId !== undefined) {
+      const pc = await this.resolvePersonnelCompany(
+        input.personnelCompanyId,
+        input.personnelCompany,
+      );
+      companyData = { personnelCompanyId: pc.id, personnelCompany: pc.name };
+    } else if (input.personnelCompany !== undefined) {
+      companyData = { personnelCompany: input.personnelCompany };
+    }
+
     await prisma.worker.update({
       where: { id },
       data: {
@@ -349,9 +379,7 @@ export class WorkersService {
           : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
-        ...(input.personnelCompany !== undefined
-          ? { personnelCompany: input.personnelCompany }
-          : {}),
+        ...companyData,
         ...(input.residence !== undefined ? { residence: input.residence } : {}),
         ...(input.startDate !== undefined
           ? { startDate: input.startDate ? new Date(input.startDate) : null }
@@ -678,5 +706,43 @@ export class WorkersService {
   private async ensureExists(id: string): Promise<void> {
     const exists = await prisma.worker.findUnique({ where: { id }, select: { id: true } });
     if (!exists) throw AppError.notFound('Worker not found');
+  }
+
+  /**
+   * Resolve the managed personnel-company FK for a create/update.
+   *
+   * POLICY:
+   *   - `personnelCompanyId` UNDEFINED → no FK link requested. Fall back to the legacy
+   *     free-text `personnelCompany` as-is (name = provided free-text ?? null, id null).
+   *   - `personnelCompanyId` === null → EXPLICIT clear: null the FK AND null the mirror.
+   *   - `personnelCompanyId` a string → it MUST reference an EXISTING, NON-ARCHIVED
+   *     PersonnelCompany, else 400 'Personnel company not found' (we never link to an
+   *     archived or nonexistent company). On success we MIRROR the company NAME into the
+   *     legacy free-text column so old readers stay consistent through the transition.
+   *
+   * Returns the pair to persist: { id, name } where `id` → Worker.personnelCompanyId and
+   * `name` → the legacy Worker.personnelCompany free-text column.
+   */
+  private async resolvePersonnelCompany(
+    personnelCompanyId: string | null | undefined,
+    freeText: string | null | undefined,
+  ): Promise<{ id: string | null; name: string | null }> {
+    if (personnelCompanyId === undefined) {
+      // No managed link requested — preserve legacy free-text behavior.
+      return { id: null, name: freeText ?? null };
+    }
+    if (personnelCompanyId === null) {
+      // Explicit unlink: clear FK and mirror together.
+      return { id: null, name: null };
+    }
+    const company = await prisma.personnelCompany.findFirst({
+      where: { id: personnelCompanyId, isArchived: false },
+      select: { id: true, name: true },
+    });
+    if (!company) {
+      // Nonexistent OR archived → refuse the link (400, not a raw FK error).
+      throw AppError.validation('Personnel company not found');
+    }
+    return { id: company.id, name: company.name };
   }
 }

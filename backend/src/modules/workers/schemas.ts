@@ -24,7 +24,13 @@ export const createWorkerSchema = z.object({
   // the schema is `.partial()`, so password stays OPTIONAL on PATCH and the update
   // path never resets the Supabase auth password (it only propagates email).
   password: z.string().min(8),
+  // Legacy free-text company (transitional). Kept for old FE writers.
   personnelCompany: z.string().nullish(),
+  // Managed personnel-company FK. When provided (non-null) the service validates it
+  // references an existing NON-ARCHIVED PersonnelCompany and mirrors its name into the
+  // legacy free-text field; null clears the FK (and the mirror). updateWorkerSchema
+  // (=.partial()) inherits this field.
+  personnelCompanyId: z.string().nullish(),
   residence: z.string().nullish(),
   startDate: z.string().datetime().nullish(),
   siteIds: z.array(z.string()).optional(),

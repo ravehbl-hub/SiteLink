@@ -237,19 +237,24 @@ describe('PersonnelCompany CRUD — ADMIN/MANAGER (org-wide, Manager-only)', () 
   });
 });
 
-describe('PersonnelCompany authz — MANAGER-only gate (NOT foreman, NOT worker)', () => {
-  const routes: Array<{ method: 'GET' | 'POST' | 'PATCH'; url: string; payload?: unknown }> = [
-    { method: 'GET', url: '/api/v1/personnel-companies' },
+describe('PersonnelCompany authz — WRITE MANAGER-only; READ also FOREMAN; WORKER 403', () => {
+  // WRITE surfaces stay MANAGER-only: a FOREMAN (read-only) and a WORKER get 403.
+  const writeRoutes: Array<{ method: 'POST' | 'PATCH'; url: string; payload?: unknown }> = [
     { method: 'POST', url: '/api/v1/personnel-companies', payload: { name: 'X' } },
-    { method: 'GET', url: '/api/v1/personnel-companies/some-id' },
     { method: 'PATCH', url: '/api/v1/personnel-companies/some-id', payload: { name: 'Y' } },
     { method: 'POST', url: '/api/v1/personnel-companies/some-id/archive' },
     { method: 'POST', url: '/api/v1/personnel-companies/some-id/unarchive' },
   ];
+  // READ surfaces: FOREMAN is now allowed (picker); WORKER is still 403.
+  const readRoutes: Array<{ method: 'GET'; url: string }> = [
+    { method: 'GET', url: '/api/v1/personnel-companies' },
+    { method: 'GET', url: '/api/v1/personnel-companies/some-id' },
+  ];
 
+  // Both foreman + worker are refused on every WRITE route.
   for (const who of ['foreman', 'worker'] as const) {
-    for (const r of routes) {
-      it(`${who} → 403 on ${r.method} ${r.url}`, async () => {
+    for (const r of writeRoutes) {
+      it(`${who} → 403 on WRITE ${r.method} ${r.url}`, async () => {
         const res = await app.inject({
           method: r.method,
           url: r.url,
@@ -263,4 +268,61 @@ describe('PersonnelCompany authz — MANAGER-only gate (NOT foreman, NOT worker)
       });
     }
   }
+
+  // WORKER stays 403 on READS too.
+  for (const r of readRoutes) {
+    it(`worker → 403 on READ ${r.method} ${r.url}`, async () => {
+      const res = await app.inject({
+        method: r.method,
+        url: r.url,
+        headers: auth(tokens.worker),
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error.code).toBe('FORBIDDEN');
+      expect(Object.keys(res.json())).toEqual(['error']);
+    });
+  }
+
+  // FOREMAN is now ALLOWED on the two READ routes (200 list / 404 missing-id, never 403).
+  it('foreman → 200 on GET list (picker read)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/personnel-companies?page=1&pageSize=50',
+      headers: auth(tokens.foreman),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.json().items)).toBe(true);
+  });
+
+  it('foreman → GET a real company by id → 200 (read-only)', async () => {
+    // Manager creates a company; foreman must be able to read it back.
+    const name = `Foreman Read Co ${randomUUID().slice(0, 8)}`;
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/personnel-companies',
+      headers: auth(tokens.manager),
+      payload: { name },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().id;
+    createdCompanyIds.push(id);
+
+    const got = await app.inject({
+      method: 'GET',
+      url: `/api/v1/personnel-companies/${id}`,
+      headers: auth(tokens.foreman),
+    });
+    expect(got.statusCode).toBe(200);
+    expect(got.json().id).toBe(id);
+  });
+
+  it('foreman → GET missing id → 404 (reaches the handler, not a 403 gate)', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/personnel-companies/does-not-exist-foreman',
+      headers: auth(tokens.foreman),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('NOT_FOUND');
+  });
 });

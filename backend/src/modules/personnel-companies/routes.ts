@@ -1,19 +1,21 @@
 /**
  * SiteLink back end — personnel-companies routes (staffing companies CRUD).
  *
- * ADMIN/MANAGER only — every route is gated by requireRole(...MANAGER_ROLES). NOT
- * Foreman-eligible and NOT site-scoped (org-wide entity, no lib/scope). Foreman and
- * Worker callers get a terse 403 at the coarse gate.
+ * READS (list + get one) are ADMIN/MANAGER/FOREMAN — a FOREMAN needs the company list
+ * to populate its worker-wizard picker (org-wide entity, no site scope). WRITES
+ * (create/update/archive/unarchive) stay MANAGER-only (ADMIN + MANAGER). The exposed
+ * fields (name/contactName/phone/email) are contact info the foreman legitimately
+ * needs — no secret/key/password. A WORKER caller is 403 everywhere.
  *
- *   GET    /personnel-companies             list (?includeArchived, page, pageSize)
- *   POST   /personnel-companies             create (name unique → 409 on duplicate)
- *   GET    /personnel-companies/:id         get one (404 if missing)
- *   PATCH  /personnel-companies/:id         update (partial; name unique → 409)
- *   POST   /personnel-companies/:id/archive     set isArchived true
- *   POST   /personnel-companies/:id/unarchive   set isArchived false
+ *   GET    /personnel-companies             list  — FOREMAN_ROLES (read-only picker)
+ *   POST   /personnel-companies             create (MANAGER; name unique → 409)
+ *   GET    /personnel-companies/:id         get one — FOREMAN_ROLES (404 if missing)
+ *   PATCH  /personnel-companies/:id         update (MANAGER; partial; name unique → 409)
+ *   POST   /personnel-companies/:id/archive     (MANAGER) set isArchived true
+ *   POST   /personnel-companies/:id/unarchive   (MANAGER) set isArchived false
  */
 import type { FastifyInstance } from 'fastify';
-import { MANAGER_ROLES } from '../../plugins/auth.js';
+import { FOREMAN_ROLES, MANAGER_ROLES } from '../../plugins/auth.js';
 import { PersonnelCompaniesService } from './service.js';
 import {
   createPersonnelCompanySchema,
@@ -24,10 +26,12 @@ import {
 
 export async function personnelCompanyRoutes(app: FastifyInstance): Promise<void> {
   const service = new PersonnelCompaniesService();
-  // MANAGER-only gate on EVERY route (ADMIN + MANAGER). No Foreman surface here.
+  // WRITE gate — MANAGER-only (ADMIN + MANAGER).
   const guard = { preHandler: [app.authenticate, app.requireRole(...MANAGER_ROLES)] };
+  // READ gate — ADMIN + MANAGER + FOREMAN (foreman picker is read-only).
+  const readGuard = { preHandler: [app.authenticate, app.requireRole(...FOREMAN_ROLES)] };
 
-  app.get('/personnel-companies', guard, async (req) => {
+  app.get('/personnel-companies', readGuard, async (req) => {
     const query = listPersonnelCompaniesQuery.parse(req.query);
     return service.list(query);
   });
@@ -38,7 +42,7 @@ export async function personnelCompanyRoutes(app: FastifyInstance): Promise<void
     return reply.status(201).send(created);
   });
 
-  app.get('/personnel-companies/:id', guard, async (req) => {
+  app.get('/personnel-companies/:id', readGuard, async (req) => {
     const { id } = idParam.parse(req.params);
     return service.get(id);
   });

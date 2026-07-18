@@ -244,7 +244,19 @@ model Worker {
   qualityOfWorks   String?
   phone            String?
   email            String?
+  // Legacy free-text personnel/staffing company. KEPT one migration step alongside the new
+  // FK (personnelCompanyId) so nothing is lost and Servio's in-flight worker edits don't
+  // break on a missing column. A LATER migration drops this once the FK is fully wired +
+  // the manager FE is cut over to the picker. Data migration backfills personnelCompanyId
+  // from the DISTINCT non-empty values of this column (see add_personnel_company migration).
   personnelCompany String?
+  // Managed personnel-company link (nullable). The relation field is named
+  // `personnelCompanyRef` because the legacy free-text column above already owns the
+  // `personnelCompany` name for now; downstream code selects the FK id via
+  // `personnelCompanyId` and the joined row via `personnelCompanyRef`.
+  // onDelete: SetNull — deleting a company unlinks its workers rather than deleting them.
+  personnelCompanyRef PersonnelCompany? @relation(fields: [personnelCompanyId], references: [id], onDelete: SetNull)
+  personnelCompanyId  String?
   residence        String?
   startDate        DateTime?
 
@@ -278,6 +290,7 @@ model Worker {
   @@index([profession])
   @@index([level])
   @@index([isArchived])
+  @@index([personnelCompanyId])
 }
 
 model WorkerDoc {
@@ -313,6 +326,32 @@ model WorkerSalaryData {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Personnel / staffing companies  [v1]  (managed entity)
+// Promotes the former free-text Worker.personnelCompany into a first-class,
+// dedupable, editable entity (name + contact). Workers link via
+// Worker.personnelCompanyId (nullable FK, onDelete: SetNull). `name` is UNIQUE:
+// the backfill dedupes distinct free-text values case-insensitively into one row
+// each, and the manager picker/CRUD (Servio) relies on name uniqueness to avoid
+// duplicate companies. Follows the same conventions as Site/Customer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PersonnelCompany {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  contactName String?
+  phone       String?
+  email       String?
+  isArchived  Boolean @default(false)
+
+  workers Worker[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isArchived])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

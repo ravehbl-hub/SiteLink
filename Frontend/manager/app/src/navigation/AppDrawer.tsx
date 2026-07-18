@@ -51,6 +51,7 @@ import { PaymentScreen } from '../features/payment/PaymentScreen';
 import { SalaryScreen } from '../features/salary/SalaryScreen';
 import { SitesScreen } from '../features/sites/SitesScreen';
 import { UsersScreen } from '../features/users/UsersScreen';
+import { PersonnelCompaniesScreen } from '../features/personnel-companies/PersonnelCompaniesScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 import { WorkersStack } from './WorkersStack';
 
@@ -118,6 +119,11 @@ export function AppDrawer() {
       />
       <Drawer.Screen name="Sites" component={SitesScreen} options={{ title: t('nav.sites') }} />
       <Drawer.Screen name="Users" component={UsersScreen} options={{ title: t('nav.users') }} />
+      <Drawer.Screen
+        name="PersonnelCompanies"
+        component={PersonnelCompaniesScreen}
+        options={{ title: t('nav.personnelCompanies') }}
+      />
       <Drawer.Screen
         name="Settings"
         component={SettingsScreen}

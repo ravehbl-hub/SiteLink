@@ -16,4 +16,6 @@ export const qk = {
   requests: (p?: Record<string, unknown>) => ['requests', p ?? {}] as const,
   users: ['users'] as const,
   salary: (p: SalaryCalcParams) => ['salary', p] as const,
+  personnelCompanies: (p?: { includeArchived?: boolean }) =>
+    ['personnelCompanies', p ?? {}] as const,
 };

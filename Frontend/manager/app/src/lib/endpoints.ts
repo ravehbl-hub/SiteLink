@@ -13,15 +13,18 @@ import type {
   CreateSiteInput,
   CreateUserInput,
   CreateWorkerInput,
+  CreatePersonnelCompanyInput,
   CurrentUser,
   DashboardRollup,
   Loan,
   Paginated,
+  PersonnelCompany,
   ProfessionWageRate,
   ProfitLoss,
   RequestStatus,
   SalaryResult,
   Site,
+  UpdatePersonnelCompanyInput,
   UpdateSiteInput,
   UpdateUserInput,
   UpdateWorkerInput,
@@ -197,6 +200,21 @@ export const endpoints = {
     api.get<WorkerRequest[] | Paginated<WorkerRequest>>('/requests', params).then(toArray),
   approveRequest: (id: string) => api.patch<WorkerRequest>(`/requests/${id}/approve`),
   rejectRequest: (id: string) => api.patch<WorkerRequest>(`/requests/${id}/reject`),
+
+  // Personnel companies (FR-MGR-EMP-2). Org-wide staffing companies; ADMIN/MANAGER
+  // manage the full list. Archive/unarchive are POST toggles; duplicate name → 409.
+  listPersonnelCompanies: (params?: { includeArchived?: boolean; page?: number; pageSize?: number }) =>
+    api.get<Paginated<PersonnelCompany>>('/personnel-companies', params),
+  getPersonnelCompany: (id: string) =>
+    api.get<PersonnelCompany>(`/personnel-companies/${id}`),
+  createPersonnelCompany: (body: CreatePersonnelCompanyInput) =>
+    api.post<PersonnelCompany>('/personnel-companies', body),
+  updatePersonnelCompany: (id: string, body: UpdatePersonnelCompanyInput) =>
+    api.patch<PersonnelCompany>(`/personnel-companies/${id}`, body),
+  archivePersonnelCompany: (id: string) =>
+    api.post<PersonnelCompany>(`/personnel-companies/${id}/archive`),
+  unarchivePersonnelCompany: (id: string) =>
+    api.post<PersonnelCompany>(`/personnel-companies/${id}/unarchive`),
 
   // Users
   listUsers: () => api.get<Paginated<User>>('/users'),

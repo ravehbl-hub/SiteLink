@@ -15,6 +15,7 @@ const TABS: { to: string; key: string }[] = [
   { to: '/payment', key: 'nav.payment' },
   { to: '/salary', key: 'nav.salary' },
   { to: '/sites', key: 'nav.sites' },
+  { to: '/personnel-companies', key: 'nav.personnelCompanies' },
   { to: '/users', key: 'nav.users' },
   { to: '/settings', key: 'nav.settings' },
 ];

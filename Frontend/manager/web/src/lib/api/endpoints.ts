@@ -15,7 +15,9 @@ import type {
   CurrentUser,
   DashboardRollup,
   Loan,
+  CreatePersonnelCompanyInput,
   Paginated,
+  PersonnelCompany,
   ProfessionWageRate,
   ProfitLoss,
   Site,
@@ -23,6 +25,7 @@ import type {
   UpdateAdvanceInput,
   UpdateAttendanceInput,
   UpdateLoanInput,
+  UpdatePersonnelCompanyInput,
   UpdateProfessionWageRateInput,
   UpdateSiteInput,
   UpdateUserInput,
@@ -202,6 +205,21 @@ export const salaryApi = {
     periodStart: string;
     periodEnd: string;
   }) => http.post<SalaryResult>('/salary/calculate', body),
+};
+
+/* ── Personnel companies (FR-MGR-EMP-2): org-wide staffing companies ─────
+ * ADMIN/MANAGER only. Duplicate name → 409; archive/unarchive toggles state. */
+export const personnelCompaniesApi = {
+  list: (params?: { includeArchived?: boolean; page?: number; pageSize?: number }) =>
+    http.get<Paginated<PersonnelCompany>>('/personnel-companies', params as Query),
+  get: (id: string) => http.get<PersonnelCompany>(`/personnel-companies/${id}`),
+  create: (body: CreatePersonnelCompanyInput) =>
+    http.post<PersonnelCompany>('/personnel-companies', body),
+  update: (id: string, body: UpdatePersonnelCompanyInput) =>
+    http.patch<PersonnelCompany>(`/personnel-companies/${id}`, body),
+  archive: (id: string) => http.post<PersonnelCompany>(`/personnel-companies/${id}/archive`),
+  unarchive: (id: string) =>
+    http.post<PersonnelCompany>(`/personnel-companies/${id}/unarchive`),
 };
 
 /* ── Users ────────────────────────────────────────────────────────────── */

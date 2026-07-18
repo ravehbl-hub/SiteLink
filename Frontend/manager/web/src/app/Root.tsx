@@ -13,6 +13,7 @@ import { PnlScreen } from '../features/pnl/PnlScreen';
 import { PaymentScreen } from '../features/payment/PaymentScreen';
 import { SalaryScreen } from '../features/salary/SalaryScreen';
 import { SitesScreen } from '../features/sites/SitesScreen';
+import { PersonnelCompaniesScreen } from '../features/personnel-companies/PersonnelCompaniesScreen';
 import { UsersScreen } from '../features/users/UsersScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
 
@@ -52,6 +53,7 @@ export function Root() {
           <Route path="payment" element={<PaymentScreen />} />
           <Route path="salary" element={<SalaryScreen />} />
           <Route path="sites" element={<SitesScreen />} />
+          <Route path="personnel-companies" element={<PersonnelCompaniesScreen />} />
           <Route path="users" element={<UsersScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />

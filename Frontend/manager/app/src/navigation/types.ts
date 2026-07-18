@@ -15,5 +15,6 @@ export type DrawerParamList = {
   Salary: undefined;
   Sites: undefined;
   Users: undefined;
+  PersonnelCompanies: undefined;
   Settings: undefined;
 };

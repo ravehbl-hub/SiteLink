@@ -19,6 +19,7 @@ import { authRoutes } from './modules/auth/routes.js';
 import { userRoutes } from './modules/users/routes.js';
 import { siteRoutes } from './modules/sites/routes.js';
 import { workerRoutes } from './modules/workers/routes.js';
+import { personnelCompanyRoutes } from './modules/personnel-companies/routes.js';
 import { attendanceRoutes } from './modules/attendance/routes.js';
 import { salaryRoutes } from './modules/salary/routes.js';
 import { paymentRoutes } from './modules/payment/routes.js';
@@ -61,6 +62,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
       await api.register(userRoutes);
       await api.register(siteRoutes);
       await api.register(workerRoutes);
+      await api.register(personnelCompanyRoutes);
       await api.register(attendanceRoutes);
       await api.register(salaryRoutes);
       await api.register(paymentRoutes);

@@ -10,6 +10,7 @@ export * from './user';
 export * from './site';
 export * from './foreman-site-assignment';
 export * from './worker';
+export * from './personnel-company';
 export * from './attendance';
 export * from './salary';
 export * from './finance';

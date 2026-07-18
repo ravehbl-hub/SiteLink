@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import type { WorkingHours } from '@sitelink/shared';
 import { endpoints, type WorkingHoursGrainParam } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
+import { focusOnly, STALE } from '../../lib/polling';
 import { currentMonthRange, shortDate } from '../../lib/format';
 import { exportWorkingHoursPdf } from '../../lib/pdf';
 import { ApiError } from '../../lib/api';
@@ -43,6 +44,8 @@ export function WorkingHoursScreen() {
   const q = useQuery({
     queryKey: qk.workingHours(params),
     queryFn: () => endpoints.workingHours(params),
+    // Self-data changes rarely — no interval, just foreground catch-up.
+    ...focusOnly(STALE.selfData),
   });
 
   const rows = (q.data ?? []) as WorkingHours[];

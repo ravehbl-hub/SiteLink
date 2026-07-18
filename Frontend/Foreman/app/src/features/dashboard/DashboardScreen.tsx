@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
+import { live, POLL, STALE } from '../../lib/polling';
 import { presetRange, type DatePreset } from '../../lib/format';
 import { useActiveSite } from '../../site/ActiveSiteProvider';
 import { SitePicker } from '../../site/SitePicker';
@@ -44,6 +45,7 @@ export function DashboardScreen() {
     queryKey: qk.dashboard(params),
     queryFn: () => endpoints.dashboard(params),
     enabled: Boolean(activeSiteId),
+    ...live(POLL.dashboard, STALE.live),
   });
 
   if (!ready) {

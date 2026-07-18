@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { AttendanceType, type Worker } from '@sitelink/shared';
 import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
+import { live, POLL, STALE } from '../../lib/polling';
 import { currentMonthRange, shortDate } from '../../lib/format';
 import { ApiError } from '../../lib/api';
 import { useActiveSite } from '../../site/ActiveSiteProvider';
@@ -60,6 +61,7 @@ export function AttendanceScreen() {
     queryKey: qk.workers({ siteId }),
     queryFn: () => endpoints.listWorkers({ siteId }),
     enabled: Boolean(activeSiteId),
+    staleTime: STALE.reference,
   });
 
   const params = { siteId, workerId: workerId ?? undefined, from: range.from, to: range.to };
@@ -67,6 +69,7 @@ export function AttendanceScreen() {
     queryKey: qk.attendance(params),
     queryFn: () => endpoints.listAttendance(params),
     enabled: Boolean(activeSiteId),
+    ...live(POLL.attendance, STALE.live),
   });
 
   const createMut = useMutation({
@@ -81,7 +84,13 @@ export function AttendanceScreen() {
         hours: type === AttendanceType.ATTENDANCE ? Number(hours) : null,
       });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['attendance'] }),
+    // Attendance feeds the dashboard rollup — invalidate both so KPIs refresh.
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['attendance'] }),
+        qc.invalidateQueries({ queryKey: ['dashboard'] }),
+      ]);
+    },
     onError: (e) => Alert.alert(t('common.error'), e instanceof ApiError ? e.message : String(e)),
   });
 

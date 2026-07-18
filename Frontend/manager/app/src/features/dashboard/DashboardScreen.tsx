@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import type { DashboardRollup, Site } from '@sitelink/shared';
 import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
+import { live, POLL, STALE } from '../../lib/polling';
 import { currentMonthRange, money } from '../../lib/format';
 import {
   Body,
@@ -67,12 +68,14 @@ export function DashboardScreen() {
   const sitesQ = useQuery({
     queryKey: qk.sites(false),
     queryFn: () => endpoints.listSites(false),
+    staleTime: STALE.reference,
   });
 
   const params = { siteId: siteId ?? undefined, from: range.from, to: range.to };
   const dashQ = useQuery({
     queryKey: qk.dashboard(params),
     queryFn: () => endpoints.dashboard(params),
+    ...live(POLL.dashboard, STALE.live),
   });
 
   // '' → all-sites (mapped to null for the query); otherwise a specific site id.

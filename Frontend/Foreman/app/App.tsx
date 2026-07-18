@@ -19,6 +19,7 @@ import { ActiveSiteProvider } from './src/site/ActiveSiteProvider';
 import { AppDrawer } from './src/navigation/AppDrawer';
 import { LoginScreen } from './src/features/auth/LoginScreen';
 import { Loading } from './src/components/ui';
+import { useAppFocusManager } from './src/lib/useAppFocus';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -66,6 +67,9 @@ function Gate() {
 
 function ThemedApp() {
   const { ready } = useTheme();
+  // Bridge RN AppState -> react-query focusManager so refetchOnWindowFocus works
+  // (foreground catch-up). Mounted once, here at the app root.
+  useAppFocusManager();
   if (!ready) return <Loading />;
   return (
     <AuthProvider>

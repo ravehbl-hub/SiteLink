@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreateWorkerInput, UpdateWorkerInput } from '@sitelink/shared';
 import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
+import { live, POLL, STALE } from '../../lib/polling';
 
 /** List workers on a site (undefined → all the foreman's sites, server-scoped). */
 export function useWorkersList(siteId?: string, enabled = true) {
@@ -20,6 +21,8 @@ export function useWorkersList(siteId?: string, enabled = true) {
     queryKey: qk.workers({ siteId }),
     queryFn: () => endpoints.listWorkers({ siteId }),
     enabled,
+    // Roster changes rarely — modest poll + foreground catch-up.
+    ...live(POLL.workers, STALE.reference),
   });
 }
 
@@ -29,6 +32,7 @@ export function useWorkerDetail(workerId: string | null) {
     queryKey: qk.worker(workerId ?? ''),
     queryFn: () => endpoints.getWorker(workerId as string),
     enabled: Boolean(workerId),
+    staleTime: STALE.reference,
   });
 }
 

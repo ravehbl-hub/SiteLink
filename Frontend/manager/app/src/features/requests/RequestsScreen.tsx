@@ -21,6 +21,7 @@ import {
 } from '@sitelink/shared';
 import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
+import { live, POLL, STALE } from '../../lib/polling';
 import { money, shortDate } from '../../lib/format';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../auth/AuthProvider';
@@ -66,10 +67,16 @@ export function RequestsScreen() {
   const requestsQ = useQuery({
     queryKey: qk.requests({ status: statusParam }),
     queryFn: () => endpoints.listRequests({ status: statusParam }),
+    ...live(POLL.requests, STALE.live),
   });
 
   // Worker names are not on the WorkerRequest DTO — resolve via the workers list.
-  const workersQ = useQuery({ queryKey: qk.workers(), queryFn: () => endpoints.listWorkers() });
+  // Reference lookup: workers change rarely, so long staleTime (no polling here).
+  const workersQ = useQuery({
+    queryKey: qk.workers(),
+    queryFn: () => endpoints.listWorkers(),
+    staleTime: STALE.reference,
+  });
   const workerName = useMemo(() => {
     const map = new Map<string, string>();
     for (const w of (workersQ.data?.items ?? []) as Worker[]) {

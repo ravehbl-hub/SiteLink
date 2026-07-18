@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { AttendanceType, type Worker } from '@sitelink/shared';
 import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
+import { live, POLL, STALE } from '../../lib/polling';
 import { currentMonthRange, shortDate } from '../../lib/format';
 import { ApiError } from '../../lib/api';
 import {
@@ -51,12 +52,14 @@ export function AttendanceScreen() {
   const workersQ = useQuery({
     queryKey: qk.workers(),
     queryFn: () => endpoints.listWorkers(),
+    staleTime: STALE.reference,
   });
 
   const params = { workerId: workerId ?? undefined, from: range.from, to: range.to };
   const attQ = useQuery({
     queryKey: qk.attendance(params),
     queryFn: () => endpoints.listAttendance(params),
+    ...live(POLL.attendance, STALE.live),
   });
 
   const createMut = useMutation({

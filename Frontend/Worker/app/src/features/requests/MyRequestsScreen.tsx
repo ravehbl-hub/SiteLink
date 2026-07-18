@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { RequestStatus, type WorkerRequest } from '@sitelink/shared';
 import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
+import { live, POLL, STALE } from '../../lib/polling';
 import { money, shortDate } from '../../lib/format';
 import {
   Body,
@@ -40,6 +41,7 @@ export function MyRequestsScreen() {
   const q = useQuery({
     queryKey: qk.requests(),
     queryFn: () => endpoints.listRequests(),
+    ...live(POLL.myRequests, STALE.live),
   });
 
   const rows = (q.data ?? []) as WorkerRequest[];

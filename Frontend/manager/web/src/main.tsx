@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import '@sitelink/tokens/css/tokens.css';
+import '@sitelink/tokens/css/neumorphic.css';
 import './app/styles.css';
 import './i18n';
 

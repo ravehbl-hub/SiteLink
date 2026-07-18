@@ -20,12 +20,17 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 function initialMode(): Mode {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored === 'light' || stored === 'dark') return stored;
-  // Operations Deck is dark-first: default to dark unless the user opts into light.
-  return 'dark';
+  // Cream/Teal Neumorphic is light-first: default to light (neumorphic) unless
+  // the user opts into dark (neumorphic-dark).
+  return 'light';
 }
 
+// The manager-web surface runs the Cream/Teal Neumorphic theme. The light/dark
+// toggle maps onto the two neumorphic variants (Deck's plain light/dark tokens
+// are intentionally not used here).
 function applyMode(mode: Mode): void {
-  document.documentElement.setAttribute('data-theme', mode);
+  const theme = mode === 'dark' ? 'neumorphic-dark' : 'neumorphic';
+  document.documentElement.setAttribute('data-theme', theme);
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

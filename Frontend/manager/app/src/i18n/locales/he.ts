@@ -64,6 +64,7 @@ export const he: TranslationResources = {
     title: 'לוח בקרה',
     site: 'אתר',
     allSites: 'כל האתרים',
+    selectSite: 'בחר אתר',
     dateRange: 'טווח תאריכים',
     workforce: 'כוח אדם',
     finance: 'כספים',

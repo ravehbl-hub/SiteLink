@@ -3,9 +3,10 @@
  * @sitelink/tokens Theme (DESIGN.md: never hard-code a hex/size). Directional
  * layout uses logical keys implicitly via RN's RTL handling; we avoid left/right.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -366,6 +367,180 @@ export function Segmented<T extends string>({
           </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+/**
+ * Generic dropdown / combobox picker. A COMPACT trigger (matching the Segmented /
+ * Button control height) that shows the current selection and, on tap, opens a
+ * modal overlay list of options — each selectable, the active one marked with a
+ * check. Modeled on the Foreman SitePicker (pill trigger + modal list) but made
+ * reusable as Select<T> so any single-choice filter can adopt it.
+ *
+ * Deck theme tokens only (surface/border/text — no hex). RTL-correct: the trigger
+ * lays out logically (chevron uses marginStart, text aligns to start), and each
+ * option row keeps the label at the start with the check at the end. Long labels
+ * (e.g. long seeded site names) stay readable — the option label wraps up to two
+ * lines rather than truncating so the full name is visible in the list.
+ */
+export function Select<T extends string>({
+  value,
+  options,
+  onChange,
+  placeholder,
+}: {
+  value: T | null;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  placeholder?: string;
+}) {
+  const { theme } = useTheme();
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value) ?? null;
+  const triggerLabel = selected?.label ?? placeholder ?? '';
+
+  return (
+    <View style={{ marginBottom: Number(theme.tokens.spacing['2']) }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={triggerLabel}
+        onPress={() => setOpen(true)}
+        // Compact trigger (matches the Segmented / Button height) with a ~44px
+        // accessible tap area via vertical hitSlop.
+        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          alignSelf: 'flex-start',
+          backgroundColor: theme.colors.surfaceAlt,
+          borderColor: theme.colors.border,
+          borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+          borderRadius: Number(theme.tokens.radii.sm),
+          paddingVertical: Number(theme.tokens.spacing['2']),
+          paddingHorizontal: Number(theme.tokens.spacing['3']),
+        }}
+      >
+        <Text
+          style={{
+            color: selected ? theme.colors.textPrimary : theme.colors.textMuted,
+            textAlign: 'auto',
+          }}
+          numberOfLines={1}
+        >
+          {triggerLabel}
+        </Text>
+        <Text
+          style={{
+            color: theme.colors.textSecondary,
+            marginStart: Number(theme.tokens.spacing['2']),
+          }}
+        >
+          ▾
+        </Text>
+      </Pressable>
+
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: 'center',
+            padding: Number(theme.tokens.spacing['4']),
+          }}
+        >
+          {/* Dim scrim (tap to dismiss); color from a token, opacity for the veil. */}
+          <Pressable
+            onPress={() => setOpen(false)}
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: theme.colors.textPrimary,
+              opacity: 0.4,
+            }}
+          />
+          <View
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+              borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+              borderRadius: Number(theme.tokens.radii.md),
+              padding: Number(theme.tokens.spacing['4']),
+              ...theme.elevation.sm.native,
+            }}
+          >
+            {placeholder ? (
+              <Text
+                style={{
+                  color: theme.colors.textSecondary,
+                  fontSize: Number(theme.tokens.fontSize.sm ?? 14),
+                  fontWeight: '600',
+                  marginBottom: Number(theme.tokens.spacing['2']),
+                  textAlign: 'auto',
+                }}
+              >
+                {placeholder}
+              </Text>
+            ) : null}
+            <ScrollView style={{ maxHeight: 320 }}>
+              {options.map((opt) => {
+                const active = opt.value === value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      onChange(opt.value);
+                      setOpen(false);
+                    }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      backgroundColor: active ? theme.colors.accentSubtle : 'transparent',
+                      borderRadius: Number(theme.tokens.radii.sm),
+                      paddingVertical: Number(theme.tokens.spacing['3']),
+                      paddingHorizontal: Number(theme.tokens.spacing['3']),
+                      marginBottom: Number(theme.tokens.spacing['1']),
+                    }}
+                  >
+                    <Text
+                      style={{
+                        flexShrink: 1,
+                        color: active ? theme.colors.accent : theme.colors.textPrimary,
+                        fontWeight: active ? '700' : '500',
+                        textAlign: 'auto',
+                      }}
+                      numberOfLines={2}
+                    >
+                      {opt.label}
+                    </Text>
+                    {active ? (
+                      <Text
+                        style={{
+                          color: theme.colors.accent,
+                          fontWeight: '700',
+                          marginStart: Number(theme.tokens.spacing['2']),
+                        }}
+                      >
+                        ✓
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

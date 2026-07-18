@@ -62,6 +62,7 @@ export const en = {
     title: 'Dashboard',
     site: 'Site',
     allSites: 'All sites',
+    selectSite: 'Select site',
     dateRange: 'Date range',
     workforce: 'Workforce',
     finance: 'Finance',

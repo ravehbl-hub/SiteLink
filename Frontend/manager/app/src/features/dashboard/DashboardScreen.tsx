@@ -26,6 +26,7 @@ import {
   Screen,
   SectionHeading,
   Segmented,
+  Select,
   Title,
 } from '../../components/ui';
 import { BarChart, HBarChart, DonutChart, type Datum } from '../../components/charts';
@@ -74,8 +75,9 @@ export function DashboardScreen() {
     queryFn: () => endpoints.dashboard(params),
   });
 
+  // '' → all-sites (mapped to null for the query); otherwise a specific site id.
   const siteOptions = [
-    { value: '__all__', label: t('dashboard.allSites') },
+    { value: '', label: t('dashboard.allSites') },
     ...((sitesQ.data?.items ?? []) as Site[]).map((s) => ({ value: s.id, label: s.name })),
   ];
 
@@ -83,14 +85,17 @@ export function DashboardScreen() {
     <Screen>
       <Title>{t('dashboard.title')}</Title>
 
-      <Segmented options={viewOptions} value={view} onChange={setView} />
-
+      {/* FILTER first: the site (+ date range) filter sits at the top… */}
       <SectionHeading>{t('dashboard.site')}</SectionHeading>
-      <Segmented
+      <Select
         options={siteOptions}
-        value={siteId ?? '__all__'}
-        onChange={(v) => setSiteId(v === '__all__' ? null : v)}
+        value={siteId ?? ''}
+        onChange={(v) => setSiteId(v === '' ? null : v)}
+        placeholder={t('dashboard.selectSite')}
       />
+
+      {/* …then the Data ↔ Graphics toggle, directly above its own content. */}
+      <Segmented options={viewOptions} value={view} onChange={setView} />
 
       {dashQ.isLoading ? (
         <Loading label={t('common.loading')} />

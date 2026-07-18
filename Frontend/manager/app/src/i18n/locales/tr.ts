@@ -64,6 +64,7 @@ export const tr: TranslationResources = {
     title: 'Panel',
     site: 'Saha',
     allSites: 'Tüm sahalar',
+    selectSite: 'Saha seç',
     dateRange: 'Tarih aralığı',
     workforce: 'İş gücü',
     finance: 'Finans',

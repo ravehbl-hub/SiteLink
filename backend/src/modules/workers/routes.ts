@@ -17,7 +17,7 @@
  *   GET    /workers/:id/image/url        mint signed image read URL
  */
 import type { FastifyInstance } from 'fastify';
-import { MANAGER_ROLES } from '../../plugins/auth.js';
+import { FOREMAN_ROLES, MANAGER_ROLES } from '../../plugins/auth.js';
 import { WorkersService } from './service.js';
 import {
   confirmDocSchema,
@@ -35,27 +35,34 @@ import {
 export async function workerRoutes(app: FastifyInstance): Promise<void> {
   const service = new WorkersService(app.supabase);
   const guard = { preHandler: [app.authenticate, app.requireRole(...MANAGER_ROLES)] };
+  // FOREMAN-eligible surfaces (LIST/VIEW/ADD/EDIT). FOREMAN_ROLES is only the COARSE
+  // gate; each handler passes req.appUser! into the service so the SERVICE applies the
+  // fine-grained site-scope boundary (lib/scope). ADMIN/MANAGER stay UNSCOPED. Every
+  // OTHER worker route (archive/remove/salary/docs/image) keeps the MANAGER-only guard.
+  const foremanGuard = {
+    preHandler: [app.authenticate, app.requireRole(...FOREMAN_ROLES)],
+  };
 
-  app.get('/workers', guard, async (req) => {
+  app.get('/workers', foremanGuard, async (req) => {
     const query = listWorkersQuery.parse(req.query);
-    return service.list(query);
+    return service.list(query, req.appUser!);
   });
 
-  app.post('/workers', guard, async (req, reply) => {
+  app.post('/workers', foremanGuard, async (req, reply) => {
     const body = createWorkerSchema.parse(req.body);
-    const worker = await service.create(body);
+    const worker = await service.create(body, req.appUser!);
     return reply.status(201).send(worker);
   });
 
-  app.get('/workers/:id', guard, async (req) => {
+  app.get('/workers/:id', foremanGuard, async (req) => {
     const { id } = idParam.parse(req.params);
-    return service.getWithDetails(id);
+    return service.getWithDetails(id, req.appUser!);
   });
 
-  app.patch('/workers/:id', guard, async (req) => {
+  app.patch('/workers/:id', foremanGuard, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = updateWorkerSchema.parse(req.body);
-    return service.update(id, body);
+    return service.update(id, body, req.appUser!);
   });
 
   app.post('/workers/:id/archive', guard, async (req) => {

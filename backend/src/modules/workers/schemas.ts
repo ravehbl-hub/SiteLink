@@ -17,9 +17,13 @@ export const createWorkerSchema = z.object({
   // dual-writes a WORKER login provisioned from this email — there is no login-less
   // create path anymore. The 4 legacy login-less workers are NOT backfilled.
   email: z.string().email(),
-  // Optional Manager-set initial password. Omit → Supabase INVITE email (worker sets
-  // their own password), consistent with the Users Manager flow.
-  password: z.string().min(8).optional(),
+  // REQUIRED initial password (Supabase policy min 8). No invite-by-email path for
+  // worker creation anymore — every new worker is created immediately sign-in-ready
+  // (createAuthUser uses email_confirm:true on the password branch). Kept explicit so
+  // Zod returns a clean 400 with a message rather than a raw Supabase error. On EDIT
+  // the schema is `.partial()`, so password stays OPTIONAL on PATCH and the update
+  // path never resets the Supabase auth password (it only propagates email).
+  password: z.string().min(8),
   personnelCompany: z.string().nullish(),
   residence: z.string().nullish(),
   startDate: z.string().datetime().nullish(),

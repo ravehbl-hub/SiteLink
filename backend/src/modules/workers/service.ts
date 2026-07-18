@@ -24,7 +24,14 @@ import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { mapSalaryData, mapWorker, mapWorkerDoc } from '../../lib/mappers.js';
 import { paginate } from '../../lib/pagination.js';
+import {
+  assertWorkerInScope,
+  effectiveSiteScope,
+  isForeman,
+  resolveSiteScope,
+} from '../../lib/scope.js';
 import { SupabaseService } from '../../lib/supabase.js';
+import type { AuthUser } from '../../plugins/types.js';
 import type {
   confirmDocSchema,
   confirmImageSchema,
@@ -60,10 +67,48 @@ function extFor(mimeType: string): string {
 export class WorkersService {
   constructor(private readonly supabase: SupabaseService) {}
 
-  async list(query: ListQuery): Promise<Paginated<Worker>> {
+  /**
+   * List workers. FOREMAN-scoped (FR-MGR-EMP LIST): when the caller is a FOREMAN the
+   * result is HARD-scoped to workers assigned to one of their UNION sites via
+   * `assignments.some.siteId IN union` — a Foreman NEVER sees the whole roster.
+   * `effectiveSiteScope` (SECURITY helper) does the validation: a `?siteId` in the
+   * Foreman's union narrows to that one site; a `?siteId` NOT in the union → 403; no
+   * `?siteId` → the WHOLE union; an EMPTY union → 403 (fail-closed). ADMIN/MANAGER (or
+   * no caller) keep the existing unscoped behavior (optional `?siteId` filter).
+   */
+  async list(query: ListQuery, caller?: AuthUser): Promise<Paginated<Worker>> {
+    // Foreman: replace the client siteId filter with the server-derived union filter.
+    // For ADMIN/MANAGER `effectiveSiteScope` returns { all } (siteId narrows) or a
+    // single requested site — identical to the legacy behavior.
+    let siteFilter: Record<string, unknown> = {};
+    if (caller) {
+      const scope = await effectiveSiteScope(caller, query.siteId);
+      if ('all' in scope) {
+        siteFilter = query.siteId
+          ? { assignments: { some: { siteId: query.siteId } } }
+          : {};
+      } else {
+        // FOREMAN (or an ADMIN/MANAGER that supplied a siteId → single-site array):
+        // force assignments IN the resolved site set. NEVER trust query.siteId here.
+        //
+        // SOFT-DELETE BOUNDARY (nexo-back): SiteAssignment is soft-deleted
+        // (`unassignedAt DateTime?`). We MUST require `unassignedAt: null` here so a
+        // worker whose union-site assignment was UNASSIGNED — and who may now be active
+        // only on an OUT-of-union site — does NOT leak into a foreman's LIST via the
+        // stale row. This matches the reference filters (attendance/service.ts and
+        // lib/scope.ts assertWorkerInScope) so LIST and VIEW agree.
+        siteFilter = {
+          assignments: { some: { unassignedAt: null, siteId: { in: scope.siteIds } } },
+        };
+      }
+    } else {
+      siteFilter = query.siteId
+        ? { assignments: { some: { siteId: query.siteId } } }
+        : {};
+    }
     const where = {
       ...(query.includeArchived ? {} : { isArchived: false }),
-      ...(query.siteId ? { assignments: { some: { siteId: query.siteId } } } : {}),
+      ...siteFilter,
     };
     const skip = (query.page - 1) * query.pageSize;
     const [rows, total] = await Promise.all([
@@ -81,22 +126,57 @@ export class WorkersService {
     });
   }
 
-  async getWithDetails(id: string): Promise<WorkerWithDetails> {
+  /**
+   * Worker detail (FR-MGR-EMP VIEW). FOREMAN-scoped: `assertWorkerInScope` runs FIRST
+   * (ADMIN/MANAGER no-op; a FOREMAN gets 403 when the worker is not on any of their
+   * union sites). We deliberately return 403 — not 404 — for an out-of-scope worker so
+   * the endpoint never confirms/denies a worker's existence to a Foreman probing ids.
+   */
+  async getWithDetails(id: string, caller?: AuthUser): Promise<WorkerWithDetails> {
+    if (caller) await assertWorkerInScope(caller, id);
     const row = await prisma.worker.findUnique({
       where: { id },
       include: { docs: true, salaryData: true, assignments: true },
     });
     if (!row) throw AppError.notFound('Worker not found');
+
+    // SITE-ID DISCLOSURE (nexo-back hardening): for a FOREMAN caller, only reveal the
+    // sites the foreman actually MANAGES — intersect the worker's assignments with the
+    // caller's union. A shared worker (also on out-of-union sites) must not leak those
+    // OTHER site ids to the foreman. ADMIN/MANAGER (or no caller) get the full list.
+    let siteIds = row.assignments.map((a) => a.siteId);
+    if (caller && isForeman(caller)) {
+      const scope = await resolveSiteScope(caller);
+      const union = new Set('all' in scope ? [] : scope.siteIds);
+      siteIds = siteIds.filter((sid) => union.has(sid));
+    }
+
     return {
       ...mapWorker(row),
       docs: row.docs.map(mapWorkerDoc),
       salaryData: row.salaryData ? mapSalaryData(row.salaryData) : null,
-      siteIds: row.assignments.map((a) => a.siteId),
+      siteIds,
     };
   }
 
-  /** Worker Wizard create (FR-MGR-EMP-1): Details + Salary + site assignments. */
-  async create(input: CreateInput): Promise<WorkerWithDetails> {
+  /**
+   * Worker Wizard create (FR-MGR-EMP-1): Details + Salary + site assignments.
+   *
+   * FOREMAN-scoped (ADD): a FOREMAN may create a worker ONLY within their own scope.
+   * `assertForemanCreateScope` (below) enforces, for a FOREMAN caller:
+   *   - siteIds MUST be present and non-empty (a Foreman cannot create an unassigned/
+   *     off-scope worker) → 400 otherwise,
+   *   - EVERY siteId ∈ the Foreman's union → 403 otherwise (never trust a client site),
+   *   - an EMPTY-union Foreman → 403 (fail-closed).
+   * The role is HARD-CODED WORKER in the dual-write below (the schema has no role
+   * field), so a Foreman cannot escalate the created identity. ADMIN/MANAGER keep the
+   * existing behavior (siteIds optional). The mandatory WORKER-login dual-write runs
+   * unchanged for Foreman-created workers.
+   */
+  async create(input: CreateInput, caller?: AuthUser): Promise<WorkerWithDetails> {
+    if (caller && isForeman(caller)) {
+      await this.assertForemanCreateScope(caller, input.siteIds);
+    }
     const created = await prisma.worker.create({
       data: {
         firstName: input.firstName,
@@ -198,7 +278,29 @@ export class WorkersService {
     }
   }
 
-  async update(id: string, input: UpdateInput): Promise<WorkerWithDetails> {
+  /**
+   * Modify a worker (FR-MGR-EMP EDIT). FOREMAN-scoped:
+   *   1. `assertWorkerInScope` FIRST — a FOREMAN can only edit a worker on one of their
+   *      union sites (403 otherwise), before any mutation.
+   *   2. If `siteIds` is supplied by a FOREMAN it must be non-empty (a Foreman cannot
+   *      orphan a worker to zero sites → 400) and every id ∈ their union (403 else).
+   *   3. CRITICAL — assignment edits by a FOREMAN are SCOPED (setAssignmentsScoped):
+   *      they may only add/remove assignments WITHIN their union; a worker's assignment
+   *      to a site OUTSIDE the Foreman's union is left UNTOUCHED. A full setAssignments
+   *      would replace across ALL sites and could delete an out-of-union assignment —
+   *      a cross-site mutation — which we must never allow.
+   * The schema has NO role field, so a Foreman can never change the worker's role via
+   * EDIT. ADMIN/MANAGER keep the full-replace setAssignments behavior.
+   */
+  async update(id: string, input: UpdateInput, caller?: AuthUser): Promise<WorkerWithDetails> {
+    const foreman = !!caller && isForeman(caller);
+    if (foreman) {
+      // Scope check BEFORE any read/mutation of an out-of-scope worker.
+      await assertWorkerInScope(caller!, id);
+      if (input.siteIds !== undefined) {
+        await this.assertForemanEditSiteIds(caller!, input.siteIds);
+      }
+    }
     const before = await prisma.worker.findUnique({
       where: { id },
       select: { id: true, email: true, userId: true },
@@ -258,7 +360,13 @@ export class WorkersService {
     });
 
     if (input.siteIds) {
-      await this.setAssignments(id, input.siteIds);
+      if (foreman) {
+        // Scoped: only add/remove within the Foreman's union; out-of-union
+        // assignments (e.g. a shared worker's other-site link) are preserved.
+        await this.setAssignmentsScoped(id, input.siteIds, caller!);
+      } else {
+        await this.setAssignments(id, input.siteIds);
+      }
     }
     return this.getWithDetails(id);
   }
@@ -472,6 +580,92 @@ export class WorkersService {
         where: { workerId, siteId: { notIn: unique.length ? unique : ['__none__'] } },
       }),
       ...unique.map((siteId) =>
+        prisma.siteAssignment.upsert({
+          where: { siteId_workerId: { siteId, workerId } },
+          create: { siteId, workerId },
+          update: {},
+        }),
+      ),
+    ]);
+  }
+
+  // ── Foreman scope guards (SECURITY BOUNDARY) ─────────────────────────────
+
+  /**
+   * ADD guard for a FOREMAN caller. Resolves the caller's server-derived union and
+   * requires the requested `siteIds` to be present, non-empty, and ENTIRELY inside
+   * that union — so a Foreman can only ever create a worker on their OWN site(s).
+   *   - empty union → 403 (fail-closed),
+   *   - siteIds absent/empty → 400 (a Foreman cannot create an unassigned worker),
+   *   - any siteId ∉ union → 403 (never trust a client-supplied site).
+   */
+  private async assertForemanCreateScope(
+    caller: AuthUser,
+    siteIds: string[] | undefined,
+  ): Promise<void> {
+    const scope = await resolveSiteScope(caller); // FOREMAN → { siteIds }
+    const union = 'all' in scope ? [] : scope.siteIds;
+    if (union.length === 0) throw AppError.forbidden();
+    if (!siteIds || siteIds.length === 0) {
+      throw AppError.validation('A foreman must assign the new worker to at least one site');
+    }
+    for (const id of siteIds) {
+      if (!union.includes(id)) throw AppError.forbidden();
+    }
+  }
+
+  /**
+   * EDIT guard for a FOREMAN-supplied `siteIds`. The set must be non-empty (a Foreman
+   * cannot strip a worker to zero sites = orphan/escape) and every id must be inside
+   * the Foreman's union (403 otherwise). Note this validates only what the Foreman
+   * ASKS for; the actual write (setAssignmentsScoped) additionally guarantees no
+   * out-of-union assignment is removed.
+   */
+  private async assertForemanEditSiteIds(
+    caller: AuthUser,
+    siteIds: string[],
+  ): Promise<void> {
+    const scope = await resolveSiteScope(caller);
+    const union = 'all' in scope ? [] : scope.siteIds;
+    if (union.length === 0) throw AppError.forbidden();
+    if (siteIds.length === 0) {
+      throw AppError.validation('A foreman cannot remove a worker from all sites');
+    }
+    for (const id of siteIds) {
+      if (!union.includes(id)) throw AppError.forbidden();
+    }
+  }
+
+  /**
+   * SCOPED assignment setter for a FOREMAN (CRITICAL cross-site-mutation guard).
+   *
+   * Unlike `setAssignments` (a full replace across ALL sites), this ONLY reconciles
+   * assignments WITHIN the Foreman's union: it removes union-site assignments the
+   * Foreman dropped from `requestedSiteIds` and adds the union sites they requested.
+   * Any assignment to a site OUTSIDE the Foreman's union is left completely UNTOUCHED
+   * — so a shared worker on siteA(union)+siteB(not-union) whose Foreman PATCHes
+   * siteIds=[siteA] keeps the siteB assignment (no cross-site deletion).
+   *
+   * `requestedSiteIds` is pre-validated all-in-union by `assertForemanEditSiteIds`.
+   */
+  private async setAssignmentsScoped(
+    workerId: string,
+    requestedSiteIds: string[],
+    caller: AuthUser,
+  ): Promise<void> {
+    const scope = await resolveSiteScope(caller);
+    const union = 'all' in scope ? [] : scope.siteIds;
+    const requested = [...new Set(requestedSiteIds)];
+    await prisma.$transaction([
+      // Delete ONLY union sites the Foreman dropped — scoped by `siteId IN union` so an
+      // out-of-union assignment can never be reached by this deleteMany.
+      prisma.siteAssignment.deleteMany({
+        where: {
+          workerId,
+          siteId: { in: union, notIn: requested.length ? requested : ['__none__'] },
+        },
+      }),
+      ...requested.map((siteId) =>
         prisma.siteAssignment.upsert({
           where: { siteId_workerId: { siteId, workerId } },
           create: { siteId, workerId },

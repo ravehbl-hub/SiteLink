@@ -21,6 +21,15 @@ export const resolveRequestSchema = z.object({
   resolutionNotes: z.string().nullish(),
 });
 
+// RE-DECIDE body — flip an ALREADY-RESOLVED request to the other terminal status.
+// `status` is server-validated to exactly APPROVED | REJECTED; resolvedById is NEVER
+// accepted from the body (always server-derived from the authenticated caller). No
+// amount/worker/date fields: the effect is re-derived from the ORIGINAL request row.
+export const redecideRequestSchema = z.object({
+  status: z.enum([RequestStatus.APPROVED, RequestStatus.REJECTED]),
+  resolutionNotes: z.string().nullish(),
+});
+
 export const listRequestsQuery = z.object({
   workerId: z.string().optional(),
   status: z.nativeEnum(RequestStatus).optional(),

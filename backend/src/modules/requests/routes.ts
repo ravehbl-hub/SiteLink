@@ -5,6 +5,7 @@
  *   POST /requests               create                    — WORKER self-scoped
  *   PATCH /requests/:id/approve  approve                   — ADMIN/MANAGER only
  *   PATCH /requests/:id/reject   reject                    — ADMIN/MANAGER only
+ *   PATCH /requests/:id/redecide re-decide RESOLVED→other  — ADMIN/MANAGER only
  */
 import type { FastifyInstance } from 'fastify';
 import { RequestStatus, Role } from '@sitelink/shared';
@@ -15,6 +16,7 @@ import {
   createRequestSchema,
   idParam,
   listRequestsQuery,
+  redecideRequestSchema,
   resolveRequestSchema,
 } from './schemas.js';
 
@@ -69,5 +71,16 @@ export async function requestRoutes(app: FastifyInstance): Promise<void> {
         ?.resolutionNotes,
     });
     return service.resolve(id, body, req.appUser!.id);
+  });
+
+  // RE-DECIDE an already-RESOLVED request (ADMIN/MANAGER only). Flips APPROVED↔REJECTED
+  // and reverses/re-applies the side effect atomically (reverse-by-requestId). Body is
+  // Zod-validated to { status: APPROVED|REJECTED, resolutionNotes? }; resolvedById is
+  // ALWAYS the acting user (server-derived), never from the body; the effect's
+  // amount/worker/dates come from the ORIGINAL request row.
+  app.patch('/requests/:id/redecide', guard, async (req) => {
+    const { id } = idParam.parse(req.params);
+    const body = redecideRequestSchema.parse(req.body);
+    return service.redecide(id, body, req.appUser!.id);
   });
 }

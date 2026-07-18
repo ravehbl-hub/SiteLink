@@ -670,6 +670,193 @@ describe('FR-REQ — approval loop side effects, reject, and rollback', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// FR-REQ-REDECIDE — re-decide an already-RESOLVED request + SAFE side-effect reversal
+// (tag-on-approve, reverse-by-requestId, idempotent flips, un-spoofable effect).
+// ════════════════════════════════════════════════════════════════════════════
+describe('FR-REQ-REDECIDE — re-decide + reverse-by-requestId', () => {
+  // Helper: create a PENDING request (as MANAGER, on `workerId`).
+  async function createRequest(payload: Record<string, unknown>): Promise<string> {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/requests',
+      headers: auth(mgrToken),
+      payload: { workerId, ...payload },
+    });
+    expect(res.statusCode).toBe(201);
+    const id = res.json().id;
+    createdRequestIds.push(id);
+    return id;
+  }
+  async function approve(reqId: string): Promise<void> {
+    const r = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/requests/${reqId}/approve`,
+      headers: auth(mgrToken),
+    });
+    expect(r.statusCode).toBe(200);
+  }
+  async function redecide(reqId: string, status: string, token = mgrToken) {
+    return app.inject({
+      method: 'PATCH',
+      url: `/api/v1/requests/${reqId}/redecide`,
+      headers: auth(token),
+      payload: { status, resolutionNotes: `redecide ${status}` },
+    });
+  }
+
+  it('(a) approve LOAN tags requestId; redecide→REJECTED reverses to 0 loans', async () => {
+    const reqId = await createRequest({ type: RequestType.LOAN, amount: 111, currency: 'ILS' });
+    await approve(reqId);
+
+    const tagged = await prisma.loan.findMany({ where: { requestId: reqId } });
+    expect(tagged.length).toBe(1);
+    for (const l of tagged) createdLoanIds.push(l.id);
+
+    const res = await redecide(reqId, RequestStatus.REJECTED);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe(RequestStatus.REJECTED);
+    // Side effect reversed: no loan tagged to this request remains.
+    expect(await prisma.loan.count({ where: { requestId: reqId } })).toBe(0);
+  });
+
+  it('(b) flip approve→reject→approve yields EXACTLY ONE tagged loan (never two)', async () => {
+    const reqId = await createRequest({ type: RequestType.LOAN, amount: 222, currency: 'ILS' });
+    await approve(reqId);
+    expect(await prisma.loan.count({ where: { requestId: reqId } })).toBe(1);
+
+    let res = await redecide(reqId, RequestStatus.REJECTED);
+    expect(res.statusCode).toBe(200);
+    expect(await prisma.loan.count({ where: { requestId: reqId } })).toBe(0);
+
+    res = await redecide(reqId, RequestStatus.APPROVED);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe(RequestStatus.APPROVED);
+
+    const loans = await prisma.loan.findMany({ where: { requestId: reqId } });
+    expect(loans.length).toBe(1); // CRITICAL: exactly one, not two.
+    for (const l of loans) createdLoanIds.push(l.id);
+  });
+
+  it('(b2) same-status re-decide is a 409 (no double side-effect)', async () => {
+    const reqId = await createRequest({ type: RequestType.LOAN, amount: 223, currency: 'ILS' });
+    await approve(reqId);
+    for (const l of await prisma.loan.findMany({ where: { requestId: reqId } })) {
+      createdLoanIds.push(l.id);
+    }
+    const res = await redecide(reqId, RequestStatus.APPROVED); // already APPROVED
+    expect(res.statusCode).toBe(409);
+    // Still exactly one loan; no double-apply.
+    expect(await prisma.loan.count({ where: { requestId: reqId } })).toBe(1);
+  });
+
+  it('(c) a manually-created loan (requestId null) is NOT deleted by a reversal', async () => {
+    const reqId = await createRequest({ type: RequestType.LOAN, amount: 333, currency: 'ILS' });
+    await approve(reqId);
+    for (const l of await prisma.loan.findMany({ where: { requestId: reqId } })) {
+      createdLoanIds.push(l.id);
+    }
+    // Manual loan: SAME worker + SAME amount, but requestId null (untagged).
+    const manual = await prisma.loan.create({
+      data: { workerId, amount: 333, currency: 'ILS', date: new Date('2026-07-01'), outstanding: 333 },
+    });
+    createdLoanIds.push(manual.id);
+
+    const res = await redecide(reqId, RequestStatus.REJECTED);
+    expect(res.statusCode).toBe(200);
+    // Tagged loan gone; manual loan UNTOUCHED (reversal is by requestId, never by amount).
+    expect(await prisma.loan.count({ where: { requestId: reqId } })).toBe(0);
+    expect(await prisma.loan.findUnique({ where: { id: manual.id } })).toBeTruthy();
+  });
+
+  it('(d) re-decide by a WORKER is forbidden (403) — request untouched', async () => {
+    const reqId = await createRequest({ type: RequestType.LOAN, amount: 444, currency: 'ILS' });
+    await approve(reqId);
+    for (const l of await prisma.loan.findMany({ where: { requestId: reqId } })) {
+      createdLoanIds.push(l.id);
+    }
+    const res = await redecide(reqId, RequestStatus.REJECTED, workerToken);
+    expect(res.statusCode).toBe(403);
+    const row = await prisma.workerRequest.findUnique({ where: { id: reqId } });
+    expect(row!.status).toBe(RequestStatus.APPROVED); // untouched
+    expect(await prisma.loan.count({ where: { requestId: reqId } })).toBe(1); // not reversed
+  });
+
+  it('(e) VACATION approve→reject removes ONLY the tagged attendance days', async () => {
+    const reqId = await createRequest({
+      type: RequestType.VACATION,
+      startDate: '2026-10-01T00:00:00.000Z',
+      endDate: '2026-10-03T00:00:00.000Z',
+    });
+    await approve(reqId);
+    const tagged = await prisma.attendanceRecord.findMany({ where: { requestId: reqId } });
+    expect(tagged.length).toBe(3);
+    for (const d of tagged) createdAttendanceIds.push(d.id);
+
+    const res = await redecide(reqId, RequestStatus.REJECTED);
+    expect(res.statusCode).toBe(200);
+    expect(await prisma.attendanceRecord.count({ where: { requestId: reqId } })).toBe(0);
+  });
+
+  it('(e2) ADVANCE approve→reject reverses the tagged advance', async () => {
+    const reqId = await createRequest({ type: RequestType.ADVANCE, amount: 555, currency: 'ILS' });
+    await approve(reqId);
+    const tagged = await prisma.advancePayment.findMany({ where: { requestId: reqId } });
+    expect(tagged.length).toBe(1);
+
+    const res = await redecide(reqId, RequestStatus.REJECTED);
+    expect(res.statusCode).toBe(200);
+    expect(await prisma.advancePayment.count({ where: { requestId: reqId } })).toBe(0);
+  });
+
+  it('(f) partially-repaid loan reversal is BLOCKED with 409 (real-money safety)', async () => {
+    const reqId = await createRequest({ type: RequestType.LOAN, amount: 666, currency: 'ILS' });
+    await approve(reqId);
+    const loan = (await prisma.loan.findFirst({ where: { requestId: reqId } }))!;
+    createdLoanIds.push(loan.id);
+    // Simulate a partial repayment: outstanding < amount.
+    await prisma.loan.update({ where: { id: loan.id }, data: { outstanding: 600 } });
+
+    const res = await redecide(reqId, RequestStatus.REJECTED);
+    expect(res.statusCode).toBe(409);
+    // Atomic: nothing changed — loan still present, request still APPROVED.
+    expect(await prisma.loan.findUnique({ where: { id: loan.id } })).toBeTruthy();
+    const row = await prisma.workerRequest.findUnique({ where: { id: reqId } });
+    expect(row!.status).toBe(RequestStatus.APPROVED);
+  });
+
+  it('(g) resolvedById is re-stamped to the CALLER on each re-decide (un-spoofable)', async () => {
+    const reqId = await createRequest({ type: RequestType.LOAN, amount: 777, currency: 'ILS' });
+    // Approve as MANAGER first.
+    await approve(reqId);
+    for (const l of await prisma.loan.findMany({ where: { requestId: reqId } })) {
+      createdLoanIds.push(l.id);
+    }
+    let row = await prisma.workerRequest.findUnique({ where: { id: reqId } });
+    expect(row!.resolvedById).toBe(mgrUserId);
+
+    // Re-decide REJECTED as ADMIN — resolvedById must flip to the admin caller, even if
+    // a body tried to spoof it (body carries no resolvedById; server derives it).
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/requests/${reqId}/redecide`,
+      headers: auth(adminToken),
+      payload: { status: RequestStatus.REJECTED, resolvedById: mgrUserId },
+    });
+    expect(res.statusCode).toBe(200);
+    row = await prisma.workerRequest.findUnique({ where: { id: reqId } });
+    expect(row!.resolvedById).toBe(adminUserId); // re-stamped to the acting caller.
+  });
+
+  it('(h) re-decide of a still-PENDING request is a 409 (use approve/reject)', async () => {
+    const reqId = await createRequest({ type: RequestType.LOAN, amount: 888, currency: 'ILS' });
+    const res = await redecide(reqId, RequestStatus.APPROVED);
+    expect(res.statusCode).toBe(409);
+    const row = await prisma.workerRequest.findUnique({ where: { id: reqId } });
+    expect(row!.status).toBe(RequestStatus.PENDING); // untouched
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 // FR-BO — Back Office (ADMIN-only)
 // ════════════════════════════════════════════════════════════════════════════
 describe('FR-BO — Back Office ADMIN-only surfaces', () => {

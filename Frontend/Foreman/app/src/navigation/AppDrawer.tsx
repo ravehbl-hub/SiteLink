@@ -52,6 +52,7 @@ function HamburgerButton() {
   );
 }
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
+import { WorkersScreen } from '../features/workers/WorkersScreen';
 import { AttendanceScreen } from '../features/attendance/AttendanceScreen';
 import { WorkerRatingScreen } from '../features/rating/WorkerRatingScreen';
 import { ReportsScreen } from '../features/reports/ReportsScreen';
@@ -108,6 +109,11 @@ export function AppDrawer() {
         name="Dashboard"
         component={DashboardScreen}
         options={{ title: t('nav.dashboard') }}
+      />
+      <Drawer.Screen
+        name="Workers"
+        component={WorkersScreen}
+        options={{ title: t('nav.workers') }}
       />
       <Drawer.Screen
         name="Attendance"

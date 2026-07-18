@@ -9,11 +9,14 @@
 import type {
   AttendanceRecord,
   CreateAttendanceInput,
+  CreateWorkerInput,
   CurrentUser,
   DashboardRollup,
   Paginated,
   PickableSite,
+  UpdateWorkerInput,
   Worker,
+  WorkerWithDetails,
 } from '@sitelink/shared';
 import { api } from './api';
 
@@ -73,9 +76,23 @@ export const endpoints = {
   // Dashboard (FR-FOR-2) — always scoped to the Foreman's own site.
   dashboard: (params: DashboardParams) => api.get<DashboardRollup>('/dashboard', params),
 
-  // Workers (own-site only — caller passes siteId=primarySiteId).
-  listWorkers: (params?: { includeArchived?: boolean; siteId?: string }) =>
+  // Workers (own-site only — caller passes siteId=primarySiteId). The back end
+  // additionally auto-scopes a FOREMAN caller to their assigned site(s); passing a
+  // siteId outside that union → 403.
+  listWorkers: (params?: { includeArchived?: boolean; siteId?: string; page?: number; pageSize?: number }) =>
     api.get<Paginated<Worker>>('/workers', params),
+
+  // Worker detail (VIEW). 403 if the worker is not on one of the foreman's sites.
+  getWorker: (id: string) => api.get<WorkerWithDetails>(`/workers/${id}`),
+
+  // Create a worker (FOREMAN: siteIds REQUIRED within the foreman's sites; email +
+  // password REQUIRED → the worker gets a WORKER login immediately). role is forced
+  // to WORKER server-side. 400 validation / 403 scope / 409 duplicate login email.
+  createWorker: (body: CreateWorkerInput) => api.post<Worker>('/workers', body),
+
+  // Edit a worker (password NOT resent). siteIds must stay within the foreman's sites.
+  updateWorker: (id: string, body: UpdateWorkerInput) =>
+    api.patch<Worker>(`/workers/${id}`, body),
 
   // Attendance (FR-FOR-4). Back end forces a Foreman's siteId to their own site.
   listAttendance: (params: { siteId?: string; workerId?: string; from?: string; to?: string }) =>

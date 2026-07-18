@@ -7,17 +7,50 @@
  * Drawer tints come from tokens (active accent / accentSubtle background).
  */
 import React from 'react';
-import { View } from 'react-native';
+import { I18nManager, Pressable, View } from 'react-native';
 import {
   createDrawerNavigator,
   DrawerContentScrollView,
   DrawerItemList,
   type DrawerContentComponentProps,
 } from '@react-navigation/drawer';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import type { DrawerParamList } from './types';
 import { useTheme } from '../theme/ThemeProvider';
 import { LogoBadge } from '../components/LogoBadge';
+
+/**
+ * HamburgerButton — an EXPLICIT drawer-toggle button. We supply this as a custom
+ * headerLeft/headerRight so the hamburger and logo swap TOGETHER with direction,
+ * rather than relying on RN's ambiguous auto-mirror of the default toggle (which
+ * did not visually move to the right under RTL). Three bars are drawn from Views
+ * so no icon-font dependency is required; bar colour matches headerTintColor.
+ */
+function HamburgerButton() {
+  const navigation = useNavigation();
+  const { theme } = useTheme();
+  const bar = {
+    width: 22,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: theme.colors.textPrimary,
+    marginVertical: 2,
+  };
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Open navigation menu"
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
+      style={{ paddingHorizontal: 16, justifyContent: 'center' }}
+    >
+      <View style={bar} />
+      <View style={bar} />
+      <View style={bar} />
+    </Pressable>
+  );
+}
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { AttendanceScreen } from '../features/attendance/AttendanceScreen';
 import { WorkerRatingScreen } from '../features/rating/WorkerRatingScreen';
@@ -57,7 +90,14 @@ export function AppDrawer() {
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.surface },
         headerTintColor: theme.colors.textPrimary,
-        headerRight: () => <LogoBadge variant="header" />,
+        // Full header mirror, deterministic (do NOT rely on RN auto-mirror):
+        //   LTR (en/tr): hamburger LEFT, logo RIGHT.
+        //   RTL (he):    hamburger RIGHT, logo LEFT.
+        // Explicit headerLeft replaces RN's default drawer toggle → one hamburger.
+        headerLeft: () =>
+          I18nManager.isRTL ? <LogoBadge variant="header" /> : <HamburgerButton />,
+        headerRight: () =>
+          I18nManager.isRTL ? <HamburgerButton /> : <LogoBadge variant="header" />,
         drawerStyle: { backgroundColor: theme.colors.surface },
         drawerActiveTintColor: theme.colors.accent,
         drawerInactiveTintColor: theme.colors.textSecondary,

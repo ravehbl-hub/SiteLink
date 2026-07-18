@@ -3,12 +3,46 @@
  * (Architecture §2: Manager app = hamburger). Each domain is a drawer item.
  */
 import React from 'react';
-import { I18nManager } from 'react-native';
+import { I18nManager, Pressable, View } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import type { DrawerParamList } from './types';
 import { useTheme } from '../theme/ThemeProvider';
 import { LogoBadge } from '../components/LogoBadge';
+
+/**
+ * HamburgerButton — an EXPLICIT drawer-toggle button. We supply this as a custom
+ * headerLeft/headerRight so the hamburger and logo swap TOGETHER with direction
+ * (see AppDrawer header config), rather than relying on RN's ambiguous auto-mirror
+ * of the default toggle (which did not visually move to the right under RTL).
+ * Three bars are drawn from Views so no icon-font dependency is required; the bar
+ * colour matches headerTintColor (theme.colors.textPrimary).
+ */
+function HamburgerButton() {
+  const navigation = useNavigation();
+  const { theme } = useTheme();
+  const bar = {
+    width: 22,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: theme.colors.textPrimary,
+    marginVertical: 2,
+  };
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Open navigation menu"
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
+      style={{ paddingHorizontal: 16, justifyContent: 'center' }}
+    >
+      <View style={bar} />
+      <View style={bar} />
+      <View style={bar} />
+    </Pressable>
+  );
+}
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { RequestsScreen } from '../features/requests/RequestsScreen';
 import { AttendanceScreen } from '../features/attendance/AttendanceScreen';
@@ -31,12 +65,16 @@ export function AppDrawer() {
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.surface },
         headerTintColor: theme.colors.textPrimary,
-        // Logo sits at the header END, opposite the hamburger (which the drawer
-        // injects at the START — headerLeft in LTR, headerRight in RTL). So the
-        // logo takes the free slot: right in en/tr, left in he.
-        ...(I18nManager.isRTL
-          ? { headerLeft: () => <LogoBadge variant="header" /> }
-          : { headerRight: () => <LogoBadge variant="header" /> }),
+        // Full header mirror, deterministic (do NOT rely on RN auto-mirror):
+        //   LTR (en/tr): hamburger LEFT, logo RIGHT.
+        //   RTL (he):    hamburger RIGHT, logo LEFT.
+        // Supplying an explicit headerLeft also replaces RN's default drawer
+        // toggle, so there is exactly one hamburger. The drawer PANEL edge is
+        // still mirrored automatically by RN from isRTL (drawerPosition default).
+        headerLeft: () =>
+          I18nManager.isRTL ? <LogoBadge variant="header" /> : <HamburgerButton />,
+        headerRight: () =>
+          I18nManager.isRTL ? <HamburgerButton /> : <LogoBadge variant="header" />,
         drawerStyle: { backgroundColor: theme.colors.surface },
         drawerActiveTintColor: theme.colors.accent,
         drawerInactiveTintColor: theme.colors.textSecondary,

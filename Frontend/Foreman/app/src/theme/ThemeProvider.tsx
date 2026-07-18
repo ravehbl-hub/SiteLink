@@ -61,7 +61,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const lang = storedLang ?? Language.EN;
       setLanguageState(lang);
       await i18n.changeLanguage(toLocale(lang));
-      applyDirection(lang);
+      // RTL ON FIRST LOAD: I18nManager.forceRTL only re-lays-out after a JS reload.
+      // If the persisted language's direction differs from how the app actually
+      // launched (e.g. saved Hebrew but the running instance came up LTR),
+      // applyDirection flips the native flag and returns true — we RELOAD ONCE now
+      // so the app comes up in the correct direction with NO user round-trip. After
+      // the reload isRTL matches shouldRtl, applyDirection returns false, and we fall
+      // through to setReady — so this reloads at most once (no loop).
+      const directionChanged = applyDirection(lang);
+      if (directionChanged) {
+        await reloadForDirection();
+        return; // reloading — do not setReady on this dying instance.
+      }
       setReady(true);
     })();
     return () => {

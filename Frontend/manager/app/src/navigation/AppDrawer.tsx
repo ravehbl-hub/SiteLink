@@ -3,6 +3,7 @@
  * (Architecture §2: Manager app = hamburger). Each domain is a drawer item.
  */
 import React from 'react';
+import { I18nManager } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useTranslation } from 'react-i18next';
 import type { DrawerParamList } from './types';
@@ -30,7 +31,12 @@ export function AppDrawer() {
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.surface },
         headerTintColor: theme.colors.textPrimary,
-        headerRight: () => <LogoBadge variant="header" />,
+        // Logo sits at the header END, opposite the hamburger (which the drawer
+        // injects at the START — headerLeft in LTR, headerRight in RTL). So the
+        // logo takes the free slot: right in en/tr, left in he.
+        ...(I18nManager.isRTL
+          ? { headerLeft: () => <LogoBadge variant="header" /> }
+          : { headerRight: () => <LogoBadge variant="header" /> }),
         drawerStyle: { backgroundColor: theme.colors.surface },
         drawerActiveTintColor: theme.colors.accent,
         drawerInactiveTintColor: theme.colors.textSecondary,

@@ -173,7 +173,8 @@ export function HBarChart({
               width: 116,
               fontSize: 12,
               color: theme.colors.textSecondary,
-              textAlign: 'left',
+              // Start-aligned: follows writing direction (left in en/tr, right in he).
+              textAlign: 'auto',
             }}
           >
             {d.label}
@@ -205,7 +206,8 @@ export function HBarChart({
               fontSize: 12,
               color: theme.colors.textPrimary,
               fontVariant: ['tabular-nums'],
-              textAlign: 'right',
+              // End-aligned value: 'right' in LTR, mirrors to 'left' (row end) under RTL.
+              textAlign: I18nManager.isRTL ? 'left' : 'right',
               minWidth: 24,
             }}
           >

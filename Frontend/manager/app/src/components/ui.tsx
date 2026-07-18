@@ -94,6 +94,8 @@ export function Title({ children }: { children: React.ReactNode }) {
         fontSize: Number(theme.tokens.fontSize.xl ?? 22),
         fontWeight: '700',
         marginBottom: Number(theme.tokens.spacing['3']),
+        // Follow writing direction: left in en/tr, right in he.
+        textAlign: 'auto',
       }}
     >
       {children}
@@ -110,6 +112,7 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
         fontSize: Number(theme.tokens.fontSize.sm ?? 14),
         fontWeight: '600',
         marginBottom: Number(theme.tokens.spacing['2']),
+        textAlign: 'auto',
       }}
     >
       {children}
@@ -132,6 +135,7 @@ export function Body({
     <Text
       style={{
         color: muted ? theme.colors.textMuted : theme.colors.textPrimary,
+        textAlign: 'auto',
         ...(tabular ? { fontVariant: ['tabular-nums' as const] } : null),
       }}
     >
@@ -152,6 +156,7 @@ export function Field({
           color: theme.colors.textSecondary,
           marginBottom: Number(theme.tokens.spacing['1']),
           fontSize: Number(theme.tokens.fontSize.sm ?? 14),
+          textAlign: 'auto',
         }}
       >
         {label}
@@ -293,11 +298,14 @@ export function Metric({
           fontSize: Number(theme.tokens.fontSize.xl ?? 22),
           fontWeight: '700',
           fontVariant: ['tabular-nums'],
+          textAlign: 'auto',
         }}
       >
         {value}
       </Text>
-      <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{label}</Text>
+      <Text style={{ color: theme.colors.textMuted, fontSize: 12, textAlign: 'auto' }}>
+        {label}
+      </Text>
     </View>
   );
 }

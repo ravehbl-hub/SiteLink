@@ -361,9 +361,10 @@ export function Segmented<T extends string>({
             // Compact select trigger, but preserve a ~44px accessible tap area.
             hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
             style={{
+              height: Number(theme.tokens.sizing.controlSm),
+              justifyContent: 'center',
               backgroundColor: active ? theme.colors.accent : theme.colors.surfaceAlt,
               borderRadius: Number(theme.tokens.radii.sm),
-              paddingVertical: Number(theme.tokens.spacing['2']),
               paddingHorizontal: Number(theme.tokens.spacing['3']),
               marginEnd: Number(theme.tokens.spacing['2']),
               marginBottom: Number(theme.tokens.spacing['2']),
@@ -414,19 +415,22 @@ export function Select<T extends string>({
         accessibilityRole="button"
         accessibilityLabel={triggerLabel}
         onPress={() => setOpen(true)}
-        // Compact trigger (matches the Segmented / Button height) with a ~44px
-        // accessible tap area via vertical hitSlop.
+        // Compact trigger sized to the SAME height as the language Segmented control
+        // (controlSm = 32) so the dashboard filter combobox visually matches the
+        // language picker. Explicit height + centered content makes the border box
+        // and the borderless Segmented render at identical heights. ~44px accessible
+        // tap area preserved via vertical hitSlop.
         hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
         style={{
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
           alignSelf: 'flex-start',
+          height: Number(theme.tokens.sizing.controlSm),
           backgroundColor: theme.colors.surfaceAlt,
           borderColor: theme.colors.border,
           borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
           borderRadius: Number(theme.tokens.radii.sm),
-          paddingVertical: Number(theme.tokens.spacing['2']),
           paddingHorizontal: Number(theme.tokens.spacing['3']),
         }}
       >

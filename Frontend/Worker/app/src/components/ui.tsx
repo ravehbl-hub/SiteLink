@@ -100,6 +100,8 @@ export function Title({ children }: { children: React.ReactNode }) {
         fontSize: Number(theme.tokens.fontSize.xl ?? 22),
         fontWeight: '700',
         marginBottom: Number(theme.tokens.spacing['3']),
+        // Follow the writing direction: start-aligned (right in he, left in en/tr).
+        textAlign: 'auto',
       }}
     >
       {children}
@@ -116,6 +118,7 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
         fontSize: Number(theme.tokens.fontSize.sm ?? 14),
         fontWeight: '600',
         marginBottom: Number(theme.tokens.spacing['2']),
+        textAlign: 'auto',
       }}
     >
       {children}
@@ -136,6 +139,9 @@ export function Body({
   const { theme } = useTheme();
   const style: TextStyle = {
     color: muted ? theme.colors.textMuted : theme.colors.textPrimary,
+    // Follow the writing direction so labels/values sit on the start edge of
+    // their flex slot (right in he, left in en/tr).
+    textAlign: 'auto',
     ...(numeric ? TABULAR : null),
   };
   return <Text style={style}>{children}</Text>;
@@ -153,6 +159,7 @@ export function Field({
           color: theme.colors.textSecondary,
           marginBottom: Number(theme.tokens.spacing['1']),
           fontSize: Number(theme.tokens.fontSize.sm ?? 14),
+          textAlign: 'auto',
         }}
       >
         {label}
@@ -269,12 +276,15 @@ export function Metric({ label, value }: { label: string; value: string | number
           color: theme.colors.accent,
           fontSize: Number(theme.tokens.fontSize.xl ?? 22),
           fontWeight: '700',
+          textAlign: 'auto',
           ...TABULAR,
         }}
       >
         {value}
       </Text>
-      <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{label}</Text>
+      <Text style={{ color: theme.colors.textMuted, fontSize: 12, textAlign: 'auto' }}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -301,7 +311,7 @@ export function ErrorState({ label, onRetry }: { label: string; onRetry?: () => 
   const { theme } = useTheme();
   return (
     <View style={styles.center}>
-      <Text style={{ color: theme.colors.danger, marginBottom: 8 }}>{label}</Text>
+      <Text style={{ color: theme.colors.danger, marginBottom: 8, textAlign: 'auto' }}>{label}</Text>
       {onRetry ? <Button title="↻" variant="secondary" onPress={onRetry} /> : null}
     </View>
   );

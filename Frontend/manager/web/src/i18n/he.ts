@@ -269,6 +269,8 @@ export const he: Resources = {
     archived: 'בארכיון',
     active: 'פעיל',
     unarchive: 'שחזר מארכיון',
+    remove: 'מחק',
+    confirmRemove: 'למחוק חברה זו? עובדים המשויכים אליה ינותקו ממנה.',
     nameExists: 'כבר קיימת חברה בשם זה.',
     empty: 'אין עדיין חברות כוח אדם.',
   },

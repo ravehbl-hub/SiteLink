@@ -269,6 +269,8 @@ export const tr: Resources = {
     archived: 'Arşivlendi',
     active: 'Aktif',
     unarchive: 'Arşivden çıkar',
+    remove: 'Sil',
+    confirmRemove: 'Bu şirket silinsin mi? Ona bağlı çalışanların bağlantısı kaldırılacak.',
     nameExists: 'Bu ada sahip bir şirket zaten var.',
     empty: 'Henüz personel şirketi yok.',
   },

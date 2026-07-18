@@ -57,3 +57,11 @@ export function useArchivePersonnelCompany() {
     onSuccess: () => qc.invalidateQueries({ queryKey: LIST_ROOT }),
   });
 }
+
+export function useDeletePersonnelCompany() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => personnelCompaniesApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: LIST_ROOT }),
+  });
+}

@@ -229,6 +229,8 @@ export const endpoints = {
     api.post<PersonnelCompany>(`/personnel-companies/${id}/archive`),
   unarchivePersonnelCompany: (id: string) =>
     api.post<PersonnelCompany>(`/personnel-companies/${id}/unarchive`),
+  deletePersonnelCompany: (id: string) =>
+    api.del<void>(`/personnel-companies/${id}`),
 
   // Users
   listUsers: () => api.get<Paginated<User>>('/users'),

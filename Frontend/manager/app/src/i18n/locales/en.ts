@@ -72,6 +72,8 @@ export const en = {
     includeArchived: 'Include archived',
     archived: 'Archived',
     unarchive: 'Unarchive',
+    remove: 'Remove',
+    confirmRemove: 'Remove this company? Any linked workers will be unlinked.',
     archiveConfirm: 'Archive this company?',
     unarchiveConfirm: 'Unarchive this company?',
     duplicateName: 'A company with this name already exists',

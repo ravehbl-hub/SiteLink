@@ -267,6 +267,8 @@ export const en = {
     archived: 'Archived',
     active: 'Active',
     unarchive: 'Unarchive',
+    remove: 'Remove',
+    confirmRemove: 'Remove this company? Workers linked to it will be unlinked.',
     nameExists: 'A company with this name already exists.',
     empty: 'No personnel companies yet.',
   },

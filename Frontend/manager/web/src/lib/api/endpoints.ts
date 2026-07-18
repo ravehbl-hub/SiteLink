@@ -252,6 +252,9 @@ export const personnelCompaniesApi = {
   archive: (id: string) => http.post<PersonnelCompany>(`/personnel-companies/${id}/archive`),
   unarchive: (id: string) =>
     http.post<PersonnelCompany>(`/personnel-companies/${id}/unarchive`),
+  // Hard delete (MANAGER-only, 204). Workers referencing this company have their
+  // personnelCompanyId auto-nulled server-side (FK onDelete:SetNull) — safe, no block.
+  remove: (id: string) => http.del<void>(`/personnel-companies/${id}`),
 };
 
 /* ── Users ────────────────────────────────────────────────────────────── */

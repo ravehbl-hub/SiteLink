@@ -74,6 +74,8 @@ export const tr: TranslationResources = {
     includeArchived: 'Arşivlenenleri göster',
     archived: 'Arşivlendi',
     unarchive: 'Arşivden çıkar',
+    remove: 'Kaldır',
+    confirmRemove: 'Bu şirket kaldırılsın mı? Bağlı çalışanların bağlantısı kaldırılacak.',
     archiveConfirm: 'Bu şirket arşivlensin mi?',
     unarchiveConfirm: 'Bu şirket arşivden çıkarılsın mı?',
     duplicateName: 'Bu ada sahip bir şirket zaten var',

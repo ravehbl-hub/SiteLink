@@ -32,7 +32,11 @@ import {
   Title,
 } from '../../components/ui';
 import { PersonnelCompanyFormModal } from './PersonnelCompanyFormModal';
-import { useArchivePersonnelCompany, usePersonnelCompanies } from './hooks';
+import {
+  useArchivePersonnelCompany,
+  useDeletePersonnelCompany,
+  usePersonnelCompanies,
+} from './hooks';
 
 export function PersonnelCompaniesScreen() {
   const { t } = useTranslation();
@@ -43,6 +47,7 @@ export function PersonnelCompaniesScreen() {
 
   const q = usePersonnelCompanies(includeArchived);
   const archiveMut = useArchivePersonnelCompany();
+  const deleteMut = useDeletePersonnelCompany();
 
   const openAdd = () => {
     setEditTarget(null);
@@ -75,6 +80,20 @@ export function PersonnelCompaniesScreen() {
         },
       ],
     );
+  };
+
+  const confirmRemove = (c: PersonnelCompany) => {
+    Alert.alert(t('personnelCompanies.confirmRemove'), c.name, [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('personnelCompanies.remove'),
+        style: 'destructive',
+        onPress: () =>
+          deleteMut.mutate(c.id, {
+            onError: () => Alert.alert(t('common.error')),
+          }),
+      },
+    ]);
   };
 
   const contactLine = (c: PersonnelCompany): string => {
@@ -131,8 +150,15 @@ export function PersonnelCompaniesScreen() {
               <View style={{ minWidth: 110 }}>
                 <Button
                   title={c.isArchived ? t('personnelCompanies.unarchive') : t('common.archive')}
-                  variant={c.isArchived ? 'primary' : 'danger'}
+                  variant={c.isArchived ? 'primary' : 'secondary'}
                   onPress={() => toggleArchive(c)}
+                />
+              </View>
+              <View style={{ minWidth: 110 }}>
+                <Button
+                  title={t('personnelCompanies.remove')}
+                  variant="danger"
+                  onPress={() => confirmRemove(c)}
                 />
               </View>
             </Row>

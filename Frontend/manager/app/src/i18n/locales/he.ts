@@ -74,6 +74,8 @@ export const he: TranslationResources = {
     includeArchived: 'כולל בארכיון',
     archived: 'בארכיון',
     unarchive: 'שחזור מארכיון',
+    remove: 'מחיקה',
+    confirmRemove: 'למחוק חברה זו? עובדים מקושרים ינותקו מהחברה.',
     archiveConfirm: 'להעביר חברה זו לארכיון?',
     unarchiveConfirm: 'לשחזר חברה זו מהארכיון?',
     duplicateName: 'כבר קיימת חברה בשם זה',

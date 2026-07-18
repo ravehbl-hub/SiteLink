@@ -14,6 +14,7 @@ import { DataState, Modal, Field, Chip } from '../../components/ui';
 import {
   useArchivePersonnelCompany,
   useCreatePersonnelCompany,
+  useDeletePersonnelCompany,
   usePersonnelCompaniesList,
   useUpdatePersonnelCompany,
 } from './hooks';
@@ -26,6 +27,16 @@ export function PersonnelCompaniesScreen() {
   const [creating, setCreating] = useState(false);
 
   const archiveMut = useArchivePersonnelCompany();
+  const deleteMut = useDeletePersonnelCompany();
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  const remove = (c: PersonnelCompany) => {
+    if (!window.confirm(t('personnelCompanies.confirmRemove'))) return;
+    setRemoveError(null);
+    deleteMut.mutate(c.id, {
+      onError: (e) => setRemoveError(e instanceof Error ? e.message : String(e)),
+    });
+  };
 
   return (
     <div>
@@ -48,6 +59,9 @@ export function PersonnelCompaniesScreen() {
       </div>
 
       <div className="card">
+        {removeError ? (
+          <div className="banner banner-danger">{removeError}</div>
+        ) : null}
         <DataState
           isLoading={list.isLoading}
           error={list.error}
@@ -94,6 +108,13 @@ export function PersonnelCompaniesScreen() {
                           {c.isArchived
                             ? t('personnelCompanies.unarchive')
                             : t('common.archive')}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          disabled={deleteMut.isPending}
+                          onClick={() => remove(c)}
+                        >
+                          {t('personnelCompanies.remove')}
                         </button>
                       </div>
                     </td>

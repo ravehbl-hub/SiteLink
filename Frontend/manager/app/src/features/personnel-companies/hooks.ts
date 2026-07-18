@@ -58,3 +58,16 @@ export function useArchivePersonnelCompany() {
     onSuccess: () => invalidate(),
   });
 }
+
+/**
+ * Hard-delete a company (DELETE → 204). The backend auto-nulls the
+ * personnelCompanyId of any linked workers (FK SetNull), so this is a safe,
+ * MANAGER-only destructive action. Invalidates every list variant on success.
+ */
+export function useDeletePersonnelCompany() {
+  const invalidate = useInvalidateList();
+  return useMutation({
+    mutationFn: (id: string) => endpoints.deletePersonnelCompany(id),
+    onSuccess: () => invalidate(),
+  });
+}

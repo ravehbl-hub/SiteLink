@@ -57,6 +57,10 @@ export const salaryDataSchema = z.object({
 export const listWorkersQuery = z.object({
   includeArchived: z.coerce.boolean().default(false),
   siteId: z.string().optional(),
+  // SERVER-SIDE search over the human-searchable text fields (firstName/lastName/
+  // phone). Trimmed + length-capped. This is an ADDITIONAL AND filter layered on top
+  // of the foreman site-scope + archived filters — it can NEVER widen scope.
+  search: z.string().trim().max(100).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });

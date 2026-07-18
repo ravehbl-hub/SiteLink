@@ -131,10 +131,41 @@ export class WorkersService {
         ? { assignments: { some: { siteId: query.siteId } } }
         : {};
     }
-    const where = {
+    const where: Record<string, unknown> = {
       ...(query.includeArchived ? {} : { isArchived: false }),
       ...siteFilter,
     };
+
+    // SERVER-SIDE SEARCH (paginated list → must filter in the DB, not the page).
+    // The search is layered as an ADDITIONAL AND condition on top of the scope +
+    // archived `where` above — it NEVER replaces or widens them, so a foreman still
+    // only searches WITHIN their scoped set (the `assignments.some` site filter and
+    // the search OR are ANDed together). Case-insensitive via Postgres `mode`.
+    //
+    // Two-word refinement: a query like "yossi cohen" also matches when firstName
+    // contains "yossi" AND lastName contains "cohen" (Prisma can't concat columns),
+    // in addition to the plain per-field OR. profession is an enum (contains won't
+    // apply) so we intentionally search name + phone only.
+    const search = query.search?.trim();
+    if (search) {
+      const or: Record<string, unknown>[] = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
+      const parts = search.split(/\s+/).filter(Boolean);
+      if (parts.length === 2) {
+        const [first, last] = parts;
+        or.push({
+          AND: [
+            { firstName: { contains: first, mode: 'insensitive' } },
+            { lastName: { contains: last, mode: 'insensitive' } },
+          ],
+        });
+      }
+      where.AND = [{ OR: or }];
+    }
+
     const skip = (query.page - 1) * query.pageSize;
     const [rows, total] = await Promise.all([
       prisma.worker.findMany({

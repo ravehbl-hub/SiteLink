@@ -11,12 +11,13 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { WorkerRequest } from '@sitelink/shared';
-import { RequestStatus, RequestType } from '@sitelink/shared';
+import { RequestStatus, RequestType, Role } from '@sitelink/shared';
 import { requestsApi } from '../../lib/api/endpoints';
 import { qk } from '../../lib/api/queryKeys';
 import { useWorkersList } from '../../lib/api/hooks';
 import { ApiError } from '../../lib/api/client';
-import { DataState, Chip } from '../../components/ui';
+import { useAuth } from '../../app/AuthProvider';
+import { DataState, Chip, Modal, Field } from '../../components/ui';
 import { formatCurrency, formatDate } from '../../lib/format';
 
 type StatusFilter = RequestStatus | 'ALL';
@@ -117,10 +118,21 @@ export function RequestsScreen() {
 function RequestRow({ req, workerName }: { req: WorkerRequest; workerName: string }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<RequestStatus | null>(null);
+  const [showRedecide, setShowRedecide] = useState(false);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['requests'] });
+  // Re-decide (a financial reversal) also touches the ledger/attendance records the
+  // side effect created, so invalidate the finance + dashboard queries too.
+  const invalidateSideEffects = () => {
+    qc.invalidateQueries({ queryKey: ['requests'] });
+    qc.invalidateQueries({ queryKey: ['loans'] });
+    qc.invalidateQueries({ queryKey: ['advances'] });
+    qc.invalidateQueries({ queryKey: ['attendance'] });
+    qc.invalidateQueries({ queryKey: ['dashboard'] });
+    qc.invalidateQueries({ queryKey: ['working-hours'] });
+  };
 
   const resolveMut = useMutation({
     mutationFn: (action: 'approve' | 'reject') =>
@@ -128,7 +140,7 @@ function RequestRow({ req, workerName }: { req: WorkerRequest; workerName: strin
     onSuccess: (_data, action) => {
       setError(null);
       setDone(action === 'approve' ? RequestStatus.APPROVED : RequestStatus.REJECTED);
-      invalidate();
+      invalidateSideEffects();
     },
     onError: (e) => {
       if (e instanceof ApiError) {
@@ -140,6 +152,11 @@ function RequestRow({ req, workerName }: { req: WorkerRequest; workerName: strin
   });
 
   const isPending = req.status === RequestStatus.PENDING;
+  const isResolved =
+    req.status === RequestStatus.APPROVED || req.status === RequestStatus.REJECTED;
+  // ADMIN/MANAGER only. Re-decide is available ONLY on already-RESOLVED rows.
+  const canManage = user?.role === Role.ADMIN || user?.role === Role.MANAGER;
+  const canRedecide = canManage && isResolved;
 
   const detail =
     req.type === RequestType.VACATION
@@ -183,9 +200,140 @@ function RequestRow({ req, workerName }: { req: WorkerRequest; workerName: strin
               </button>
             </div>
           )
+        ) : canRedecide ? (
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              setError(null);
+              setShowRedecide(true);
+            }}
+          >
+            {t('requests.redecide')}
+          </button>
         ) : null}
         {error ? <span className="field-error">{error}</span> : null}
+        {showRedecide ? (
+          <RedecideModal
+            req={req}
+            onClose={() => setShowRedecide(false)}
+            onSuccess={() => {
+              setShowRedecide(false);
+              invalidateSideEffects();
+            }}
+          />
+        ) : null}
       </td>
     </tr>
+  );
+}
+
+/**
+ * Re-decide CONFIRM modal — an UNAMBIGUOUS financial reversal. Shows the current
+ * status → the flip target and a clear note that the loan/advance/vacation side
+ * effect will be reversed/re-applied. Optional resolutionNotes. On confirm →
+ * PATCH /requests/:id/redecide. Handles the CAS-conflict + partial-repayment 409s.
+ */
+function RedecideModal({
+  req,
+  onClose,
+  onSuccess,
+}: {
+  req: WorkerRequest;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { t } = useTranslation();
+  const [notes, setNotes] = useState('');
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  // The flip target is the OTHER terminal status.
+  const target =
+    req.status === RequestStatus.APPROVED
+      ? RequestStatus.REJECTED
+      : RequestStatus.APPROVED;
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      requestsApi.redecide(req.id, {
+        status: target,
+        resolutionNotes: notes.trim() || null,
+      }),
+    onSuccess: () => onSuccess(),
+    onError: (e) => {
+      if (e instanceof ApiError) {
+        if (e.status === 409) {
+          // CAS conflict vs. partial-repayment block — surface the backend message
+          // (it distinguishes "changed concurrently" from "has repayments"). Show a
+          // clear leading label plus the server detail.
+          setModalError(
+            /concurrent/i.test(e.message)
+              ? t('requests.redecideConflict')
+              : e.message,
+          );
+          return;
+        }
+        if (e.status === 403) {
+          setModalError(t('requests.redecideForbidden'));
+          return;
+        }
+        setModalError(e.message);
+        return;
+      }
+      setModalError(e instanceof Error ? e.message : String(e));
+    },
+  });
+
+  return (
+    <Modal
+      title={t('requests.redecideTitle')}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose} disabled={mutation.isPending}>
+            {t('common.cancel')}
+          </button>
+          <button
+            className="btn btn-danger"
+            disabled={mutation.isPending}
+            onClick={() => {
+              setModalError(null);
+              mutation.mutate();
+            }}
+          >
+            {t('requests.redecideConfirm')}
+          </button>
+        </>
+      }
+    >
+      <div className="stack">
+        <p style={{ margin: 0 }}>
+          {t('requests.redecidePrompt', {
+            from: t(`requestStatus.${req.status}`),
+            to: t(`requestStatus.${target}`),
+          })}
+        </p>
+        <div
+          className="banner banner-warning"
+          role="status"
+          style={{ display: 'flex', gap: 'var(--sl-space-2, 8px)', alignItems: 'center' }}
+        >
+          <Chip tone={STATUS_TONE[req.status]}>{t(`requestStatus.${req.status}`)}</Chip>
+          <span aria-hidden="true">→</span>
+          <Chip tone={STATUS_TONE[target]}>{t(`requestStatus.${target}`)}</Chip>
+        </div>
+        <p className="muted" style={{ margin: 0 }}>
+          {t('requests.redecideSideEffectNote')}
+        </p>
+        <Field label={t('requests.resolutionNotes')}>
+          <textarea
+            className="textarea"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={t('requests.resolutionNotesHint')}
+          />
+        </Field>
+        {modalError ? <div className="banner banner-danger">{modalError}</div> : null}
+      </div>
+    </Modal>
   );
 }

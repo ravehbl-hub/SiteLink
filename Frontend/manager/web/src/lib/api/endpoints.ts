@@ -73,6 +73,26 @@ export const sitesApi = {
 };
 
 /* ── Workers ──────────────────────────────────────────────────────────── */
+/**
+ * Worker create/update wire body. Extends the shared DTO with the transitional
+ * `personnelCompanyId` FK (the manager FE is cut over to the PersonnelCompany
+ * PICKER; the legacy free-text `personnelCompany` on the shared DTO is no longer
+ * written by this app). Kept as a local intersection so the picker can send the id
+ * without waiting on a shared-package bump.
+ */
+export type CreateWorkerBody = CreateWorkerInput & { personnelCompanyId?: string | null };
+export type UpdateWorkerBody = UpdateWorkerInput & { personnelCompanyId?: string | null };
+
+/**
+ * Worker read aggregate as returned by the API, augmented with the transitional
+ * `personnelCompanyId` FK so the edit form can pre-select the picker. Optional
+ * because the legacy read path may only carry the free-text `personnelCompany`
+ * (we fall back to matching by name in that case).
+ */
+export type WorkerDetailsWithCompany = WorkerWithDetails & {
+  personnelCompanyId?: string | null;
+};
+
 export const workersApi = {
   list: (params?: {
     includeArchived?: boolean;
@@ -80,10 +100,10 @@ export const workersApi = {
     page?: number;
     pageSize?: number;
   }) => http.get<Paginated<Worker>>('/workers', params as Query),
-  get: (id: string) => http.get<WorkerWithDetails>(`/workers/${id}`),
-  create: (body: CreateWorkerInput) => http.post<WorkerWithDetails>('/workers', body),
-  update: (id: string, body: UpdateWorkerInput) =>
-    http.patch<WorkerWithDetails>(`/workers/${id}`, body),
+  get: (id: string) => http.get<WorkerDetailsWithCompany>(`/workers/${id}`),
+  create: (body: CreateWorkerBody) => http.post<WorkerDetailsWithCompany>('/workers', body),
+  update: (id: string, body: UpdateWorkerBody) =>
+    http.patch<WorkerDetailsWithCompany>(`/workers/${id}`, body),
   archive: (id: string) => http.post<Worker>(`/workers/${id}/archive`),
   remove: (id: string) => http.del<void>(`/workers/${id}`),
   upsertSalaryData: (
@@ -185,6 +205,14 @@ export const requestsApi = {
     http.get<Paginated<WorkerRequest>>('/requests', params as Query),
   approve: (id: string) => http.patch<WorkerRequest>(`/requests/${id}/approve`),
   reject: (id: string) => http.patch<WorkerRequest>(`/requests/${id}/reject`),
+  /**
+   * RE-DECIDE an already-RESOLVED request (ADMIN/MANAGER only). Flips APPROVED↔REJECTED
+   * and reverses/re-applies the loan/advance/vacation side effect atomically server-side.
+   */
+  redecide: (
+    id: string,
+    body: { status: RequestStatus.APPROVED | RequestStatus.REJECTED; resolutionNotes?: string | null },
+  ) => http.patch<WorkerRequest>(`/requests/${id}/redecide`, body),
 };
 
 /* ── Payment: profession wage rates ───────────────────────────────────── */

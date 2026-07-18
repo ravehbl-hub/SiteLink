@@ -123,6 +123,12 @@ export function WorkerDetailsScreen({ route, navigation }: Props) {
         </Row>
       </Row>
 
+      <Button
+        title={t('common.edit')}
+        variant="secondary"
+        onPress={() => navigation.navigate('WorkerWizard', { workerId })}
+      />
+
       <Card>
         <SectionHeading>{t('workers.details')}</SectionHeading>
         <DetailRow label={t('workers.profession')} value={t(`professions.${w.profession}`)} />

@@ -200,6 +200,14 @@ export const endpoints = {
     api.get<WorkerRequest[] | Paginated<WorkerRequest>>('/requests', params).then(toArray),
   approveRequest: (id: string) => api.patch<WorkerRequest>(`/requests/${id}/approve`),
   rejectRequest: (id: string) => api.patch<WorkerRequest>(`/requests/${id}/reject`),
+  // Re-decide an ALREADY-RESOLVED request (ADMIN/MANAGER). Flips APPROVED↔REJECTED and
+  // atomically reverses/re-applies the loan/advance/vacation side effect server-side.
+  // Body carries only the target status + optional notes (effect target is server-derived).
+  // 409 on: same-status, concurrent change (CAS), or a partially-repaid tagged obligation.
+  redecideRequest: (
+    id: string,
+    body: { status: RequestStatus; resolutionNotes?: string | null },
+  ) => api.patch<WorkerRequest>(`/requests/${id}/redecide`, body),
 
   // Personnel companies (FR-MGR-EMP-2). Org-wide staffing companies; ADMIN/MANAGER
   // manage the full list. Archive/unarchive are POST toggles; duplicate name → 409.

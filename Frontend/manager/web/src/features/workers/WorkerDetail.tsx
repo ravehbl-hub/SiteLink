@@ -1,16 +1,21 @@
 /** Worker Details view/edit (FR-MGR-EMP-2/4) + Worker Docs signed-URL flow
  *  (FR-MGR-EMP-3, Architecture §7a) + Worker Salary data upsert. */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   RateType,
   WorkerDocType,
-  type UpdateWorkerInput,
   type WorkerDoc,
 } from '@sitelink/shared';
-import { workersApi } from '../../lib/api/endpoints';
+import {
+  workersApi,
+  type UpdateWorkerBody,
+  type WorkerDetailsWithCompany,
+} from '../../lib/api/endpoints';
+import { ApiError } from '../../lib/api/client';
+import { usePersonnelCompaniesList } from '../personnel-companies/hooks';
 import { qk } from '../../lib/api/queryKeys';
 import { DataState, Field, Chip } from '../../components/ui';
 import { dateInputToISO, formatDate, toDateInput } from '../../lib/format';
@@ -51,7 +56,15 @@ export function WorkerDetail() {
   );
 }
 
-function toForm(w: Awaited<ReturnType<typeof workersApi.get>>): WorkerFormState {
+function toForm(
+  w: WorkerDetailsWithCompany,
+  companyIdByName: Map<string, string>,
+): WorkerFormState {
+  // Prefer the FK id from the read DTO; fall back to matching the legacy free-text
+  // `personnelCompany` name against the loaded active companies (transitional).
+  const personnelCompanyId =
+    w.personnelCompanyId ??
+    (w.personnelCompany ? companyIdByName.get(w.personnelCompany.trim()) ?? '' : '');
   return {
     firstName: w.firstName,
     lastName: w.lastName,
@@ -63,7 +76,7 @@ function toForm(w: Awaited<ReturnType<typeof workersApi.get>>): WorkerFormState 
     phone: w.phone ?? '',
     email: w.email ?? '',
     password: '',
-    personnelCompany: w.personnelCompany ?? '',
+    personnelCompanyId,
     residence: w.residence ?? '',
     startDate: toDateInput(w.startDate),
     siteIds: w.siteIds,
@@ -75,19 +88,39 @@ function DetailsCard({
   data,
 }: {
   workerId: string;
-  data: Awaited<ReturnType<typeof workersApi.get>>;
+  data: WorkerDetailsWithCompany;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [form, setForm] = useState<WorkerFormState>(() => toForm(data));
+  // Load active companies once so we can pre-select the picker by FK id, or (legacy)
+  // match the worker's free-text company name to an id.
+  const companies = usePersonnelCompaniesList(false);
+  const companyIdByName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of companies.data?.items ?? []) map.set(c.name.trim(), c.id);
+    return map;
+  }, [companies.data]);
+  const [form, setForm] = useState<WorkerFormState>(() => toForm(data, new Map()));
+  const [preselected, setPreselected] = useState(false);
   const [errors, setErrors] = useState<WorkerFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
+
+  // Once companies load, pre-select the picker if we couldn't resolve the id yet
+  // (legacy name-only workers). Runs once and never clobbers a user edit.
+  useEffect(() => {
+    if (preselected || form.personnelCompanyId || companies.data == null) return;
+    const resolved = toForm(data, companyIdByName).personnelCompanyId;
+    if (resolved) setForm((f) => ({ ...f, personnelCompanyId: resolved }));
+    setPreselected(true);
+  }, [companies.data, companyIdByName, data, form.personnelCompanyId, preselected]);
 
   const set = (patch: Partial<WorkerFormState>) => setForm((f) => ({ ...f, ...patch }));
 
   const save = useMutation({
     mutationFn: () => {
-      const body: UpdateWorkerInput = {
+      // EDIT decision: the password field is OMITTED on edit — the backend PATCH does
+      // NOT reset the Supabase auth password, so we never send/show it here.
+      const body: UpdateWorkerBody = {
         firstName: form.firstName,
         lastName: form.lastName,
         profession: form.profession,
@@ -100,7 +133,8 @@ function DetailsCard({
         // propagates to the linked User.email server-side. Only send when present so
         // legacy login-less workers (null email) aren't forced to acquire one here.
         ...(form.email.trim() ? { email: form.email.trim() } : {}),
-        personnelCompany: form.personnelCompany || null,
+        // Personnel company via the FK PICKER; empty selection → null (clears it).
+        personnelCompanyId: form.personnelCompanyId || null,
         residence: form.residence || null,
         startDate: form.startDate ? dateInputToISO(form.startDate) : null,
         siteIds: form.siteIds,
@@ -108,16 +142,25 @@ function DetailsCard({
       return workersApi.update(workerId, body);
     },
     onSuccess: () => {
+      setError(null);
       qc.invalidateQueries({ queryKey: qk.worker(workerId) });
       qc.invalidateQueries({ queryKey: ['workers'] });
     },
-    onError: (e) => setError(e instanceof Error ? e.message : String(e)),
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 409) {
+        // Duplicate login email → surface inline on the email field.
+        setErrors((prev) => ({ ...prev, email: t('workers.emailExists') }));
+        return;
+      }
+      setError(e instanceof Error ? e.message : String(e));
+    },
   });
 
   function onSave() {
     const errs = validateWorker(form, t('common.required'), {
       // On edit, email is optional (legacy login-less workers keep null), but if
       // supplied it must be well-formed since it propagates to the linked login.
+      // Password is NOT validated on edit — the field is omitted entirely.
       requireEmail: false,
       emailInvalid: t('workers.emailInvalid'),
     });

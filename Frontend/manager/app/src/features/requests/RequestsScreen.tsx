@@ -23,7 +23,9 @@ import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
 import { money, shortDate } from '../../lib/format';
 import { ApiError } from '../../lib/api';
+import { useAuth } from '../../auth/AuthProvider';
 import { useTheme } from '../../theme/ThemeProvider';
+import { Role } from '@sitelink/shared';
 import {
   Body,
   Button,
@@ -51,7 +53,12 @@ const STATUS_TONE: Record<RequestStatus, 'warning' | 'success' | 'danger'> = {
 export function RequestsScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const { user } = useAuth();
   const qc = useQueryClient();
+
+  // Re-decide (flipping an already-RESOLVED request) is an ADMIN/MANAGER-only action
+  // with real financial side effects — gate the UI to those roles (backend re-gates).
+  const canRedecide = user?.role === Role.ADMIN || user?.role === Role.MANAGER;
   // Default filter = ALL (the inbox opens showing every request status).
   const [filter, setFilter] = useState<Filter>('ALL');
 
@@ -103,6 +110,62 @@ export function RequestsScreen() {
       ],
     );
 
+  // RE-DECIDE: flip an already-RESOLVED request to the other terminal status. The
+  // backend atomically reverses/re-applies the loan/advance/vacation side effect, so
+  // on success we invalidate not only the requests list but also the dashboard and the
+  // finance (loans/advances) queries that reflect those side effects.
+  const redecideMut = useMutation({
+    mutationFn: (v: { id: string; target: RequestStatus }) =>
+      endpoints.redecideRequest(v.id, { status: v.target }),
+    onSuccess: async (_data, v) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['requests'] }),
+        qc.invalidateQueries({ queryKey: ['dashboard'] }),
+        qc.invalidateQueries({ queryKey: ['loans'] }),
+        qc.invalidateQueries({ queryKey: ['advances'] }),
+      ]);
+      Alert.alert(
+        t(
+          v.target === RequestStatus.APPROVED
+            ? 'requests.redecidedApproved'
+            : 'requests.redecidedRejected',
+        ),
+      );
+    },
+    onError: async (e) => {
+      // 409 covers the CAS lost-update AND the partial-repayment reversal block; the
+      // backend sends a precise message — surface it verbatim so the manager sees why.
+      if (e instanceof ApiError && e.status === 409) {
+        await qc.invalidateQueries({ queryKey: ['requests'] });
+        Alert.alert(t('requests.redecideConflictTitle'), e.message);
+        return;
+      }
+      Alert.alert(t('common.error'), e instanceof ApiError ? e.message : String(e));
+    },
+  });
+
+  // Confirm the flip UNAMBIGUOUSLY: explicit current→target status and a warning that
+  // this reverses/re-applies the loan/advance/vacation side effect.
+  const confirmRedecide = (r: WorkerRequest) => {
+    const target =
+      r.status === RequestStatus.APPROVED ? RequestStatus.REJECTED : RequestStatus.APPROVED;
+    Alert.alert(
+      t('requests.redecideConfirmTitle'),
+      t('requests.redecideConfirmBody', {
+        from: statusLabel(r.status),
+        to: statusLabel(target),
+      }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('requests.redecideConfirmCta', { status: statusLabel(target) }),
+          style: target === RequestStatus.REJECTED ? 'destructive' : 'default',
+          onPress: () => redecideMut.mutate({ id: r.id, target }),
+        },
+      ],
+    );
+  };
+
   const filterOptions: { value: Filter; label: string }[] = [
     { value: 'ALL', label: t('requests.filterAll') },
     { value: RequestStatus.PENDING, label: t('requests.filterPending') },
@@ -133,7 +196,9 @@ export function RequestsScreen() {
 
   const renderItem = ({ item }: { item: WorkerRequest }) => {
     const pending = item.status === RequestStatus.PENDING;
+    const resolved = !pending; // APPROVED or REJECTED
     const busy = resolveMut.isPending && resolveMut.variables?.id === item.id;
+    const redeciding = redecideMut.isPending && redecideMut.variables?.id === item.id;
     return (
       <Card
         style={
@@ -185,6 +250,28 @@ export function RequestsScreen() {
                   />
                 </View>
               </>
+            )}
+          </Row>
+        ) : null}
+
+        {/* RESOLVED (not pending) → ADMIN/MANAGER can re-decide (flip the decision). */}
+        {resolved && canRedecide ? (
+          <Row
+            style={{
+              justifyContent: 'flex-end',
+              marginTop: Number(theme.tokens.spacing['3']),
+            }}
+          >
+            {redeciding ? (
+              <ActivityIndicator color={theme.colors.accent} />
+            ) : (
+              <View style={{ minWidth: 140 }}>
+                <Button
+                  title={t('requests.redecide')}
+                  variant="secondary"
+                  onPress={() => confirmRedecide(item)}
+                />
+              </View>
             )}
           </Row>
         ) : null}

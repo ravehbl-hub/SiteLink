@@ -5,8 +5,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { RateType, type CreateWorkerInput } from '@sitelink/shared';
-import { workersApi } from '../../lib/api/endpoints';
+import { RateType } from '@sitelink/shared';
+import { workersApi, type CreateWorkerBody } from '../../lib/api/endpoints';
+import { ApiError } from '../../lib/api/client';
+import { qk } from '../../lib/api/queryKeys';
 import { Field } from '../../components/ui';
 import { dateInputToISO } from '../../lib/format';
 import {
@@ -39,7 +41,7 @@ export function WorkerWizard() {
 
   const create = useMutation({
     mutationFn: () => {
-      const body: CreateWorkerInput & {
+      const body: CreateWorkerBody & {
         salaryData?: {
           hourlyWage: number;
           rateType: RateType;
@@ -58,8 +60,10 @@ export function WorkerWizard() {
         // item 12: email is REQUIRED — every new worker is provisioned a WORKER
         // login from this address. Validated (non-empty + format) before we get here.
         email: form.email.trim(),
-        ...(form.password ? { password: form.password } : {}),
-        personnelCompany: form.personnelCompany || null,
+        // Password is REQUIRED on create (min 8, validated at step 0). Always sent.
+        password: form.password,
+        // Personnel company via the FK PICKER; empty selection → null.
+        personnelCompanyId: form.personnelCompanyId || null,
         residence: form.residence || null,
         startDate: form.startDate ? dateInputToISO(form.startDate) : null,
         siteIds: form.siteIds,
@@ -78,9 +82,25 @@ export function WorkerWizard() {
     },
     onSuccess: (worker) => {
       qc.invalidateQueries({ queryKey: ['workers'] });
+      qc.invalidateQueries({ queryKey: qk.worker(worker.id) });
       navigate(`/workers/${worker.id}`);
     },
-    onError: (e) => setError(e instanceof Error ? e.message : String(e)),
+    onError: (e) => {
+      if (e instanceof ApiError) {
+        // 409 = duplicate login email → surface inline on the email field and jump
+        // back to the details step so the user can fix it.
+        if (e.status === 409) {
+          setErrors((prev) => ({ ...prev, email: t('workers.emailExists') }));
+          setStep(0);
+          setError(null);
+          return;
+        }
+        // 400 = validation (e.g. short password) → show the server message.
+        setError(e.message);
+        return;
+      }
+      setError(e instanceof Error ? e.message : String(e));
+    },
   });
 
   function goToSalary() {
@@ -88,6 +108,9 @@ export function WorkerWizard() {
       requireEmail: true,
       emailRequired: t('workers.emailRequired'),
       emailInvalid: t('workers.emailInvalid'),
+      requirePassword: true,
+      passwordRequired: t('workers.passwordRequired'),
+      passwordTooShort: t('workers.passwordTooShort'),
     });
     setErrors(errs);
     if (Object.keys(errs).length === 0) setStep(1);

@@ -1,5 +1,6 @@
-/** Worker list (FR-MGR-EMP-5/6): active + archives toggle, per-site filter,
- *  archive/remove, link to details, and a launcher for the Worker Wizard. */
+/** Worker list (FR-MGR-EMP-5/6): Active ⇄ Archived view switch, per-site filter,
+ *  archive/restore/remove, link to details, and a launcher for the Worker Wizard.
+ *  Archived view queries GET /workers?archivedOnly=true (ONLY archived rows). */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,7 +15,9 @@ export function WorkersList() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const sites = useSitesList();
-  const [includeArchived, setIncludeArchived] = useState(false);
+  // Active ⇄ Archived VIEW switch. false = Active (default GET /workers, no
+  // archived); true = Archived (GET /workers?archivedOnly=true — ONLY archived).
+  const [archived, setArchived] = useState(false);
   const [siteId, setSiteId] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -34,7 +37,9 @@ export function WorkersList() {
   }, [debouncedSearch]);
 
   const params = {
-    includeArchived,
+    // archivedOnly drives the Archived view; server treats it as precedence
+    // over includeArchived, so we never send both.
+    archivedOnly: archived || undefined,
     siteId: siteId || undefined,
     search: debouncedSearch || undefined,
     page,
@@ -42,9 +47,14 @@ export function WorkersList() {
   };
   const list = useQuery({ queryKey: qk.workers(params), queryFn: () => workersApi.list(params) });
 
+  // Invalidate the broad ['workers'] root so BOTH views' cached queries refetch.
   const invalidate = () => qc.invalidateQueries({ queryKey: ['workers'] });
   const archiveMut = useMutation({
     mutationFn: (id: string) => workersApi.archive(id),
+    onSuccess: invalidate,
+  });
+  const unarchiveMut = useMutation({
+    mutationFn: (id: string) => workersApi.unarchive(id),
     onSuccess: invalidate,
   });
   const removeMut = useMutation({
@@ -80,14 +90,32 @@ export function WorkersList() {
             </option>
           ))}
         </select>
-        <label className="inline">
-          <input
-            type="checkbox"
-            checked={includeArchived}
-            onChange={(e) => setIncludeArchived(e.target.checked)}
-          />
-          {t('workers.showArchived')}
-        </label>
+        <div className="inline" role="group" aria-label={t('workers.showArchived')}>
+          <button
+            type="button"
+            className={`btn btn-sm${archived ? '' : ' btn-primary'}`}
+            aria-pressed={!archived}
+            onClick={() => {
+              if (!archived) return;
+              setArchived(false);
+              setPage(1);
+            }}
+          >
+            {t('workers.viewActive')}
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm${archived ? ' btn-primary' : ''}`}
+            aria-pressed={archived}
+            onClick={() => {
+              if (archived) return;
+              setArchived(true);
+              setPage(1);
+            }}
+          >
+            {t('workers.viewArchived')}
+          </button>
+        </div>
         <button className="btn btn-primary" onClick={() => navigate('/workers/new')}>
           {t('workers.newWorker')}
         </button>
@@ -97,8 +125,11 @@ export function WorkersList() {
         <DataState
           isLoading={list.isLoading}
           error={list.error}
-          isEmpty={list.data?.items.length === 0}
+          isEmpty={!archived && list.data?.items.length === 0}
         >
+          {archived && list.data?.items.length === 0 ? (
+            <div className="empty-state">{t('workers.noArchived')}</div>
+          ) : (
           <div className="table-wrap">
             <table className="data">
               <thead>
@@ -138,7 +169,16 @@ export function WorkersList() {
                         <button className="btn btn-sm" onClick={() => navigate(`/workers/${w.id}`)}>
                           {t('common.view')}
                         </button>
-                        {!w.isArchived ? (
+                        {w.isArchived ? (
+                          <button
+                            className="btn btn-sm"
+                            onClick={() => {
+                              if (confirm(t('workers.confirmRestore'))) unarchiveMut.mutate(w.id);
+                            }}
+                          >
+                            {t('workers.restore')}
+                          </button>
+                        ) : (
                           <button
                             className="btn btn-sm"
                             onClick={() => {
@@ -147,7 +187,7 @@ export function WorkersList() {
                           >
                             {t('common.archive')}
                           </button>
-                        ) : null}
+                        )}
                         <button
                           className="btn btn-sm btn-danger"
                           onClick={() => {
@@ -163,6 +203,7 @@ export function WorkersList() {
               </tbody>
             </table>
           </div>
+          )}
         </DataState>
       </div>
     </div>

@@ -1,11 +1,13 @@
 /**
- * Workers list (FR-MGR-EMP). Lists active workers with an archived toggle; taps
+ * Workers list (FR-MGR-EMP). An Active ⇄ Archived view switch: Active lists live
+ * workers, Archived lists ONLY archived ones (server ?archivedOnly=true), each
+ * with a Restore action. Search applies (ANDed server-side) in both views. Taps
  * open details; the + button starts the Worker Wizard.
  */
 import React, { useEffect, useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Alert, Pressable, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { endpoints } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
@@ -40,16 +42,35 @@ type Props = NativeStackScreenProps<WorkersStackParamList, 'WorkersList'>;
 export function WorkersListScreen({ navigation }: Props) {
   const { t } = useTranslation();
   const { theme } = useTheme();
-  const [includeArchived, setIncludeArchived] = useState(false);
+  const qc = useQueryClient();
+  // Active ⇄ Archived view. Archived shows ONLY archived rows (server-side).
+  const [archived, setArchived] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounced(searchInput.trim(), 300);
   // Only send `search` when a term is present; undefined keeps the full scoped list.
   const search = debouncedSearch.length > 0 ? debouncedSearch : undefined;
 
+  // Archived view → GET /workers?archivedOnly=true; Active view → default GET /workers.
+  // archivedOnly is part of the query key so each view refetches/caches independently.
+  const params = { archivedOnly: archived || undefined, search };
+
   const q = useQuery({
-    queryKey: qk.workers({ includeArchived, search }),
-    queryFn: () => endpoints.listWorkers({ includeArchived, search }),
+    queryKey: qk.workers(params),
+    queryFn: () => endpoints.listWorkers(params),
   });
+
+  // Restore an archived worker (MANAGER-only). On success invalidate the whole
+  // ['workers'] namespace so the row leaves the Archived view (and rejoins Active).
+  const restoreMut = useMutation({
+    mutationFn: (id: string) => endpoints.unarchiveWorker(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['workers'] }),
+  });
+
+  const confirmRestore = (id: string) =>
+    Alert.alert(t('workers.restore'), t('workers.confirmRestore'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('workers.restore'), onPress: () => restoreMut.mutate(id) },
+    ]);
 
   return (
     <Screen>
@@ -79,11 +100,11 @@ export function WorkersListScreen({ navigation }: Props) {
       />
       <Segmented
         options={[
-          { value: 'active', label: t('sites.active') },
-          { value: 'archived', label: t('workers.includeArchived') },
+          { value: 'active', label: t('workers.viewActive') },
+          { value: 'archived', label: t('workers.viewArchived') },
         ]}
-        value={includeArchived ? 'archived' : 'active'}
-        onChange={(v) => setIncludeArchived(v === 'archived')}
+        value={archived ? 'archived' : 'active'}
+        onChange={(v) => setArchived(v === 'archived')}
       />
 
       {q.isLoading ? (
@@ -91,7 +112,7 @@ export function WorkersListScreen({ navigation }: Props) {
       ) : q.isError ? (
         <ErrorState label={t('common.error')} onRetry={() => q.refetch()} />
       ) : !q.data || q.data.items.length === 0 ? (
-        <EmptyState label={t('common.empty')} />
+        <EmptyState label={archived ? t('workers.noArchived') : t('common.empty')} />
       ) : (
         q.data.items.map((w) => (
           <Pressable
@@ -118,6 +139,14 @@ export function WorkersListScreen({ navigation }: Props) {
                   )}
                 </Row>
               </Row>
+              {archived ? (
+                <Button
+                  title={t('workers.restore')}
+                  variant="secondary"
+                  onPress={() => confirmRestore(w.id)}
+                  loading={restoreMut.isPending && restoreMut.variables === w.id}
+                />
+              ) : null}
             </Card>
           </Pressable>
         ))

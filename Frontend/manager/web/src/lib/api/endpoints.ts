@@ -97,6 +97,7 @@ export type WorkerDetailsWithCompany = WorkerWithDetails & {
 export const workersApi = {
   list: (params?: {
     includeArchived?: boolean;
+    archivedOnly?: boolean;
     siteId?: string;
     search?: string;
     page?: number;
@@ -107,6 +108,7 @@ export const workersApi = {
   update: (id: string, body: UpdateWorkerBody) =>
     http.patch<WorkerDetailsWithCompany>(`/workers/${id}`, body),
   archive: (id: string) => http.post<Worker>(`/workers/${id}/archive`),
+  unarchive: (id: string) => http.post<Worker>(`/workers/${id}/unarchive`),
   remove: (id: string) => http.del<void>(`/workers/${id}`),
   upsertSalaryData: (
     id: string,

@@ -129,12 +129,17 @@ export const endpoints = {
   removeSite: (id: string) => api.del<void>(`/sites/${id}`),
 
   // Workers
-  listWorkers: (params?: { includeArchived?: boolean; siteId?: string; search?: string }) =>
-    api.get<Paginated<Worker>>('/workers', params),
+  listWorkers: (params?: {
+    includeArchived?: boolean;
+    archivedOnly?: boolean;
+    siteId?: string;
+    search?: string;
+  }) => api.get<Paginated<Worker>>('/workers', params),
   getWorker: (id: string) => api.get<WorkerWithDetails>(`/workers/${id}`),
   createWorker: (body: CreateWorkerInput) => api.post<Worker>('/workers', body),
   updateWorker: (id: string, body: UpdateWorkerInput) => api.patch<Worker>(`/workers/${id}`, body),
   archiveWorker: (id: string) => api.post<Worker>(`/workers/${id}/archive`),
+  unarchiveWorker: (id: string) => api.post<Worker>(`/workers/${id}/unarchive`),
   removeWorker: (id: string) => api.del<void>(`/workers/${id}`),
   upsertWorkerSalary: (id: string, body: WorkerSalaryDataInput) =>
     api.put<WorkerSalaryData>(`/workers/${id}/salary-data`, body),

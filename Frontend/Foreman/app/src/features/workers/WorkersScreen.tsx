@@ -13,7 +13,9 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { ApiError } from '../../lib/api';
+import { ApiError, uploadToSignedUrl } from '../../lib/api';
+import { endpoints } from '../../lib/endpoints';
+import type { PickedFile } from '../../lib/camera';
 import { money } from '../../lib/format';
 import { useActiveSite } from '../../site/ActiveSiteProvider';
 import { SitePicker } from '../../site/SitePicker';
@@ -275,10 +277,34 @@ function AddView({ onDone }: { onDone: () => void }) {
   const errMsg = useApiErrorMessage();
   const [error, setError] = useState<string | null>(null);
 
-  function submit(values: WorkerFormValues) {
+  function submit(values: WorkerFormValues, image: PickedFile | null) {
     setError(null);
     create.mutate(values, {
-      onSuccess: () => onDone(),
+      onSuccess: async (worker) => {
+        // BEST-EFFORT profile-image upload via the signed-URL flow (mirrors the
+        // Manager wizard). A failure here must NOT fail the create — the worker is
+        // already saved; we surface a non-fatal inline notice and still close.
+        if (image) {
+          try {
+            const signed = await endpoints.requestImageUpload(worker.id, {
+              fileName: image.fileName,
+              mimeType: image.mimeType,
+              sizeBytes: image.sizeBytes,
+            });
+            await uploadToSignedUrl(signed.uploadUrl, image.uri, image.mimeType);
+            await endpoints.confirmImage(worker.id, {
+              storageKey: signed.storageKey,
+              fileName: image.fileName,
+              mimeType: image.mimeType,
+              sizeBytes: image.sizeBytes,
+            });
+          } catch {
+            setError(t('workers.imageUploadFailed'));
+            return; // keep the screen open so the non-fatal notice is visible
+          }
+        }
+        onDone();
+      },
       onError: (e) => setError(errMsg(e)),
     });
   }
@@ -302,7 +328,9 @@ function EditView({ workerId, onDone }: { workerId: string; onDone: () => void }
   const errMsg = useApiErrorMessage();
   const [error, setError] = useState<string | null>(null);
 
-  function submit(values: WorkerFormValues) {
+  // EDIT does not change the image (parity with the Manager wizard, which only
+  // captures the profile image on ADD); the image arg is always null here.
+  function submit(values: WorkerFormValues, _image: PickedFile | null) {
     setError(null);
     // password is already omitted by the form on edit; strip defensively.
     const { password: _password, ...patch } = values;

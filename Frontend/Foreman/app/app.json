@@ -10,11 +10,24 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sitelink.foreman"
+      "bundleIdentifier": "com.sitelink.foreman",
+      "infoPlist": {
+        "NSCameraUsageDescription": "SiteLink uses the camera to capture worker profile photos.",
+        "NSPhotoLibraryUsageDescription": "SiteLink accesses your photos to attach worker profile images."
+      }
     },
     "android": {
-      "package": "com.sitelink.foreman"
+      "package": "com.sitelink.foreman",
+      "permissions": ["CAMERA", "READ_MEDIA_IMAGES"]
     },
-    "plugins": ["expo-secure-store"]
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "SiteLink uses the camera to capture worker profile photos."
+        }
+      ],
+      "expo-secure-store"
+    ]
   }
 }

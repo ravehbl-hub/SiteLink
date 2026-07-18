@@ -148,6 +148,12 @@ export const he: TranslationResources = {
     errorValidation: 'בדוק את הטופס ונסה שוב',
     errorScope: 'אתר זה מחוץ לאתרים שהוקצו לך',
     errorDuplicate: 'כבר קיים עובד עם כתובת דוא"ל זו',
+    photo: 'תמונה',
+    photoOptional: 'אופציונלי',
+    addPhoto: 'הוסף תמונה',
+    takePhoto: 'מצלמה',
+    chooseFromLibrary: 'גלריה',
+    imageUploadFailed: 'העובד נוצר, אך לא ניתן היה להעלות את התמונה. אפשר להוסיף אותה מאוחר יותר.',
   },
   professions: {
     IRONWORKER: 'ברזלן',

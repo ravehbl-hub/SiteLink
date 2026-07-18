@@ -146,6 +146,12 @@ export const en = {
     errorValidation: 'Please check the form and try again',
     errorScope: 'This site is outside your assigned sites',
     errorDuplicate: 'A worker with this login email already exists',
+    photo: 'Photo',
+    photoOptional: 'Optional',
+    addPhoto: 'Add photo',
+    takePhoto: 'Camera',
+    chooseFromLibrary: 'Gallery',
+    imageUploadFailed: 'Worker created, but the photo could not be uploaded. You can add it later.',
   },
   professions: {
     IRONWORKER: 'Ironworker',

@@ -14,13 +14,14 @@
  * surfaced as a friendly inline banner by the calling screen.
  */
 import React, { useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Profession, WorkerLevel } from '@sitelink/shared';
 import type { CreateWorkerInput, WorkerWithDetails } from '@sitelink/shared';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useActiveSite } from '../../site/ActiveSiteProvider';
-import { Body, Button, SectionHeading, Segmented } from '../../components/ui';
+import { captureFromCamera, pickFromLibrary, type PickedFile } from '../../lib/camera';
+import { Body, Button, Row, SectionHeading, Segmented } from '../../components/ui';
 
 /** The wire payload the form emits. On EDIT `password` is always absent. */
 export interface WorkerFormValues extends CreateWorkerInput {}
@@ -107,7 +108,8 @@ export function WorkerForm({
   mode: 'add' | 'edit';
   initial?: WorkerWithDetails | null;
   submitting?: boolean;
-  onSubmit: (values: WorkerFormValues) => void;
+  // On ADD the second arg carries an optional profile image; on EDIT it is null.
+  onSubmit: (values: WorkerFormValues, image: PickedFile | null) => void;
 }) {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -137,6 +139,10 @@ export function WorkerForm({
     return current ?? activeSiteId ?? sites[0]?.siteId ?? null;
   }, [initial, sites, activeSiteId]);
   const [siteId, setSiteId] = useState<string | null>(initialSiteId);
+
+  // Profile image (ADD only). Captured/picked here and handed up on submit; the
+  // signed-URL upload is run best-effort by the caller after the worker is created.
+  const [image, setImage] = useState<PickedFile | null>(null);
 
   const [touched, setTouched] = useState(false);
 
@@ -179,7 +185,16 @@ export function WorkerForm({
     };
     // Password is sent ONLY on ADD; never resent on EDIT.
     if (mode === 'add') values.password = password;
-    onSubmit(values);
+    onSubmit(values, mode === 'add' ? image : null);
+  }
+
+  async function onCapture() {
+    const file = await captureFromCamera();
+    if (file) setImage(file);
+  }
+  async function onPickFromLibrary() {
+    const file = await pickFromLibrary();
+    if (file) setImage(file);
   }
 
   const multiSite = sites.length > 1;
@@ -187,6 +202,63 @@ export function WorkerForm({
 
   return (
     <View>
+      {/* 0) Profile photo — captured on ADD only (parity with the Manager wizard,
+          which only captures the image on create). Best-effort upload runs after
+          the worker is created. RTL-safe via logical margins. */}
+      {mode === 'add' ? (
+        <View style={{ marginBottom: Number(theme.tokens.spacing['3']) }}>
+          <SectionHeading>{t('workers.photo')}</SectionHeading>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {image ? (
+              <Image
+                source={{ uri: image.uri }}
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 36,
+                  marginEnd: Number(theme.tokens.spacing['3']),
+                  backgroundColor: theme.colors.surface,
+                }}
+              />
+            ) : (
+              <View
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 36,
+                  marginEnd: Number(theme.tokens.spacing['3']),
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.surface,
+                }}
+              >
+                <Body muted>{t('workers.photoOptional')}</Body>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Row>
+                <View style={{ flex: 1, marginEnd: Number(theme.tokens.spacing['2']) }}>
+                  <Button
+                    title={t('workers.takePhoto')}
+                    variant="secondary"
+                    onPress={onCapture}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    title={t('workers.chooseFromLibrary')}
+                    variant="secondary"
+                    onPress={onPickFromLibrary}
+                  />
+                </View>
+              </Row>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
       {/* 1) email (required) */}
       <LabeledInput
         label={t('workers.email')}

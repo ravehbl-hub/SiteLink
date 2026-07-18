@@ -148,6 +148,12 @@ export const tr: TranslationResources = {
     errorValidation: 'Lütfen formu kontrol edip tekrar deneyin',
     errorScope: 'Bu şantiye size atanan şantiyelerin dışında',
     errorDuplicate: 'Bu giriş e-postasına sahip bir işçi zaten var',
+    photo: 'Fotoğraf',
+    photoOptional: 'İsteğe bağlı',
+    addPhoto: 'Fotoğraf ekle',
+    takePhoto: 'Kamera',
+    chooseFromLibrary: 'Galeri',
+    imageUploadFailed: 'İşçi oluşturuldu ancak fotoğraf yüklenemedi. Daha sonra ekleyebilirsiniz.',
   },
   professions: {
     IRONWORKER: 'Demirci',

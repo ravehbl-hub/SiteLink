@@ -64,6 +64,34 @@ export interface WorkerCount {
   count: number;
 }
 
+/**
+ * Worker profile image signed-URL flow (symmetric to the Manager app). The back
+ * end mints an upload URL, the client PUTs the object to Supabase, then confirms.
+ * Shapes mirror backend/src/modules/workers/dto.ts and are now FOREMAN-accessible
+ * + site-scoped by the foreman token server-side.
+ */
+export interface SignedUploadResponse {
+  storageKey: string;
+  uploadUrl: string;
+  token: string;
+  bucket: string;
+}
+export interface SignedReadResponse {
+  url: string;
+  expiresInSeconds: number;
+}
+export interface ImageUploadRequest {
+  fileName: string;
+  mimeType: string;
+  sizeBytes?: number;
+}
+export interface ConfirmImageRequest {
+  storageKey: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes?: number;
+}
+
 export const endpoints = {
   // Auth
   me: () => api.get<CurrentUser>('/auth/me'),
@@ -107,6 +135,15 @@ export const endpoints = {
     api.get<WorkerRating[]>(`/workers/${workerId}/ratings`),
   createWorkerRating: (workerId: string, body: CreateWorkerRatingInput) =>
     api.post<WorkerRating>(`/workers/${workerId}/ratings`, body),
+
+  // Worker profile image (signed-URL flow, symmetric to the Manager app; the routes
+  // are FOREMAN-accessible + site-scoped by the foreman token server-side).
+  requestImageUpload: (id: string, body: ImageUploadRequest) =>
+    api.post<SignedUploadResponse>(`/workers/${id}/image/upload-url`, body),
+  confirmImage: (id: string, body: ConfirmImageRequest) =>
+    api.post<Worker>(`/workers/${id}/image`, body),
+  getImageReadUrl: (id: string) =>
+    api.get<SignedReadResponse>(`/workers/${id}/image/url`),
 
   // Reports (FR-FOR-3) — worker-count summary for own site.
   workerCount: (params: { siteId?: string }) => api.get<WorkerCount>('/worker-count', params),

@@ -56,6 +56,11 @@ export const salaryDataSchema = z.object({
 
 export const listWorkersQuery = z.object({
   includeArchived: z.coerce.boolean().default(false),
+  // ARCHIVED-ONLY view (FR-MGR-EMP archives tab). When true the list returns ONLY
+  // archived workers (isArchived:true), still ANDed with the foreman site-scope +
+  // search. PRECEDENCE: archivedOnly WINS over includeArchived if both are passed —
+  // archivedOnly=true always narrows to archived-only regardless of includeArchived.
+  archivedOnly: z.coerce.boolean().default(false),
   siteId: z.string().optional(),
   // SERVER-SIDE search over the human-searchable text fields (firstName/lastName/
   // phone). Trimmed + length-capped. This is an ADDITIONAL AND filter layered on top

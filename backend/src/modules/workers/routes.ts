@@ -1,10 +1,11 @@
 /**
  * SiteLink back end — workers routes (FR-MGR-EMP). Manager/Admin-gated.
- *   GET    /workers                     list (?includeArchived, ?siteId)
+ *   GET    /workers                     list (?includeArchived, ?archivedOnly, ?siteId)
  *   POST   /workers                     Worker Wizard create
  *   GET    /workers/:id                 details (Details + Docs + Salary)
  *   PATCH  /workers/:id                 modify
  *   POST   /workers/:id/archive         archive
+ *   POST   /workers/:id/unarchive       restore (unarchive)
  *   DELETE /workers/:id                 remove
  *   PUT    /workers/:id/salary-data     upsert salary data
  *   GET    /workers/:id/docs            list docs
@@ -68,6 +69,13 @@ export async function workerRoutes(app: FastifyInstance): Promise<void> {
   app.post('/workers/:id/archive', guard, async (req) => {
     const { id } = idParam.parse(req.params);
     return service.archive(id);
+  });
+
+  // Restore an archived worker. MANAGER-only (same `guard` as archive) — a FOREMAN can
+  // VIEW archived workers via GET /workers?archivedOnly but cannot restore them.
+  app.post('/workers/:id/unarchive', guard, async (req) => {
+    const { id } = idParam.parse(req.params);
+    return service.unarchive(id);
   });
 
   app.delete('/workers/:id', guard, async (req, reply) => {

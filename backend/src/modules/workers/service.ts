@@ -131,8 +131,19 @@ export class WorkersService {
         ? { assignments: { some: { siteId: query.siteId } } }
         : {};
     }
+    // ARCHIVED dimension. PRECEDENCE (archivedOnly WINS over includeArchived):
+    //   archivedOnly=true          → { isArchived: true }   (ONLY archived)
+    //   else includeArchived=true  → {}                     (all — active + archived)
+    //   else                       → { isArchived: false }  (active only, the default)
+    // This clause is ANDed with siteFilter + search below exactly as before, so the
+    // archived view still respects the foreman site-scope and the search filter.
+    const archivedClause: Record<string, unknown> = query.archivedOnly
+      ? { isArchived: true }
+      : query.includeArchived
+        ? {}
+        : { isArchived: false };
     const where: Record<string, unknown> = {
-      ...(query.includeArchived ? {} : { isArchived: false }),
+      ...archivedClause,
       ...siteFilter,
     };
 
@@ -461,6 +472,16 @@ export class WorkersService {
     const row = await prisma.worker.update({
       where: { id },
       data: { isArchived: true, archivedAt: new Date() },
+    });
+    return mapWorker(row);
+  }
+
+  /** Unarchive (restore-from-archives, FR-MGR-EMP-5/6). Returns to active rosters. */
+  async unarchive(id: string): Promise<Worker> {
+    await this.ensureExists(id);
+    const row = await prisma.worker.update({
+      where: { id },
+      data: { isArchived: false, archivedAt: null },
     });
     return mapWorker(row);
   }

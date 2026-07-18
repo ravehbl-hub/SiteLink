@@ -93,6 +93,9 @@ export function Title({ children }: { children: React.ReactNode }) {
         fontSize: Number(theme.tokens.fontSize.xl ?? 22),
         fontWeight: '700',
         marginBottom: Number(theme.tokens.spacing['3']),
+        // 'auto' resolves to the writing direction: right in RTL (he), left in
+        // LTR (en/tr). RN Text does NOT auto-flip without this.
+        textAlign: 'auto',
       }}
     >
       {children}
@@ -109,6 +112,7 @@ export function SectionHeading({ children }: { children: React.ReactNode }) {
         fontSize: Number(theme.tokens.fontSize.sm ?? 14),
         fontWeight: '600',
         marginBottom: Number(theme.tokens.spacing['2']),
+        textAlign: 'auto',
       }}
     >
       {children}
@@ -131,6 +135,8 @@ export function Body({
     <Text
       style={{
         color: muted ? theme.colors.textMuted : theme.colors.textPrimary,
+        // Follow writing direction (he → right, en/tr → left).
+        textAlign: 'auto',
         ...(numeric ? { fontVariant: ['tabular-nums' as const] } : null),
       }}
     >
@@ -151,6 +157,7 @@ export function Field({
           color: theme.colors.textSecondary,
           marginBottom: Number(theme.tokens.spacing['1']),
           fontSize: Number(theme.tokens.fontSize.sm ?? 14),
+          textAlign: 'auto',
         }}
       >
         {label}
@@ -302,11 +309,14 @@ export function Metric({ label, value }: { label: string; value: string | number
           fontSize: Number(theme.tokens.fontSize.xl ?? 22),
           fontWeight: '700',
           fontVariant: ['tabular-nums'],
+          textAlign: 'auto',
         }}
       >
         {value}
       </Text>
-      <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{label}</Text>
+      <Text style={{ color: theme.colors.textMuted, fontSize: 12, textAlign: 'auto' }}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -333,7 +343,7 @@ export function ErrorState({ label, onRetry }: { label: string; onRetry?: () => 
   const { theme } = useTheme();
   return (
     <View style={styles.center}>
-      <Text style={{ color: theme.colors.danger, marginBottom: 8 }}>{label}</Text>
+      <Text style={{ color: theme.colors.danger, marginBottom: 8, textAlign: 'auto' }}>{label}</Text>
       {onRetry ? <Button title="↻" variant="secondary" onPress={onRetry} /> : null}
     </View>
   );

@@ -143,6 +143,7 @@ export function SitePicker() {
                 fontSize: Number(theme.tokens.fontSize.sm ?? 14),
                 fontWeight: '600',
                 marginBottom: Number(theme.tokens.spacing['2']),
+                textAlign: 'auto',
               }}
             >
               {t('site.select')}
@@ -173,6 +174,7 @@ export function SitePicker() {
                         style={{
                           color: active ? theme.colors.accent : theme.colors.textPrimary,
                           fontWeight: active ? '700' : '500',
+                          textAlign: 'auto',
                         }}
                         numberOfLines={1}
                       >
@@ -183,6 +185,7 @@ export function SitePicker() {
                           style={{
                             color: theme.colors.textMuted,
                             fontSize: Number(theme.tokens.fontSize.xs ?? 12),
+                            textAlign: 'auto',
                           }}
                         >
                           {t('site.primary')}

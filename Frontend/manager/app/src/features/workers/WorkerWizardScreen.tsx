@@ -13,10 +13,10 @@
  * the personnel company can be changed.
  *
  * personnelCompany uses the reusable Select<T> populated from usePersonnelCompanies
- * (active). Selection is tracked by company id; the committed backend contract persists
- * the free-text `personnelCompany`, so on submit we send the selected company's NAME.
- * Image upload uses the signed-URL flow after create (the worker id is needed for the
- * server-chosen storage key).
+ * (active). Selection is tracked by company id; on submit we send `personnelCompanyId`
+ * (the backend binds the FK and mirrors the company name into the legacy free-text
+ * column). Image upload uses the signed-URL flow after create (the worker id is needed
+ * for the server-chosen storage key).
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Image, Pressable, Text, View } from 'react-native';

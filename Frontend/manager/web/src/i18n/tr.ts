@@ -279,6 +279,9 @@ export const tr: Resources = {
     unlock: 'Kilidi aç',
     lockedOut: 'Kilitli',
     confirmDelete: 'Bu kullanıcı kaldırılsın mı?',
+    additionalSites: 'Ek şantiyeler',
+    additionalSitesHint: 'Bu ustabaşının birincil şantiyenin yanı sıra yönetebileceği ek şantiyeler.',
+    noOtherSites: 'Başka şantiye yok.',
   },
   settings: {
     title: 'Ayarlar',

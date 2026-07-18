@@ -110,7 +110,7 @@ export const http = {
     request<T>('POST', path, { body, query }),
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, { body }),
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, { body }),
-  del: <T>(path: string) => request<T>('DELETE', path),
+  del: <T>(path: string, query?: Query) => request<T>('DELETE', path, { query }),
 };
 
 /** Absolute URL for streaming endpoints (PDFs) that we open directly. */

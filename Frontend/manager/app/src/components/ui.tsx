@@ -381,6 +381,77 @@ export function Segmented<T extends string>({
 }
 
 /**
+ * MULTI-select chip list — the many-choice sibling of Segmented. Renders one
+ * toggle chip per option; tapping flips its membership in `value`. Selected chips
+ * fill with the accent, unselected sit on surfaceAlt (same visual language as
+ * Segmented so it stays on-theme with Deck — tokens only, no hex).
+ *
+ * A `disabledValues` set renders locked chips (e.g. the foreman's PRIMARY site,
+ * which is always in scope and cannot be toggled off here). RTL-safe: logical
+ * margins (marginEnd) and textAlign:'auto'; ~44px tap area via hitSlop.
+ */
+export function MultiSelectChips<T extends string>({
+  options,
+  value,
+  onChange,
+  disabledValues,
+}: {
+  options: { value: T; label: string }[];
+  value: T[];
+  onChange: (v: T[]) => void;
+  disabledValues?: readonly T[];
+}) {
+  const { theme } = useTheme();
+  const selected = new Set(value);
+  const locked = new Set(disabledValues ?? []);
+  const toggle = (v: T) => {
+    if (locked.has(v)) return;
+    const next = new Set(selected);
+    if (next.has(v)) next.delete(v);
+    else next.add(v);
+    onChange(options.filter((o) => next.has(o.value)).map((o) => o.value));
+  };
+  return (
+    <View style={styles.row}>
+      {options.map((opt) => {
+        const isLocked = locked.has(opt.value);
+        const active = isLocked || selected.has(opt.value);
+        return (
+          <Pressable
+            key={opt.value}
+            onPress={() => toggle(opt.value)}
+            disabled={isLocked}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: active, disabled: isLocked }}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            style={{
+              minHeight: Number(theme.tokens.sizing.controlSm),
+              justifyContent: 'center',
+              opacity: isLocked ? 0.6 : 1,
+              backgroundColor: active ? theme.colors.accent : theme.colors.surfaceAlt,
+              borderRadius: Number(theme.tokens.radii.sm),
+              paddingHorizontal: Number(theme.tokens.spacing['3']),
+              paddingVertical: Number(theme.tokens.spacing['1']),
+              marginEnd: Number(theme.tokens.spacing['2']),
+              marginBottom: Number(theme.tokens.spacing['2']),
+            }}
+          >
+            <Text
+              style={{
+                color: active ? theme.colors.onAccent : theme.colors.textSecondary,
+                textAlign: 'auto',
+              }}
+            >
+              {isLocked ? `${opt.label} ✓` : opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
  * Generic dropdown / combobox picker. A COMPACT trigger (matching the Segmented /
  * Button control height) that shows the current selection and, on tap, opens a
  * modal overlay list of options — each selectable, the active one marked with a

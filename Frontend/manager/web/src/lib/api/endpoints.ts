@@ -31,6 +31,7 @@ import type {
   UpdateUserInput,
   UpdateWorkerInput,
   User,
+  ForemanSiteAssignment,
   Worker,
   WorkerRequest,
   WorkerDoc,
@@ -260,4 +261,18 @@ export const usersApi = {
   lockout: (id: string, isLockedOut: boolean) =>
     http.post<User>(`/users/${id}/lockout`, { isLockedOut }),
   remove: (id: string) => http.del<void>(`/users/${id}`),
+};
+
+/* ── Foreman ⇄ Site assignments (multi-site FOREMAN scope) ────────────────
+ * A FOREMAN's full scope = User.primarySiteId (default) + the ACTIVE assignments
+ * below. MANAGER/ADMIN gated server-side; the api client attaches the token.
+ * POST reactivates a previously-unassigned pair (idempotent on an active pair);
+ * DELETE is a soft unassign (sets unassignedAt). See @sitelink/shared. */
+export const foremanAssignmentsApi = {
+  list: (foremanId: string) =>
+    http.get<ForemanSiteAssignment[]>('/foreman-assignments', { foremanId }),
+  assign: (foremanId: string, siteId: string) =>
+    http.post<ForemanSiteAssignment>('/foreman-assignments', { foremanId, siteId }),
+  unassign: (foremanId: string, siteId: string) =>
+    http.del<void>('/foreman-assignments', { foremanId, siteId }),
 };

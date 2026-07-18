@@ -302,6 +302,45 @@ html[dir='rtl'] .kpi-label {
   font-size: var(--sl-font-size-xs);
 }
 
+/* Checklist: a scrollable list of toggleable rows (e.g. a foreman's
+   additional sites). RTL-safe — layout uses logical flex ordering. */
+.checklist {
+  display: flex;
+  flex-direction: column;
+  max-height: 168px;
+  overflow-y: auto;
+  border: var(--sl-border-hairline) solid var(--sl-color-border);
+  border-radius: var(--sl-radius-md);
+  background: var(--sl-color-bg);
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sl-space-2);
+  padding: var(--sl-space-2) var(--sl-space-3);
+  font-size: var(--sl-font-size-sm);
+  color: var(--sl-color-text-primary);
+  cursor: pointer;
+}
+
+.checklist-item + .checklist-item {
+  border-block-start: var(--sl-border-hairline) solid var(--sl-color-border);
+}
+
+.checklist-item input[type='checkbox'] {
+  inline-size: 16px;
+  block-size: 16px;
+  margin: 0;
+  accent-color: var(--sl-color-accent);
+}
+
+.checklist-empty {
+  padding: var(--sl-space-3);
+  font-size: var(--sl-font-size-sm);
+  color: var(--sl-color-text-secondary);
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

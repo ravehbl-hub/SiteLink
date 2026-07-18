@@ -1,10 +1,10 @@
 /** Users Manager (FR-MGR-USER): list + Add User (role/name/site/email/optional
  *  password), Edit, Lockout (reversible), Remove. */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Role, type CreateUserInput, type User } from '@sitelink/shared';
-import { usersApi } from '../../lib/api/endpoints';
+import { usersApi, foremanAssignmentsApi } from '../../lib/api/endpoints';
 import { ApiError } from '../../lib/api/client';
 import { qk } from '../../lib/api/queryKeys';
 import { useSitesList } from '../../lib/api/hooks';
@@ -137,15 +137,64 @@ function UserForm({ user, onClose }: { user?: User; onClose: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const isForeman = role === Role.FOREMAN;
+
+  // EDIT + FOREMAN: load the target's CURRENT additional-site scope (active
+  // ForemanSiteAssignment rows). primarySiteId is the default and is NOT part of
+  // this set. Only enabled when editing a user who is already a foreman.
+  const editingForeman = Boolean(user) && user?.role === Role.FOREMAN;
+  const assignments = useQuery({
+    queryKey: qk.foremanAssignments(user?.id ?? ''),
+    queryFn: () => foremanAssignmentsApi.list(user!.id),
+    enabled: editingForeman,
+    staleTime: 0,
+  });
+
+  // Selected additional sites (site ids). Seeded from the loaded assignments on
+  // edit; empty on add. `seeded` guards the one-shot preselect so user toggles
+  // aren't clobbered by a background refetch.
+  const [additionalSiteIds, setAdditionalSiteIds] = useState<string[]>([]);
+  const [seeded, setSeeded] = useState(false);
+  useEffect(() => {
+    if (!seeded && assignments.data) {
+      setAdditionalSiteIds(assignments.data.map((a) => a.siteId));
+      setSeeded(true);
+    }
+  }, [assignments.data, seeded]);
+
+  const toggleAdditional = (siteId: string) =>
+    setAdditionalSiteIds((prev) =>
+      prev.includes(siteId) ? prev.filter((s) => s !== siteId) : [...prev, siteId],
+    );
+
+  // Apply the additional-sites diff for a foreman (id known post-create on add).
+  // POST newly-selected, DELETE removed. Primary is never assigned here. Errors
+  // surface (thrown) so the mutation reports them instead of silently vanishing.
+  const applyAssignments = async (foremanId: string) => {
+    const current = new Set(assignments.data?.map((a) => a.siteId) ?? []);
+    const desired = new Set(additionalSiteIds.filter((s) => s && s !== primarySiteId));
+    const toAdd = [...desired].filter((s) => !current.has(s));
+    const toRemove = [...current].filter((s) => !desired.has(s));
+    await Promise.all([
+      ...toAdd.map((siteId) => foremanAssignmentsApi.assign(foremanId, siteId)),
+      ...toRemove.map((siteId) => foremanAssignmentsApi.unassign(foremanId, siteId)),
+    ]);
+    if (toAdd.length || toRemove.length) {
+      qc.invalidateQueries({ queryKey: qk.foremanAssignments(foremanId) });
+    }
+  };
+
   const mut = useMutation({
     mutationFn: async () => {
       if (user) {
-        return usersApi.update(user.id, {
+        const updated = await usersApi.update(user.id, {
           fullName,
           email,
           role,
           primarySiteId: primarySiteId || null,
         });
+        if (isForeman) await applyAssignments(user.id);
+        return updated;
       }
       const body: CreateUserInput = {
         role,
@@ -154,7 +203,9 @@ function UserForm({ user, onClose }: { user?: User; onClose: () => void }) {
         primarySiteId: primarySiteId || null,
         ...(password ? { password } : {}),
       };
-      return usersApi.create(body);
+      const created = await usersApi.create(body);
+      if (isForeman) await applyAssignments(created.id);
+      return created;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users'] });
@@ -224,6 +275,35 @@ function UserForm({ user, onClose }: { user?: User; onClose: () => void }) {
           ))}
         </select>
       </Field>
+      {isForeman ? (
+        <Field label={t('users.additionalSites')}>
+          <span className="muted">{t('users.additionalSitesHint')}</span>
+          {editingForeman && assignments.isLoading ? (
+            <div className="checklist-empty">{t('common.loading')}</div>
+          ) : (
+            (() => {
+              const others = (sites.data?.items ?? []).filter((s) => s.id !== primarySiteId);
+              if (others.length === 0) {
+                return <div className="checklist-empty">{t('users.noOtherSites')}</div>;
+              }
+              return (
+                <div className="checklist">
+                  {others.map((s) => (
+                    <label key={s.id} className="checklist-item">
+                      <input
+                        type="checkbox"
+                        checked={additionalSiteIds.includes(s.id)}
+                        onChange={() => toggleAdditional(s.id)}
+                      />
+                      {s.name}
+                    </label>
+                  ))}
+                </div>
+              );
+            })()
+          )}
+        </Field>
+      ) : null}
       {!user ? (
         <Field label={`${t('users.password')} (${t('common.optional')})`}>
           <input

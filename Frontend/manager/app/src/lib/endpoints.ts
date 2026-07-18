@@ -6,6 +6,7 @@
 import type {
   AdvancePayment,
   AttendanceRecord,
+  ForemanSiteAssignment,
   CreateAdvanceInput,
   CreateAttendanceInput,
   CreateLoanInput,
@@ -231,4 +232,15 @@ export const endpoints = {
   lockoutUser: (id: string, locked: boolean) =>
     api.post<User>(`/users/${id}/lockout`, { isLockedOut: locked }),
   removeUser: (id: string) => api.del<void>(`/users/${id}`),
+
+  // Foreman ⇄ site assignments (multi-site FOREMAN scope, MANAGER/ADMIN gated).
+  // A foreman's full scope = primarySiteId + these active assignment rows.
+  // POST reactivates an unassigned pair and is idempotent when already active;
+  // DELETE is a soft unassign keyed by (foremanId, siteId).
+  listForemanAssignments: (foremanId: string) =>
+    api.get<ForemanSiteAssignment[]>('/foreman-assignments', { foremanId }),
+  assignForemanSite: (foremanId: string, siteId: string) =>
+    api.post<ForemanSiteAssignment>('/foreman-assignments', { foremanId, siteId }),
+  unassignForemanSite: (foremanId: string, siteId: string) =>
+    api.del<void>('/foreman-assignments', { foremanId, siteId }),
 };

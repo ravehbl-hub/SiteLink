@@ -277,6 +277,9 @@ export const en = {
     unlock: 'Unlock',
     lockedOut: 'Locked out',
     confirmDelete: 'Remove this user?',
+    additionalSites: 'Additional sites',
+    additionalSitesHint: 'Extra sites this foreman can manage, beyond the primary site.',
+    noOtherSites: 'No other sites available.',
   },
   settings: {
     title: 'Settings',

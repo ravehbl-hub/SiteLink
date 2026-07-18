@@ -279,6 +279,9 @@ export const he: Resources = {
     unlock: 'שחרר',
     lockedOut: 'נעול',
     confirmDelete: 'להסיר משתמש זה?',
+    additionalSites: 'אתרים נוספים',
+    additionalSitesHint: 'אתרים נוספים שמנהל העבודה יכול לנהל, מעבר לאתר הראשי.',
+    noOtherSites: 'אין אתרים נוספים זמינים.',
   },
   settings: {
     title: 'הגדרות',

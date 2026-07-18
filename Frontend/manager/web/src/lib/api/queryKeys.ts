@@ -14,5 +14,6 @@ export const qk = {
   advances: (params: unknown) => ['advances', params] as const,
   wageRates: ['wage-rates'] as const,
   users: (params: unknown) => ['users', params] as const,
+  foremanAssignments: (foremanId: string) => ['foreman-assignments', foremanId] as const,
   personnelCompanies: (params: unknown) => ['personnel-companies', params] as const,
 };

@@ -165,20 +165,16 @@ export class FinanceService {
     });
     const workerIds = attendance.map((a) => a.workerId);
 
+    // BATCH: one bulk salary calc for the in-scope worker set (was an N+1 loop of
+    // 3 queries per worker). Workers without a configured wage are absent from the
+    // map — same "skip" behaviour the per-worker try/catch used to give.
+    const salaryByWorker = await this.salary.calculateMany(workerIds, {
+      siteId: query.siteId,
+      periodStart: query.from,
+      periodEnd: query.to,
+    });
     let salaryCost = 0;
-    for (const workerId of workerIds) {
-      try {
-        const result = await this.salary.calculate({
-          workerId,
-          siteId: query.siteId,
-          periodStart: query.from,
-          periodEnd: query.to,
-        });
-        salaryCost += result.gross;
-      } catch {
-        // Skip workers without a configured wage — don't fail the whole P&L.
-      }
-    }
+    for (const result of salaryByWorker.values()) salaryCost += result.gross;
 
     const loanAgg = await prisma.loan.aggregate({
       _sum: { outstanding: true },

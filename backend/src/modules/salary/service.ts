@@ -110,4 +110,119 @@ export class SalaryService {
 
     return { ...result, warnings };
   }
+
+  /**
+   * BATCH salary computation for many workers over one period (perf: eliminates the
+   * per-worker N+1 that the dashboard rollup + P&L incurred).
+   *
+   * Semantics are byte-for-byte identical to calling `calculate()` per worker:
+   *   - same wage-rule resolution (per-worker WorkerSalaryData overrides the
+   *     ProfessionWageRate; a site-specific rate beats the global one),
+   *   - same mode resolution from stored config (FIXED default),
+   *   - same "skip workers with no configured wage" behaviour (they're omitted from
+   *     the result map, exactly as calculate() would have thrown-and-been-caught).
+   * The ONLY difference is round-trips: 3 bulk queries total instead of 3×N. All
+   * per-worker `compute()` work stays in-memory (pure), so results are unchanged.
+   *
+   * Returns a Map keyed by workerId → SalaryCalculation for every worker that HAS a
+   * usable wage; workers with no wage are simply absent (callers sum over the map).
+   */
+  async calculateMany(
+    workerIds: string[],
+    period: { siteId?: string; periodStart: string; periodEnd: string },
+  ): Promise<Map<string, SalaryCalculation>> {
+    const out = new Map<string, SalaryCalculation>();
+    if (workerIds.length === 0) return out;
+    const ids = [...new Set(workerIds)];
+
+    // ── 3 bulk reads (was 3 PER worker) ─────────────────────────────────────
+    const workers = await prisma.worker.findMany({
+      where: { id: { in: ids } },
+      include: { salaryData: true },
+    });
+    const professions = [...new Set(workers.map((w) => w.profession))];
+    // All candidate wage rules for the professions in play: the site-specific rule
+    // for the given site AND the global (siteId=null) fallback — same OR the
+    // single-worker path uses, just batched across professions.
+    const wageRates = await prisma.professionWageRate.findMany({
+      where: {
+        profession: { in: professions },
+        OR: [{ siteId: period.siteId ?? null }, { siteId: null }],
+      },
+    });
+    const records = await prisma.attendanceRecord.findMany({
+      where: {
+        workerId: { in: ids },
+        date: { gte: new Date(period.periodStart), lte: new Date(period.periodEnd) },
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    // Index attendance by worker (rows already globally date-sorted → per-worker
+    // slices stay ascending, matching the single-worker orderBy).
+    const recordsByWorker = new Map<string, typeof records>();
+    for (const r of records) {
+      const list = recordsByWorker.get(r.workerId) ?? [];
+      list.push(r);
+      recordsByWorker.set(r.workerId, list);
+    }
+
+    for (const worker of workers) {
+      // Resolve the wage rule exactly like calculate(): prefer a site-specific rule
+      // (siteId === period.siteId) over the global one (siteId === null).
+      const candidates = wageRates.filter((w) => w.profession === worker.profession);
+      const wageRate =
+        candidates.find((w) => w.siteId === (period.siteId ?? null)) ??
+        candidates.find((w) => w.siteId === null) ??
+        null;
+
+      const hourlyWage = worker.salaryData
+        ? toNumber(worker.salaryData.hourlyWage)
+        : wageRate
+          ? toNumber(wageRate.wage)
+          : 0;
+      // Same skip rule as calculate(): no wage configured → omit this worker.
+      if (hourlyWage <= 0 && !worker.salaryData) continue;
+
+      const currency = worker.salaryData?.currency ?? wageRate?.currency ?? 'ILS';
+      const calcMode =
+        (wageRate?.calcMode as SalaryCalcMode | undefined) ?? SalaryCalcMode.FIXED;
+      const mode = toSalaryMode(calcMode);
+
+      const hoursByDay: SalaryHoursByDay[] = (recordsByWorker.get(worker.id) ?? []).map(
+        (r) => ({
+          date: toDateOnly(r.date),
+          hours: r.type === AttendanceType.ATTENDANCE ? toNumber(r.hours) : 0,
+          status:
+            r.type === AttendanceType.ATTENDANCE
+              ? 'attendance'
+              : r.type === AttendanceType.VACATION
+                ? 'vacation'
+                : 'disease',
+        }),
+      );
+
+      const salaryInput: SalaryInput = {
+        workerId: worker.id,
+        siteId: period.siteId,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        mode,
+        hoursByDay,
+        hourlyWage,
+        ...(mode === 'fixed' && wageRate?.rateType === 'MONTHLY'
+          ? { fixedSalary: toNumber(wageRate.wage) }
+          : {}),
+        currency,
+      };
+
+      const engine = this.factory.resolve(mode);
+      const result = engine.compute(salaryInput);
+      const warnings: string[] = [];
+      if (mode === 'israeli-labor-law') warnings.push(SALARY_WARNINGS.ISRAELI_STUB);
+      out.set(worker.id, { ...result, warnings });
+    }
+
+    return out;
+  }
 }

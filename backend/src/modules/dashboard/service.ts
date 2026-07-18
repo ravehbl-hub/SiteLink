@@ -75,13 +75,7 @@ export class DashboardService {
       where: siteWhere,
       select: { id: true, name: true },
     });
-    const workersPerSite: WorkersPerSite[] = [];
-    for (const s of sites) {
-      const count = await prisma.worker.count({
-        where: { isArchived: false, assignments: { some: { siteId: s.id } } },
-      });
-      workersPerSite.push({ siteId: s.id, siteName: s.name, workerCount: count });
-    }
+    const workersPerSite = await this.countWorkersPerSite(sites);
 
     // ── WORKERS: attendance/vacation/disease counts + total worked hours ──
     const attendance = await prisma.attendanceRecord.findMany({
@@ -134,20 +128,16 @@ export class DashboardService {
     // multi-site union the salary calc runs unfiltered by site over the scoped workers.
     const scopedWorkerIds = await this.workersWithActivity(from, to, siteIn);
     const salarySiteId = filterSiteId ?? undefined;
+    // BATCH: one bulk calc for the whole scoped worker set (was an N+1 loop issuing
+    // 3 queries per worker). Workers without a configured wage are simply absent from
+    // the map — same skip semantics the old per-worker try/catch produced.
+    const salaryByWorker = await this.salary.calculateMany(scopedWorkerIds, {
+      siteId: salarySiteId,
+      periodStart: fromISO,
+      periodEnd: toISO,
+    });
     let salaryTotal = 0;
-    for (const workerId of scopedWorkerIds) {
-      try {
-        const result = await this.salary.calculate({
-          workerId,
-          siteId: salarySiteId,
-          periodStart: fromISO,
-          periodEnd: toISO,
-        });
-        salaryTotal += result.gross;
-      } catch {
-        // Workers without a configured wage are skipped (don't fail the rollup).
-      }
-    }
+    for (const result of salaryByWorker.values()) salaryTotal += result.gross;
     salaryTotal = round2(salaryTotal);
 
     // ── FINANCE: P&L (manual revenue, delegated to FinanceService) ───────
@@ -193,14 +183,32 @@ export class DashboardService {
       where: siteWhere,
       select: { id: true, name: true },
     });
-    const out: WorkersPerSite[] = [];
-    for (const s of sites) {
-      const workerCount = await prisma.worker.count({
-        where: { isArchived: false, assignments: { some: { siteId: s.id } } },
-      });
-      out.push({ siteId: s.id, siteName: s.name, workerCount });
-    }
-    return out;
+    return this.countWorkersPerSite(sites);
+  }
+
+  /**
+   * Active-worker headcount per site for a set of sites, in ONE grouped query
+   * (was an N+1 per-site `worker.count` loop). Counts SiteAssignment rows whose
+   * worker is non-archived, grouped by siteId — identical to the old
+   * `assignments: { some: { siteId } }` count (no unassignedAt filter, to preserve
+   * byte-for-byte the previous result). Sites with no active workers report 0.
+   */
+  private async countWorkersPerSite(
+    sites: { id: string; name: string }[],
+  ): Promise<WorkersPerSite[]> {
+    if (sites.length === 0) return [];
+    const siteIds = sites.map((s) => s.id);
+    const grouped = await prisma.siteAssignment.groupBy({
+      by: ['siteId'],
+      where: { siteId: { in: siteIds }, worker: { isArchived: false } },
+      _count: { workerId: true },
+    });
+    const countBySite = new Map(grouped.map((g) => [g.siteId, g._count.workerId]));
+    return sites.map((s) => ({
+      siteId: s.id,
+      siteName: s.name,
+      workerCount: countBySite.get(s.id) ?? 0,
+    }));
   }
 
   /** Distinct worker ids with attendance in the window (optionally site-scoped). */

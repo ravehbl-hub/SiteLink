@@ -132,9 +132,10 @@ export function SitePicker() {
               backgroundColor: theme.colors.surface,
               borderColor: theme.colors.border,
               borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
-              borderRadius: Number(theme.tokens.radii.md),
+              // Neumorphic modal: softer cardLg radius + a raised drop-shadow.
+              borderRadius: Number(theme.neumorphic?.radii.cardLg ?? theme.tokens.radii.md),
               padding: Number(theme.tokens.spacing['4']),
-              ...theme.elevation.sm.native,
+              ...theme.elevation.lg.native,
             }}
           >
             <Text

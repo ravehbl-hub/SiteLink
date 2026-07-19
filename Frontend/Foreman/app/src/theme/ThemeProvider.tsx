@@ -1,11 +1,15 @@
 /**
  * Theme + language context (DESIGN.md "Native"). Holds the active @sitelink/tokens
- * Theme object (lightTheme/darkTheme) and the active Language, seeds from
+ * Theme object (neumorphicLightTheme/neumorphicDarkTheme) and the active Language, seeds from
  * Appearance + persisted prefs, and persists user overrides. i18n direction is
  * applied on language change (RTL for Hebrew).
  */
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { lightTheme, darkTheme, defaultThemeName, type Theme as TokenTheme } from '@sitelink/tokens';
+import {
+  neumorphicLightTheme,
+  neumorphicDarkTheme,
+  type Theme as TokenTheme,
+} from '@sitelink/tokens';
 import { Language, Theme } from '@sitelink/shared';
 import i18n, { toLocale } from '../i18n';
 import { applyDirection, reloadForDirection } from '../i18n/rtl';
@@ -37,14 +41,14 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 /**
- * Seed DARK-FIRST (Operations Deck, Direction 03). SiteLink now LEADS with dark,
- * so the app boots into the dark command-center ground rather than mirroring the
- * OS scheme. The tokens package is the single source of truth for the default via
- * `defaultThemeName`. A persisted user choice (loaded in the effect below) still
- * overrides this, and the Settings toggle remains fully in effect.
+ * Seed LIGHT-FIRST (Cream / Teal Neumorphic). The reskin LEADS with the warm cream
+ * neumorphic ground, so the app boots into the light neumorphic theme rather than
+ * mirroring the OS scheme. A persisted user choice (loaded in the effect below)
+ * still overrides this, and the Settings toggle (LIGHT ↔ DARK) remains fully in
+ * effect — DARK selects the neumorphic-dark variant.
  */
 function seedThemeMode(): Theme {
-  return defaultThemeName === 'dark' ? Theme.DARK : Theme.LIGHT;
+  return Theme.LIGHT;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -105,7 +109,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<ThemeContextValue>(
     () => ({
-      theme: themeMode === Theme.DARK ? darkTheme : lightTheme,
+      theme: themeMode === Theme.DARK ? neumorphicDarkTheme : neumorphicLightTheme,
       themeMode,
       language,
       toggleTheme,

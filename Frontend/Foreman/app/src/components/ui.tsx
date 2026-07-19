@@ -38,10 +38,13 @@ export function ScreenPlain({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Operations Deck panel. A dense card on a teal-bordered dark surface. When
- * `glow` is set it becomes an "active/data" tile: a brighter teal accent border
- * plus a soft teal shadow (theme.glow.accent) — the native approximation of the
- * web deck glow. Padding uses the COMPACT spacing scale (Deck "dense + calm").
+ * Cream/teal NEUMORPHIC panel. A soft "extruded" card on the warm cream surface:
+ * RAISED via a single dark drop-shadow (native limitation — RN has no dual/inset
+ * shadow, so the dual dark+light of the web spec collapses to the drop shadow in
+ * `theme.elevation.md.native`). The dual shadow provides separation, so no heavy
+ * border — only a whisper-hairline in the neumorphic line color. Softer card
+ * radius (`neumorphic.radii.card` ~20). When `glow` is set it becomes an
+ * "active/data" tile: a teal accent border plus a soft teal shadow.
  */
 export function Card({
   children,
@@ -53,11 +56,12 @@ export function Card({
   glow?: boolean;
 }) {
   const { theme } = useTheme();
+  const cardRadius = Number(theme.neumorphic?.radii.card ?? theme.tokens.radii.xl ?? 16);
   const glowStyle: ViewStyle = glow
     ? {
         borderColor: theme.colors.accent,
         shadowColor: theme.glow.accent.color,
-        shadowOpacity: 0.35,
+        shadowOpacity: 0.3,
         shadowRadius: 16,
         shadowOffset: { width: 0, height: 6 },
         elevation: 6,
@@ -70,10 +74,11 @@ export function Card({
           backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
           borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
-          borderRadius: Number(theme.tokens.radii.md),
+          borderRadius: cardRadius,
           padding: Number(theme.tokens.spacingCompact['4']),
           marginBottom: Number(theme.tokens.spacingCompact['3']),
-          ...theme.elevation.sm.native,
+          // RAISED neumorphic drop-shadow (native approximation of the dual shadow).
+          ...theme.elevation.md.native,
         },
         glowStyle,
         style,
@@ -166,13 +171,16 @@ export function Field({
         placeholderTextColor={theme.colors.textMuted}
         {...props}
         style={{
+          // NEUMORPHIC "well": native can't render an inset shadow, so we read
+          // pressed-in via a recessed `surfaceAlt` fill + a hairline line border
+          // and a softer well radius (docs/NEUMORPHIC.md native limitation).
           borderColor: theme.colors.border,
-          borderWidth: 1,
-          borderRadius: Number(theme.tokens.radii.sm),
+          borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+          borderRadius: Number(theme.neumorphic?.radii.well ?? theme.tokens.radii.md),
           paddingVertical: Number(theme.tokens.spacing['2']),
           paddingHorizontal: Number(theme.tokens.spacing['3']),
           color: theme.colors.textPrimary,
-          backgroundColor: theme.colors.surface,
+          backgroundColor: theme.colors.surfaceAlt,
           textAlign: 'auto',
         }}
       />
@@ -199,8 +207,12 @@ export function Button({
       ? theme.colors.accent
       : variant === 'danger'
         ? theme.colors.danger
-        : theme.colors.surfaceAlt;
+        : theme.colors.surface;
   const fg = variant === 'secondary' ? theme.colors.textPrimary : theme.colors.onAccent;
+  // Secondary (surface) buttons get a hairline so they read as a raised tile on
+  // the cream ground; teal/danger fills stand on their own.
+  const border = variant === 'secondary' ? theme.colors.border : bg;
+  const controlRadius = Number(theme.neumorphic?.radii.control ?? theme.tokens.radii.sm);
   return (
     <Pressable
       onPress={onPress}
@@ -209,22 +221,27 @@ export function Button({
       // Compact VISUAL chrome (matches the Segmented) but keep a ~44px accessible
       // tap area: the vertical hitSlop expands the touch region above/below.
       hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-      style={{
+      style={({ pressed }) => ({
         backgroundColor: bg,
+        borderColor: border,
+        borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
         opacity: disabled ? 0.5 : 1,
-        borderRadius: Number(theme.tokens.radii.sm),
+        borderRadius: controlRadius,
         // Match the language Segmented control height (less tall).
         paddingVertical: Number(theme.tokens.spacing['2']),
         paddingHorizontal: Number(theme.tokens.spacing['4']),
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: Number(theme.tokens.spacing['2']),
-      }}
+        // RAISED at rest; FLATTER when pressed (native approximation of the
+        // neumorphic raised→inset state swap — no inset shadow on RN).
+        ...(pressed || disabled ? theme.elevation.sm.native : theme.elevation.md.native),
+      })}
     >
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
-        <Text style={{ color: fg, fontWeight: '600' }}>{title}</Text>
+        <Text style={{ color: fg, fontWeight: '700' }}>{title}</Text>
       )}
     </Pressable>
   );
@@ -372,8 +389,11 @@ export function Segmented<T extends string>({
             // Compact select trigger, but preserve a ~44px accessible tap area.
             hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
             style={{
+              // Chip: resting = recessed well (surfaceAlt), selected = teal fill.
               backgroundColor: active ? theme.colors.accent : theme.colors.surfaceAlt,
-              borderRadius: Number(theme.tokens.radii.sm),
+              borderColor: active ? theme.colors.accent : theme.colors.border,
+              borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+              borderRadius: Number(theme.neumorphic?.radii.chip ?? theme.tokens.radii.pill ?? 999),
               paddingVertical: Number(theme.tokens.spacing['2']),
               paddingHorizontal: Number(theme.tokens.spacing['3']),
               marginEnd: Number(theme.tokens.spacing['2']),
@@ -421,12 +441,12 @@ export function RatingRow({
             style={{
               width: 44,
               height: 44,
-              borderRadius: Number(theme.tokens.radii.sm),
+              borderRadius: Number(theme.neumorphic?.radii.control ?? theme.tokens.radii.sm),
               alignItems: 'center',
               justifyContent: 'center',
               marginEnd: Number(theme.tokens.spacing['2']),
               backgroundColor: active ? theme.colors.accentSubtle : theme.colors.surfaceAlt,
-              borderWidth: 1,
+              borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
               borderColor: active ? theme.colors.accent : theme.colors.border,
             }}
           >

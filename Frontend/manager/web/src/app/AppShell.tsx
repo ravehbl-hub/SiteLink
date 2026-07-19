@@ -26,6 +26,7 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
+      <div className="app-topbar">
       <header className="app-header">
         <span className="brand">
           <img className="brand-logo" src="/logo.png" alt={t('common.appName')} />
@@ -63,6 +64,7 @@ export function AppShell() {
           </NavLink>
         ))}
       </nav>
+      </div>
 
       <main className="app-main">
         <Outlet />

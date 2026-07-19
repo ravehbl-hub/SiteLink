@@ -95,9 +95,12 @@ export function PersonnelCompaniesScreen() {
                     </td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn btn-sm" onClick={() => setEditing(c)}>
-                          {t('common.edit')}
-                        </button>
+                        {/* Archived rows are not editable — restore/remove only. */}
+                        {!c.isArchived ? (
+                          <button className="btn btn-sm" onClick={() => setEditing(c)}>
+                            {t('common.edit')}
+                          </button>
+                        ) : null}
                         <button
                           className="btn btn-sm"
                           disabled={archiveMut.isPending}

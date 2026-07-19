@@ -145,7 +145,7 @@ export function WorkersList() {
                     <td>{t(`profession.${w.profession}`)}</td>
                     <td>{t(`level.${w.level}`)}</td>
                     <td>
-                      <div className="row-actions">
+                      <div className="status-chips">
                         {w.isArchived ? (
                           <Chip tone="neutral">{t('workers.archived')}</Chip>
                         ) : (

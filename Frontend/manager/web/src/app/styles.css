@@ -74,6 +74,14 @@ html[dir='rtl'] .neu-label {
   min-height: 100%;
 }
 
+/* Header + tab-menu lock together as one sticky unit (avoids stale magic-number
+   offsets between them; the whole topbar stays pinned when scrolling). */
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -82,9 +90,6 @@ html[dir='rtl'] .neu-label {
   background: var(--sl-color-surface);
   border-block-end: var(--sl-border-hairline) solid var(--sl-color-border);
   box-shadow: var(--sl-shadow-raised-sm, var(--sl-elevation-sm));
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 
 .brand {
@@ -132,9 +137,6 @@ html[dir='rtl'] .neu-label {
   padding: var(--sl-space-2) var(--sl-space-6);
   background: var(--sl-color-bg);
   overflow-x: auto;
-  position: sticky;
-  top: 57px;
-  z-index: 9;
 }
 
 .tab-menu a {
@@ -465,6 +467,15 @@ table.data tbody tr.selected {
   display: flex;
   gap: var(--sl-space-2);
   justify-content: flex-end;
+}
+
+/* Status pill(s) align to the column START (under the header), NOT flex-end —
+   status is data, not an action. */
+.status-chips {
+  display: flex;
+  gap: var(--sl-space-2);
+  justify-content: flex-start;
+  align-items: center;
 }
 
 /* ── Chips / badges ───────────────────────────────────────────────────── */

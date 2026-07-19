@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="SiteLink — construction workforce management. Run your crews across multiple sites: attendance, payroll, requests and reports in one place."
+    />
+    <title>SiteLink — Construction Workforce Management</title>
+    <script>
+      // Pre-hydration: apply saved language + direction before first paint so
+      // there is no flash of the wrong layout direction. Hebrew (RTL) is default.
+      (function () {
+        try {
+          var l = localStorage.getItem('sitelink.website.language') || 'he';
+          document.documentElement.setAttribute('lang', l);
+          document.documentElement.setAttribute('dir', l === 'he' ? 'rtl' : 'ltr');
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

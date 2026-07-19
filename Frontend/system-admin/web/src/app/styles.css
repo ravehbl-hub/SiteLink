@@ -48,6 +48,20 @@ button {
   outline-offset: 2px;
 }
 
+/* ── Neumorphic label treatment ───────────────────────────────────────────
+   Uppercase-bold widened-tracking section labels (docs/NEUMORPHIC.md). Latin
+   only: RTL/Hebrew must NOT be uppercased or tracked out — guarded below. */
+.neu-label {
+  font-size: var(--sl-label-size, var(--sl-font-size-xs));
+  font-weight: var(--sl-label-weight, var(--sl-font-weight-semibold));
+  letter-spacing: var(--sl-label-tracking, var(--sl-tracking-label));
+  text-transform: var(--sl-label-transform, uppercase);
+}
+html[dir='rtl'] .neu-label {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 /* ── Layout shell ─────────────────────────────────────────────────────── */
 .app-shell {
   display: flex;
@@ -62,7 +76,7 @@ button {
   padding: var(--sl-space-3) var(--sl-space-6);
   background: var(--sl-color-surface);
   border-block-end: var(--sl-border-hairline) solid var(--sl-color-border);
-  box-shadow: var(--sl-elevation-sm);
+  box-shadow: var(--sl-shadow-raised-sm, var(--sl-elevation-sm));
   position: sticky;
   top: 0;
   z-index: 10;
@@ -107,11 +121,9 @@ button {
 .side-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--sl-space-1);
+  gap: var(--sl-space-2);
   padding: var(--sl-space-4) var(--sl-space-3);
-  background: var(--sl-color-surface);
-  /* Divider sits between the rail and the content, on the rail's inline-END. */
-  border-inline-end: var(--sl-border-hairline) solid var(--sl-color-border);
+  background: var(--sl-color-bg);
   position: sticky;
   top: 61px;
   align-self: start;
@@ -124,25 +136,30 @@ button {
   align-items: center;
   gap: var(--sl-space-2);
   padding: var(--sl-space-3) var(--sl-space-3);
-  border-radius: var(--sl-radius-md);
+  border-radius: var(--sl-radius-neu-control, var(--sl-radius-md));
   /* Reserve the accent bar width on the inline-START edge so text never shifts. */
   border-inline-start: var(--sl-border-thick) solid transparent;
   color: var(--sl-color-text-secondary);
   font-weight: var(--sl-font-weight-medium);
   font-size: var(--sl-font-size-sm);
+  transition: box-shadow 0.12s ease, color 0.12s ease;
 }
 
 .nav-item:hover {
-  background: var(--sl-color-surface-alt);
+  box-shadow: var(--sl-shadow-inset-sm);
+  color: var(--sl-color-text-primary);
 }
 
+/* Active nav (vertical rail) = RAISED + teal accent (docs/NEUMORPHIC.md). */
 .nav-item.active {
   color: var(--sl-color-accent);
-  background: var(--sl-color-accent-subtle);
+  background: var(--sl-color-surface);
   border-inline-start-color: var(--sl-color-accent);
   font-weight: var(--sl-font-weight-semibold);
-  /* Deck: subtle teal glow on the active rail item. */
-  box-shadow: var(--sl-glow-accent);
+  box-shadow: var(--sl-shadow-raised);
+}
+.nav-item.active:hover {
+  box-shadow: var(--sl-shadow-raised);
 }
 
 .nav-label {
@@ -190,9 +207,9 @@ button {
 /* ── Cards ────────────────────────────────────────────────────────────── */
 .card {
   background: var(--sl-color-surface);
-  border: var(--sl-border-hairline) solid var(--sl-color-border);
-  border-radius: var(--sl-radius-lg);
-  box-shadow: var(--sl-elevation-sm);
+  border: none;
+  border-radius: var(--sl-radius-neu-card, var(--sl-radius-lg));
+  box-shadow: var(--sl-shadow-raised);
   padding: var(--sl-space-5);
 }
 
@@ -211,15 +228,17 @@ button {
 
 .kpi {
   background: var(--sl-color-surface);
-  border: var(--sl-border-hairline) solid var(--sl-color-border);
-  border-radius: var(--sl-radius-lg);
+  border: none;
+  border-radius: var(--sl-radius-neu-card, var(--sl-radius-lg));
+  box-shadow: var(--sl-shadow-raised);
   padding: var(--sl-space-4);
 }
 
 .kpi-label {
-  font-size: var(--sl-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--sl-tracking-label);
+  font-size: var(--sl-label-size, var(--sl-font-size-xs));
+  text-transform: var(--sl-label-transform, uppercase);
+  letter-spacing: var(--sl-label-tracking, var(--sl-tracking-label));
+  font-weight: var(--sl-label-weight, var(--sl-font-weight-medium));
   color: var(--sl-color-text-muted);
 }
 
@@ -265,17 +284,24 @@ html[dir='rtl'] .kpi-label {
   gap: var(--sl-space-2);
   height: var(--sl-size-controlSm);
   padding: 0 var(--sl-space-4);
-  border-radius: var(--sl-radius-md);
-  border: var(--sl-border-hairline) solid var(--sl-color-border);
+  border-radius: var(--sl-radius-neu-control, var(--sl-radius-md));
+  border: none;
   background: var(--sl-color-surface);
   color: var(--sl-color-text-primary);
-  font-weight: var(--sl-font-weight-medium);
+  font-weight: var(--sl-font-weight-semibold);
   font-size: var(--sl-font-size-sm);
   cursor: pointer;
+  box-shadow: var(--sl-shadow-raised);
+  transition: box-shadow 0.1s ease, background 0.1s ease;
 }
 
 .btn:hover {
-  background: var(--sl-color-surface-alt);
+  box-shadow: var(--sl-shadow-raised-sm);
+}
+
+/* Pressed/active = inset well. */
+.btn:active {
+  box-shadow: var(--sl-shadow-inset);
 }
 
 .btn:disabled {
@@ -285,17 +311,20 @@ html[dir='rtl'] .kpi-label {
 
 .btn-primary {
   background: var(--sl-color-accent);
-  border-color: var(--sl-color-accent);
   color: var(--sl-color-on-accent);
+  box-shadow: var(--sl-shadow-raised);
 }
 
 .btn-primary:hover {
   background: var(--sl-color-accent-hover);
+  box-shadow: var(--sl-shadow-raised-sm);
+}
+.btn-primary:active {
+  box-shadow: var(--sl-shadow-inset);
 }
 
 .btn-danger {
   color: var(--sl-color-danger);
-  border-color: var(--sl-color-danger);
 }
 
 .btn-sm {
@@ -321,12 +350,24 @@ html[dir='rtl'] .kpi-label {
 .select {
   height: var(--sl-size-controlSm);
   padding: 0 var(--sl-space-3);
-  border-radius: var(--sl-radius-md);
-  border: var(--sl-border-hairline) solid var(--sl-color-border);
-  background: var(--sl-color-bg);
+  border-radius: var(--sl-radius-neu-well, var(--sl-radius-md));
+  border: none;
+  background: var(--sl-color-surface-alt);
   color: var(--sl-color-text-primary);
   font-size: var(--sl-font-size-sm);
   width: 100%;
+  box-shadow: var(--sl-shadow-inset-sm);
+}
+
+.input::placeholder {
+  color: var(--sl-color-text-muted);
+}
+
+/* Keep the inset well on focus and layer a teal focus ring for keyboard users. */
+.input:focus-visible,
+.select:focus-visible {
+  outline: var(--sl-border-thick) solid var(--sl-color-focus-ring);
+  outline-offset: 2px;
 }
 
 /* Compact variant for header/inline controls (e.g. the language picker) —
@@ -365,10 +406,11 @@ table.data td {
 
 table.data th {
   color: var(--sl-color-text-muted);
-  font-size: var(--sl-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--sl-tracking-label);
-  font-weight: var(--sl-font-weight-semibold);
+  background: var(--sl-color-surface-alt);
+  font-size: var(--sl-label-size, var(--sl-font-size-xs));
+  text-transform: var(--sl-label-transform, uppercase);
+  letter-spacing: var(--sl-label-tracking, var(--sl-tracking-label));
+  font-weight: var(--sl-label-weight, var(--sl-font-weight-semibold));
 }
 
 html[dir='rtl'] table.data th {
@@ -378,6 +420,12 @@ html[dir='rtl'] table.data th {
 
 table.data tbody tr:hover {
   background: var(--sl-color-surface-alt);
+}
+
+/* Selected row = accent-subtle tint (form + color, per spec). */
+table.data tbody tr[aria-selected='true'],
+table.data tbody tr.selected {
+  background: var(--sl-color-accent-subtle);
 }
 
 .mono {
@@ -390,10 +438,11 @@ table.data tbody tr:hover {
   display: inline-flex;
   align-items: center;
   gap: var(--sl-space-1);
-  padding: 2px var(--sl-space-2);
-  border-radius: var(--sl-radius-pill);
+  padding: 3px var(--sl-space-3);
+  border-radius: var(--sl-radius-neu-chip, var(--sl-radius-pill));
   font-size: var(--sl-font-size-xs);
-  font-weight: var(--sl-font-weight-medium);
+  font-weight: var(--sl-font-weight-semibold);
+  box-shadow: var(--sl-shadow-raised-sm);
 }
 
 .chip-success {
@@ -429,9 +478,10 @@ table.data tbody tr:hover {
   display: inline-flex;
   gap: var(--sl-space-1);
   padding: var(--sl-space-1);
-  border-radius: var(--sl-radius-md);
+  border-radius: var(--sl-radius-neu-control, var(--sl-radius-md));
   background: var(--sl-color-surface-alt);
-  border: var(--sl-border-hairline) solid var(--sl-color-border);
+  border: none;
+  box-shadow: var(--sl-shadow-inset-sm);
 }
 .segmented button {
   appearance: none;
@@ -440,13 +490,15 @@ table.data tbody tr:hover {
   background: transparent;
   color: var(--sl-color-text-secondary);
   padding: var(--sl-space-1) var(--sl-space-4);
-  border-radius: var(--sl-radius-sm);
+  border-radius: var(--sl-radius-neu-control, var(--sl-radius-sm));
   font-size: var(--sl-font-size-sm);
+  font-weight: var(--sl-font-weight-medium);
   line-height: 2;
 }
 .segmented button[aria-pressed='true'] {
   background: var(--sl-color-accent);
   color: var(--sl-color-on-accent);
+  box-shadow: var(--sl-shadow-raised-sm);
 }
 
 /* ── Charts (dependency-free inline-SVG bar + donut) ──────────────────── */
@@ -583,9 +635,14 @@ table.data tbody tr:hover {
 }
 
 /* ── Buttons: ghost variant (icon-only, e.g. modal close) ─────────────── */
+/* Ghost = flat, no shadow; gentle inset on hover. */
 .btn-ghost {
   border-color: transparent;
   background: transparent;
+  box-shadow: none;
+}
+.btn-ghost:hover {
+  box-shadow: var(--sl-shadow-inset-sm);
 }
 
 /* ── Form field error + inline row actions ────────────────────────────── */
@@ -612,8 +669,8 @@ table.data tbody tr:hover {
 }
 .modal {
   background: var(--sl-color-surface);
-  border-radius: var(--sl-radius-xl);
-  box-shadow: var(--sl-elevation-lg);
+  border-radius: var(--sl-radius-neu-cardLg, var(--sl-radius-xl));
+  box-shadow: var(--sl-shadow-raised-lg, var(--sl-elevation-lg));
   width: 100%;
   max-width: 560px;
   max-height: 90vh;
@@ -637,16 +694,17 @@ table.data tbody tr:hover {
   display: inline-flex;
   gap: var(--sl-space-1);
   padding: var(--sl-space-1);
-  border-radius: var(--sl-radius-md);
+  border-radius: var(--sl-radius-neu-control, var(--sl-radius-md));
   background: var(--sl-color-surface-alt);
-  border: var(--sl-border-hairline) solid var(--sl-color-border);
+  border: none;
+  box-shadow: var(--sl-shadow-inset-sm);
   flex-wrap: wrap;
 }
 .segmented .seg {
   height: var(--sl-size-controlSm);
   padding: 0 var(--sl-space-3);
-  border-radius: var(--sl-radius-sm);
-  border: var(--sl-border-hairline) solid transparent;
+  border-radius: var(--sl-radius-neu-control, var(--sl-radius-sm));
+  border: none;
   background: transparent;
   color: var(--sl-color-text-secondary);
   font-size: var(--sl-font-size-xs);
@@ -654,9 +712,9 @@ table.data tbody tr:hover {
   cursor: pointer;
 }
 .segmented .seg.active {
-  background: var(--sl-color-accent-subtle);
-  color: var(--sl-color-accent);
-  border-color: var(--sl-color-accent);
+  background: var(--sl-color-accent);
+  color: var(--sl-color-on-accent);
+  box-shadow: var(--sl-shadow-raised-sm);
 }
 
 /* ══ Operations Deck skin ══════════════════════════════════════════════════
@@ -703,4 +761,31 @@ table.data tbody tr:hover {
 table.data .num,
 table.data td.num {
   font-variant-numeric: tabular-nums;
+}
+
+/* ══ Cream/Teal Neumorphic overrides for the Deck surfaces ═════════════════
+   The Deck skin (Dashboard) was authored dark-first with teal glow shadows.
+   Under the neumorphic theme those glows read wrong on cream, so we re-map Deck
+   panels/tiles/charts to the soft dual-shadow language. Scoped to the neumorphic
+   themes; Deck (light/dark) is untouched. Visual only. */
+[data-theme='neumorphic'] .deck,
+[data-theme='neumorphic-dark'] .deck {
+  background: var(--sl-color-bg);
+}
+
+[data-theme='neumorphic'] .deck .card,
+[data-theme='neumorphic-dark'] .deck .card,
+[data-theme='neumorphic'] .deck .kpi,
+[data-theme='neumorphic-dark'] .deck .kpi {
+  border: none;
+  border-radius: var(--sl-radius-neu-card, var(--sl-radius-lg));
+  box-shadow: var(--sl-shadow-raised);
+}
+
+/* Drop the teal drop-shadow glow filters — flat teal fills on cream. */
+[data-theme='neumorphic'] .deck .svg-bar,
+[data-theme='neumorphic-dark'] .deck .svg-bar,
+[data-theme='neumorphic'] .deck .svg-arc,
+[data-theme='neumorphic-dark'] .deck .svg-arc {
+  filter: none;
 }

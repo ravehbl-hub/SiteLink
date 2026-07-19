@@ -1,8 +1,7 @@
 /**
  * Theme provider (DESIGN "Theming approach", FR-X-THEME). Sets data-theme on
- * <html>; all --sl-* CSS variables update instantly. Operations Deck is DARK-FIRST:
- * with no persisted choice the app seeds to DARK (matching the token default on
- * :root). Persists the user choice and applies before paint to avoid a flash
+ * <html>; all --sl-* CSS variables update instantly. Seeds from the persisted
+ * choice, persists the user choice, and applies before paint to avoid a flash
  * (FR-X-THEME-2). The toggle + persisted choice keep working.
  */
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
@@ -22,12 +21,17 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 function initialMode(): Mode {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored === 'light' || stored === 'dark') return stored;
-  // Dark-first default (Operations Deck). No persisted choice → DARK.
-  return 'dark';
+  // Cream/Teal Neumorphic is light-first: default to light (neumorphic) unless
+  // the user opts into dark (neumorphic-dark).
+  return 'light';
 }
 
+// The system-admin surface runs the Cream/Teal Neumorphic theme. The light/dark
+// toggle maps onto the two neumorphic variants (Deck's plain light/dark tokens
+// are intentionally not used here).
 function applyMode(mode: Mode): void {
-  document.documentElement.setAttribute('data-theme', mode);
+  const theme = mode === 'dark' ? 'neumorphic-dark' : 'neumorphic';
+  document.documentElement.setAttribute('data-theme', theme);
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

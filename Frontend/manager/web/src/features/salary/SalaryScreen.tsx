@@ -1,14 +1,23 @@
 /** Salary (FR-MGR-SRE): calculate via /salary/calculate (mode + rate resolved
  *  server-side), show the itemized breakdown, and download the payslip PDF. */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { SalaryResult } from '@sitelink/shared';
-import { salaryApi, payslipApi } from '../../lib/api/endpoints';
+import type { SalaryResult, WorkingHours } from '@sitelink/shared';
+import { salaryApi, payslipApi, attendanceApi } from '../../lib/api/endpoints';
+import { qk } from '../../lib/api/queryKeys';
 import { apiUrl, bearerToken, ApiError } from '../../lib/api/client';
 import { useWorkersList } from '../../lib/api/hooks';
 import { currentMonthRange, formatCurrency, formatDate, toDateInput, dateInputToISO } from '../../lib/format';
 import i18n from '../../i18n';
+
+/** Derive the day's type from the DAY-grain rollup flags. Each DAY bucket is
+ *  exactly one record, so at most one of these is 1. */
+function whType(wh: WorkingHours): 'ATTENDANCE' | 'VACATION' | 'DISEASE' {
+  if (wh.vacationDays >= 1) return 'VACATION';
+  if (wh.diseaseDays >= 1) return 'DISEASE';
+  return 'ATTENDANCE';
+}
 
 export function SalaryScreen() {
   const { t } = useTranslation();
@@ -123,6 +132,40 @@ export function SalaryScreen() {
       setSuccess(null);
     },
   });
+
+  // Per-day working-hours breakdown behind the salary total. Reuses the EXISTING
+  // /working-hours aggregate at DAY grain over the SAME worker + period the salary
+  // was computed for — so the summed hours reconcile with the salary calc (both
+  // derive from the same AttendanceRecord source). Enabled once a result exists.
+  const whParams = { workerId, from: periodStart, to: periodEnd, grain: 'DAY' as const };
+  const workingHours = useQuery({
+    queryKey: qk.workingHours(whParams),
+    queryFn: () => attendanceApi.workingHours(whParams),
+    enabled: Boolean(result && workerId),
+    staleTime: 5_000,
+  });
+
+  // Sort ascending by bucket start; each DAY bucket = one calendar day.
+  const whRows = useMemo(
+    () =>
+      [...(workingHours.data ?? [])].sort((a, b) =>
+        a.periodStart < b.periodStart ? -1 : a.periodStart > b.periodStart ? 1 : 0,
+      ),
+    [workingHours.data],
+  );
+  const whTotals = useMemo(
+    () =>
+      whRows.reduce(
+        (acc, wh) => ({
+          hours: acc.hours + wh.totalHours,
+          attendance: acc.attendance + wh.attendanceDays,
+          vacation: acc.vacation + wh.vacationDays,
+          disease: acc.disease + wh.diseaseDays,
+        }),
+        { hours: 0, attendance: 0, vacation: 0, disease: 0 },
+      ),
+    [whRows],
+  );
 
   async function downloadPayslip() {
     setDownloading(true);
@@ -333,6 +376,65 @@ export function SalaryScreen() {
               ) : null}
             </div>
           </div>
+
+          {/* Details of working hours — the per-day breakdown behind the salary
+              hours total. Same worker/period, DAY-grain rollup; the TOTAL row
+              reconciles with the salary calc's attendance hours. */}
+          <details open style={{ marginBlockStart: 'var(--sl-space-4)' }}>
+            <summary
+              className="subsection-title"
+              style={{ cursor: 'pointer', marginBlockEnd: 'var(--sl-space-2)' }}
+            >
+              {t('salary.workingHoursDetails')}
+            </summary>
+            {workingHours.isLoading ? (
+              <p className="muted">{t('common.loading')}</p>
+            ) : whRows.length === 0 ? (
+              <div className="empty-state">{t('salary.whNoData')}</div>
+            ) : (
+              <>
+                <div className="table-wrap">
+                  <table className="data">
+                    <thead>
+                      <tr>
+                        <th>{t('salary.whDate')}</th>
+                        <th style={{ textAlign: 'end' }}>{t('salary.whHours')}</th>
+                        <th>{t('salary.whType')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {whRows.map((wh, i) => {
+                        const type = whType(wh);
+                        return (
+                          <tr key={`${wh.periodStart}-${i}`}>
+                            <td>{formatDate(wh.periodStart)}</td>
+                            <td style={{ textAlign: 'end' }}>
+                              {type === 'ATTENDANCE' ? wh.totalHours : '—'}
+                            </td>
+                            <td>{t(`attendanceType.${type}`)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ fontWeight: 'var(--sl-font-weight-bold, 700)' }}>
+                        <td>{t('salary.whTotal')}</td>
+                        <td style={{ textAlign: 'end' }}>{whTotals.hours}</td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <p className="muted" style={{ marginBlockStart: 'var(--sl-space-2)' }}>
+                  {t('salary.whSummary', {
+                    attendance: whTotals.attendance,
+                    vacation: whTotals.vacation,
+                    disease: whTotals.disease,
+                  })}
+                </p>
+              </>
+            )}
+          </details>
         </div>
       ) : null}
 

@@ -259,6 +259,13 @@ export const he: Resources = {
     shareNoPhone: 'לעובד זה אין מספר טלפון',
     shareFailed: 'לא ניתן לשתף את תלוש השכר. נסה שוב.',
     whatsappMessage: 'הנה תלוש השכר שלך: {{url}}',
+    workingHoursDetails: 'פירוט שעות עבודה',
+    whDate: 'תאריך',
+    whHours: 'שעות',
+    whType: 'סוג',
+    whTotal: 'סה"כ',
+    whNoData: 'אין שעות עבודה בתקופה זו',
+    whSummary: '{{attendance}} נוכחות · {{vacation}} חופשה · {{disease}} מחלה',
   },
   sites: {
     title: 'אתרים',

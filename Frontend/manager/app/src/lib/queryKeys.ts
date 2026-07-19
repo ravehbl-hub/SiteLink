@@ -15,6 +15,7 @@ export const qk = {
   worker: (id: string) => ['worker', id] as const,
   workerDocs: (id: string) => ['worker', id, 'docs'] as const,
   attendance: (p: Record<string, unknown>) => ['attendance', p] as const,
+  workingHours: (p: Record<string, unknown>) => ['workingHours', p] as const,
   wageRates: ['wageRates'] as const,
   loans: (p?: Record<string, unknown>) => ['loans', p ?? {}] as const,
   advances: (p?: Record<string, unknown>) => ['advances', p ?? {}] as const,

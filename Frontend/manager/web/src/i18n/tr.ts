@@ -259,6 +259,13 @@ export const tr: Resources = {
     shareNoPhone: 'Bu çalışanın telefon numarası yok',
     shareFailed: 'Bordro paylaşılamadı. Lütfen tekrar deneyin.',
     whatsappMessage: 'İşte bordronuz: {{url}}',
+    workingHoursDetails: 'Çalışma saatleri detayı',
+    whDate: 'Tarih',
+    whHours: 'Saat',
+    whType: 'Tür',
+    whTotal: 'Toplam',
+    whNoData: 'Bu dönem için çalışma saati yok',
+    whSummary: '{{attendance}} devam · {{vacation}} izin · {{disease}} hastalık',
   },
   sites: {
     title: 'Şantiyeler',

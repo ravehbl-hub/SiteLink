@@ -257,6 +257,13 @@ export const en = {
     shareNoPhone: 'This worker has no phone number',
     shareFailed: 'Could not share the payslip. Please try again.',
     whatsappMessage: 'Here is your payslip: {{url}}',
+    workingHoursDetails: 'Working hours details',
+    whDate: 'Date',
+    whHours: 'Hours',
+    whType: 'Type',
+    whTotal: 'Total',
+    whNoData: 'No working hours for this period',
+    whSummary: '{{attendance}} attendance · {{vacation}} vacation · {{disease}} sick',
   },
   sites: {
     title: 'Sites',

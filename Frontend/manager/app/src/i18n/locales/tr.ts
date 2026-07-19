@@ -262,6 +262,10 @@ export const tr: TranslationResources = {
     typeVacation: 'İzin',
     typeDisease: 'Hastalık',
     noWorkingHours: 'Bu dönem için çalışma saati yok',
+    hourlyRate: 'Saatlik ücret',
+    lineTotal: 'Tutar',
+    moneyTotal: 'Ödenecek toplam',
+    rateInformational: 'Ücret bilgi amaçlıdır; brüt tutar esas alınır',
   },
   sites: {
     title: 'Sahalar',

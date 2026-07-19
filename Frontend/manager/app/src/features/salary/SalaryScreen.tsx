@@ -98,6 +98,26 @@ export function SalaryScreen() {
     [whDays],
   );
 
+  /** Per-day line total = hours × hourlyWage for ATTENDANCE only (vacation/disease → 0). */
+  const rate = result?.hourlyWage ?? 0;
+  const lineTotal = React.useCallback(
+    (d: WorkingHours): number =>
+      dayType(d) === 'ATTENDANCE' ? (d.totalHours ?? 0) * rate : 0,
+    [rate],
+  );
+  const moneyTotal = React.useMemo(
+    () => whDays.reduce((sum, d) => sum + lineTotal(d), 0),
+    [whDays, lineTotal],
+  );
+  /**
+   * Flat hourly reconciles: sum(hours × hourlyWage) === gross. For a fixed-monthly
+   * calc (or any mismatch) the rate is informational and gross stays authoritative.
+   */
+  const reconciles =
+    result != null &&
+    result.mode !== 'fixed' &&
+    Math.abs(moneyTotal - result.gross) < 0.01;
+
   const workerOptions = ((workersQ.data?.items ?? []) as Worker[]).map((w) => ({
     value: w.id,
     label: `${w.firstName} ${w.lastName}`,
@@ -131,10 +151,6 @@ export function SalaryScreen() {
               <Body tabular>{money(line.amount, result.currency)}</Body>
             </Row>
           ))}
-          <View style={{ height: 8 }} />
-          <Body muted>
-            {t('salary.engineVersion')}: {result.engineVersion}
-          </Body>
         </Card>
       ) : (
         <EmptyState label={t('salary.noResult')} />
@@ -144,29 +160,41 @@ export function SalaryScreen() {
         <Card>
           <SectionHeading>{t('salary.workingHoursTitle')}</SectionHeading>
 
+          {/* Hourly rate — the exact rate the calc used (result.hourlyWage). */}
+          <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
+            <Body muted>{t('salary.hourlyRate')}</Body>
+            <Body tabular>{money(result.hourlyWage, result.currency)}</Body>
+          </Row>
+
           {whQ.isLoading ? (
             <Loading />
           ) : whDays.length === 0 ? (
             <EmptyState label={t('salary.noWorkingHours')} />
           ) : (
             <View>
-              {/* Column header */}
+              {/* Column header: DATE | HOURS | TYPE | LINE TOTAL */}
               <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
                 <View style={{ flex: 1 }}>
                   <Body muted>{t('salary.date')}</Body>
                 </View>
-                <View style={{ width: 64 }}>
+                <View style={{ width: 48 }}>
                   <Body muted tabular>
                     {t('salary.hours')}
                   </Body>
                 </View>
-                <View style={{ width: 96 }}>
+                <View style={{ width: 76 }}>
                   <Body muted>{t('salary.type')}</Body>
+                </View>
+                <View style={{ width: 84, alignItems: 'flex-end' }}>
+                  <Body muted tabular>
+                    {t('salary.lineTotal')}
+                  </Body>
                 </View>
               </Row>
 
               {whDays.map((d) => {
                 const dt = dayType(d);
+                const lt = lineTotal(d);
                 return (
                   <Row
                     key={d.periodStart}
@@ -175,17 +203,22 @@ export function SalaryScreen() {
                     <View style={{ flex: 1 }}>
                       <Body>{shortDate(d.periodStart)}</Body>
                     </View>
-                    <View style={{ width: 64 }}>
+                    <View style={{ width: 48 }}>
                       <Body tabular>{d.totalHours}</Body>
                     </View>
-                    <View style={{ width: 96 }}>
+                    <View style={{ width: 76 }}>
                       <StatusPill label={t(DAY_LABEL_KEY[dt])} tone={DAY_TONE[dt]} />
+                    </View>
+                    <View style={{ width: 84, alignItems: 'flex-end' }}>
+                      <Body tabular muted={dt !== 'ATTENDANCE'}>
+                        {dt === 'ATTENDANCE' ? money(lt, result.currency) : '—'}
+                      </Body>
                     </View>
                   </Row>
                 );
               })}
 
-              {/* Total row — reconciles with the salary's attendance hours. */}
+              {/* Total row — hours total reconciles with the salary's attendance hours. */}
               <View style={{ height: 8 }} />
               <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
                 <SectionHeading>{t('salary.total')}</SectionHeading>
@@ -193,6 +226,19 @@ export function SalaryScreen() {
                   {whTotal} {t('salary.hours')}
                 </Body>
               </Row>
+
+              {/* Money total = sum(line totals). Flat hourly → equals result.gross. */}
+              <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
+                <Body muted>{t('salary.moneyTotal')}</Body>
+                <Body tabular>{money(moneyTotal, result.currency)}</Body>
+              </Row>
+
+              {/* Fixed-monthly / mismatch: rate is informational, gross authoritative. */}
+              {!reconciles ? (
+                <View style={{ paddingTop: 4 }}>
+                  <Body muted>{t('salary.rateInformational')}</Body>
+                </View>
+              ) : null}
             </View>
           )}
         </Card>

@@ -264,6 +264,11 @@ export const en = {
     whTotal: 'Total',
     whNoData: 'No working hours for this period',
     whSummary: '{{attendance}} attendance · {{vacation}} vacation · {{disease}} sick',
+    hourlyRate: 'Hourly rate',
+    whLineTotal: 'Line total',
+    whMoneyTotal: 'Total pay',
+    whReconcileNote: 'Line totals sum to the gross pay.',
+    whFixedNote: 'Fixed monthly salary — the hourly rate is informational; the gross is the fixed amount.',
   },
   sites: {
     title: 'Sites',

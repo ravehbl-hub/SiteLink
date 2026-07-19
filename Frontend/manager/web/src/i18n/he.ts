@@ -266,6 +266,11 @@ export const he: Resources = {
     whTotal: 'סה"כ',
     whNoData: 'אין שעות עבודה בתקופה זו',
     whSummary: '{{attendance}} נוכחות · {{vacation}} חופשה · {{disease}} מחלה',
+    hourlyRate: 'מחיר לשעה',
+    whLineTotal: 'סה"כ שורה',
+    whMoneyTotal: 'סה"כ תשלום',
+    whReconcileNote: 'סכום השורות שווה לשכר ברוטו.',
+    whFixedNote: 'שכר חודשי קבוע — המחיר לשעה הוא מידע בלבד; הברוטו הוא הסכום הקבוע.',
   },
   sites: {
     title: 'אתרים',

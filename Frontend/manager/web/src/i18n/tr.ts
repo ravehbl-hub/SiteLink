@@ -266,6 +266,11 @@ export const tr: Resources = {
     whTotal: 'Toplam',
     whNoData: 'Bu dönem için çalışma saati yok',
     whSummary: '{{attendance}} devam · {{vacation}} izin · {{disease}} hastalık',
+    hourlyRate: 'Saatlik ücret',
+    whLineTotal: 'Satır toplamı',
+    whMoneyTotal: 'Toplam ödeme',
+    whReconcileNote: 'Satır toplamları brüt ücrete eşittir.',
+    whFixedNote: 'Sabit aylık maaş — saatlik ücret bilgi amaçlıdır; brüt sabit tutardır.',
   },
   sites: {
     title: 'Şantiyeler',

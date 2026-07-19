@@ -27,6 +27,11 @@ export function SalaryScreen() {
   const [periodStart, setPeriodStart] = useState(range.from);
   const [periodEnd, setPeriodEnd] = useState(range.to);
   const [result, setResult] = useState<SalaryResult | null>(null);
+  // Pin the worker/period the DISPLAYED result was computed for, so the
+  // working-hours details always follow the computed salary — not the live
+  // selector (which can change without recomputing). Mirrors the app.
+  const [resultWorkerId, setResultWorkerId] = useState('');
+  const [resultPeriod, setResultPeriod] = useState<{ from: string; to: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -123,12 +128,17 @@ export function SalaryScreen() {
     mutationFn: () => salaryApi.calculate({ workerId, periodStart, periodEnd }),
     onSuccess: (r) => {
       setResult(r);
+      // Pin the details query to what we just computed.
+      setResultWorkerId(workerId);
+      setResultPeriod({ from: periodStart, to: periodEnd });
       setError(null);
       setSuccess(null);
     },
     onError: (e) => {
       setError(e instanceof Error ? e.message : String(e));
       setResult(null);
+      setResultWorkerId('');
+      setResultPeriod(null);
       setSuccess(null);
     },
   });
@@ -137,11 +147,16 @@ export function SalaryScreen() {
   // /working-hours aggregate at DAY grain over the SAME worker + period the salary
   // was computed for — so the summed hours reconcile with the salary calc (both
   // derive from the same AttendanceRecord source). Enabled once a result exists.
-  const whParams = { workerId, from: periodStart, to: periodEnd, grain: 'DAY' as const };
+  const whParams = {
+    workerId: resultWorkerId,
+    from: resultPeriod?.from ?? periodStart,
+    to: resultPeriod?.to ?? periodEnd,
+    grain: 'DAY' as const,
+  };
   const workingHours = useQuery({
     queryKey: qk.workingHours(whParams),
     queryFn: () => attendanceApi.workingHours(whParams),
-    enabled: Boolean(result && workerId),
+    enabled: Boolean(result && resultWorkerId && resultPeriod),
     staleTime: 5_000,
   });
 
@@ -153,6 +168,10 @@ export function SalaryScreen() {
       ),
     [workingHours.data],
   );
+  // The exact rate the salary calc used. Per ATTENDANCE row the line total is
+  // hours × hourlyWage; vacation/disease rows contribute 0. For a flat hourly
+  // calc the summed line totals equal result.gross.
+  const hourlyWage = result?.hourlyWage ?? 0;
   const whTotals = useMemo(
     () =>
       whRows.reduce(
@@ -161,11 +180,23 @@ export function SalaryScreen() {
           attendance: acc.attendance + wh.attendanceDays,
           vacation: acc.vacation + wh.vacationDays,
           disease: acc.disease + wh.diseaseDays,
+          // Only ATTENDANCE rows carry paid hours toward the money total.
+          money:
+            acc.money +
+            (whType(wh) === 'ATTENDANCE' ? wh.totalHours * hourlyWage : 0),
         }),
-        { hours: 0, attendance: 0, vacation: 0, disease: 0 },
+        { hours: 0, attendance: 0, vacation: 0, disease: 0, money: 0 },
       ),
-    [whRows],
+    [whRows, hourlyWage],
   );
+
+  // Reconciliation: for a flat hourly calc sum(line totals) === gross. For a
+  // fixed monthly salary the rate is informational and won't sum to gross —
+  // detect via mode OR a mismatch (allow a cent of float slack).
+  const reconciles =
+    result != null &&
+    result.mode !== 'fixed' &&
+    Math.abs(whTotals.money - result.gross) < 0.01;
 
   async function downloadPayslip() {
     setDownloading(true);
@@ -266,14 +297,17 @@ export function SalaryScreen() {
               {t('salary.result')}
             </h3>
             <div className="header-spacer" />
-            <span className="muted">
-              {t('salary.engineVersion')}: {result.engineVersion}
-            </span>
           </div>
           <div className="grid grid-kpi" style={{ marginBlockEnd: 'var(--sl-space-4)' }}>
             <div className="kpi">
               <div className="kpi-label">{t('salary.gross')}</div>
               <div className="kpi-value">{formatCurrency(result.gross, result.currency)}</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-label">{t('salary.hourlyRate')}</div>
+              <div className="kpi-value">
+                {formatCurrency(result.hourlyWage, result.currency)}
+              </div>
             </div>
             <div className="kpi">
               <div className="kpi-label">{t('payment.calcMode')}</div>
@@ -400,18 +434,25 @@ export function SalaryScreen() {
                         <th>{t('salary.whDate')}</th>
                         <th style={{ textAlign: 'end' }}>{t('salary.whHours')}</th>
                         <th>{t('salary.whType')}</th>
+                        <th style={{ textAlign: 'end' }}>{t('salary.whLineTotal')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {whRows.map((wh, i) => {
                         const type = whType(wh);
+                        const isAttendance = type === 'ATTENDANCE';
                         return (
                           <tr key={`${wh.periodStart}-${i}`}>
                             <td>{formatDate(wh.periodStart)}</td>
                             <td style={{ textAlign: 'end' }}>
-                              {type === 'ATTENDANCE' ? wh.totalHours : '—'}
+                              {isAttendance ? wh.totalHours : '—'}
                             </td>
                             <td>{t(`attendanceType.${type}`)}</td>
+                            <td style={{ textAlign: 'end' }}>
+                              {isAttendance
+                                ? formatCurrency(wh.totalHours * hourlyWage, result.currency)
+                                : '—'}
+                            </td>
                           </tr>
                         );
                       })}
@@ -420,7 +461,10 @@ export function SalaryScreen() {
                       <tr style={{ fontWeight: 'var(--sl-font-weight-bold, 700)' }}>
                         <td>{t('salary.whTotal')}</td>
                         <td style={{ textAlign: 'end' }}>{whTotals.hours}</td>
-                        <td />
+                        <td>{t('salary.whMoneyTotal')}</td>
+                        <td style={{ textAlign: 'end' }}>
+                          {formatCurrency(whTotals.money, result.currency)}
+                        </td>
                       </tr>
                     </tfoot>
                   </table>
@@ -431,6 +475,9 @@ export function SalaryScreen() {
                     vacation: whTotals.vacation,
                     disease: whTotals.disease,
                   })}
+                </p>
+                <p className="muted" style={{ marginBlockStart: 'var(--sl-space-1)' }}>
+                  {reconciles ? t('salary.whReconcileNote') : t('salary.whFixedNote')}
                 </p>
               </>
             )}

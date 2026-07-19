@@ -260,6 +260,10 @@ export const en = {
     typeVacation: 'Vacation',
     typeDisease: 'Sick',
     noWorkingHours: 'No working hours for this period',
+    hourlyRate: 'Hourly rate',
+    lineTotal: 'Amount',
+    moneyTotal: 'Total due',
+    rateInformational: 'Rate is informational; the gross is the authoritative total',
   },
   sites: {
     title: 'Sites',

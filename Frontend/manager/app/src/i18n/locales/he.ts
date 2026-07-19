@@ -262,6 +262,10 @@ export const he: TranslationResources = {
     typeVacation: 'חופשה',
     typeDisease: 'מחלה',
     noWorkingHours: 'אין שעות עבודה לתקופה זו',
+    hourlyRate: 'מחיר לשעה',
+    lineTotal: 'סכום',
+    moneyTotal: 'סה"כ לתשלום',
+    rateInformational: 'התעריף הוא לידיעה בלבד; הברוטו הוא הסכום הקובע',
   },
   sites: {
     title: 'אתרים',

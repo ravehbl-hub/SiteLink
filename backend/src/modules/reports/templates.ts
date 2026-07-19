@@ -41,6 +41,13 @@ export interface ReportHeaderMeta {
   from: string;
   to: string;
   direction: 'ltr' | 'rtl';
+  /**
+   * Specific locale ('he' | 'en' | 'tr'). `direction` alone can't distinguish en
+   * from tr (both LTR), so templates that localize labels (e.g. the payslip
+   * working-hours section) read `lang` to pick the exact locale. Optional — when
+   * absent, templates fall back to he for rtl / en for ltr.
+   */
+  lang?: 'he' | 'en' | 'tr';
 }
 
 function header(meta: ReportHeaderMeta): React.ReactElement {

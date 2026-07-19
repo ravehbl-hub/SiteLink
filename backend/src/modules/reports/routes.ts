@@ -120,6 +120,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       from: q.from,
       to: q.to,
       direction: dirFor(q.lang),
+      lang: q.lang,
     });
     return reply
       .header('Content-Type', 'application/pdf')
@@ -157,6 +158,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       from: body.from,
       to: body.to,
       direction: dirFor(body.lang),
+      lang: body.lang,
     });
 
     const filename = `payslip-${nameSlug(worker.firstName, worker.lastName)}-${periodTag(
@@ -210,6 +212,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       from: body.from,
       to: body.to,
       direction: dirFor(body.lang),
+      lang: body.lang,
     });
 
     // SERVER-generated key on the worker-docs bucket under a payslips/ prefix

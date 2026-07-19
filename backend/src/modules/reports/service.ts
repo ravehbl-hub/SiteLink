@@ -70,6 +70,7 @@ export class ReportsService {
     from: string;
     to: string;
     direction: 'ltr' | 'rtl';
+    lang?: 'he' | 'en' | 'tr';
   }): Promise<Buffer> {
     const worker = await prisma.worker.findUnique({ where: { id: params.workerId } });
     if (!worker) throw AppError.notFound('Worker not found');
@@ -98,6 +99,7 @@ export class ReportsService {
       from: toDateOnly(new Date(params.from)),
       to: toDateOnly(new Date(params.to)),
       direction: params.direction,
+      lang: params.lang,
     };
 
     const workerName = `${worker.firstName} ${worker.lastName}`;

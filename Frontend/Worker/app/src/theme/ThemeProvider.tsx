@@ -6,9 +6,8 @@
  */
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
-  lightTheme,
-  darkTheme,
-  defaultThemeName,
+  neumorphicLightTheme,
+  neumorphicDarkTheme,
   type Theme as TokenTheme,
 } from '@sitelink/tokens';
 import { Language, Theme } from '@sitelink/shared';
@@ -42,13 +41,13 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 /**
- * Dark-first seed (Operations Deck, Direction 03). SiteLink LEADS with dark, so
- * the initial mode is the tokens' `defaultThemeName` (dark) rather than the OS
- * appearance. A persisted user choice still wins (loaded in the effect below),
- * and the Settings toggle remains fully functional.
+ * Cream-first seed (Neumorphic Cream/Teal). The reskin LEADS with the light cream
+ * theme, so the initial mode is LIGHT rather than the OS appearance. A persisted
+ * user choice still wins (loaded in the effect below), and the Settings toggle
+ * remains fully functional (LIGHT ↔ DARK maps to neumorphicLight ↔ neumorphicDark).
  */
 function seedThemeMode(): Theme {
-  return defaultThemeName === 'dark' ? Theme.DARK : Theme.LIGHT;
+  return Theme.LIGHT;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -109,7 +108,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<ThemeContextValue>(
     () => ({
-      theme: themeMode === Theme.DARK ? darkTheme : lightTheme,
+      theme: themeMode === Theme.DARK ? neumorphicDarkTheme : neumorphicLightTheme,
       themeMode,
       language,
       toggleTheme,

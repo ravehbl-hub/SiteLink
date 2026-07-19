@@ -36,6 +36,43 @@ function accentGlow(theme: TokenTheme): ViewStyle {
   };
 }
 
+/**
+ * Neumorphic radius helper. When the active theme is the Cream/Teal neumorphic
+ * one it exposes the softer radius scale (cards ~20, controls ~12, wells ~14);
+ * otherwise fall back to the base radii so a Deck theme still renders. Token-only.
+ */
+function neuRadius(
+  theme: TokenTheme,
+  key: 'card' | 'control' | 'controlLg' | 'well',
+  fallback: number,
+): number {
+  return Number(theme.neumorphic?.radii[key] ?? fallback);
+}
+
+/**
+ * Neumorphic RAISED elevation for native. RN cannot render a dual/inset shadow,
+ * so a raised element is the single dark drop-shadow from the theme elevation set
+ * (md.native). Token-only — no hard-coded shadow values.
+ */
+function raised(theme: TokenTheme): ViewStyle {
+  return theme.elevation.md.native as ViewStyle;
+}
+
+const raisedSm = (theme: TokenTheme): ViewStyle => theme.elevation.sm.native as ViewStyle;
+
+/**
+ * Neumorphic WELL (inset) for native. RN cannot inset-shadow, so per the spec a
+ * well is approximated with a slightly darker `surfaceAlt` fill + a hairline
+ * `border`. Token-only.
+ */
+function well(theme: TokenTheme): ViewStyle & TextStyle {
+  return {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: theme.colors.border,
+    borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+  };
+}
+
 /** Tabular figures so numeric columns/amounts align (Operations Deck data feel). */
 const TABULAR: Pick<TextStyle, 'fontVariant'> = { fontVariant: ['tabular-nums'] };
 
@@ -57,9 +94,11 @@ export function ScreenPlain({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Deck panel. Dense (compact spacing) surface on a dark ground, with a teal
- * hairline border (theme.colors.border reads teal in dark). `glow` opts a panel
- * into the teal accent glow for active/data-forward cards (theme.glow.accent).
+ * Neumorphic panel. A soft, raised cream surface (theme.colors.surface) floating
+ * on the cream ground via a single dark drop-shadow (the native neumorphic RAISED
+ * approximation — RN has no dual/inset shadow). Softer card radius (~20). `glow`
+ * opts a panel into the teal accent glow for active/data-forward cards; a glowing
+ * card keeps a teal hairline ring to read as "live".
  */
 export function Card({
   children,
@@ -76,12 +115,16 @@ export function Card({
       style={[
         {
           backgroundColor: theme.colors.surface,
-          borderColor: glow ? theme.glow.accent.color : theme.colors.border,
-          borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
-          borderRadius: Number(theme.tokens.radii.md),
+          borderRadius: neuRadius(theme, 'card', Number(theme.tokens.radii.md)),
           padding: Number(theme.tokens.spacingCompact['4']),
           marginBottom: Number(theme.tokens.spacingCompact['3']),
-          ...(glow ? accentGlow(theme) : theme.elevation.sm.native),
+          ...(glow
+            ? {
+                borderColor: theme.glow.accent.color,
+                borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+                ...accentGlow(theme),
+              }
+            : raised(theme)),
         },
         style,
       ]}
@@ -168,14 +211,14 @@ export function Field({
         placeholderTextColor={theme.colors.textMuted}
         {...props}
         style={{
-          borderColor: theme.colors.border,
-          borderWidth: 1,
-          borderRadius: Number(theme.tokens.radii.sm),
+          // Neumorphic WELL: sunken feel via a darker surfaceAlt fill + hairline
+          // border (RN can't inset-shadow). Rounded to the well radius (~14).
+          ...well(theme),
+          borderRadius: neuRadius(theme, 'well', Number(theme.tokens.radii.sm)),
           // Compact density to match the language Segmented control height.
           paddingVertical: Number(theme.tokens.spacingCompact['2']),
           paddingHorizontal: Number(theme.tokens.spacing['3']),
           color: theme.colors.textPrimary,
-          backgroundColor: theme.colors.surface,
           textAlign: 'auto',
         }}
       />
@@ -212,17 +255,21 @@ export function Button({
       // Compact VISUAL chrome (~controlSm) but keep a ~44px accessible tap area:
       // the vertical hitSlop expands the touch region above/below the short button.
       hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-      style={{
+      style={({ pressed }) => ({
         backgroundColor: bg,
         opacity: disabled ? 0.5 : 1,
-        borderRadius: Number(theme.tokens.radii.sm),
+        // Softer neumorphic control radius (~12).
+        borderRadius: neuRadius(theme, 'control', Number(theme.tokens.radii.sm)),
         // Compact density to match the language Segmented control height.
         paddingVertical: Number(theme.tokens.spacingCompact['2']),
         paddingHorizontal: Number(theme.tokens.spacing['4']),
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: Number(theme.tokens.spacing['2']),
-      }}
+        // Neumorphic: RAISED at rest, FLATTER when pressed (drop the shadow so the
+        // control reads as sunk into the ground). Disabled reads flat too.
+        ...(pressed || disabled ? null : raised(theme)),
+      })}
     >
       {loading ? (
         <ActivityIndicator color={fg} />
@@ -255,7 +302,7 @@ export function StatusPill({ label, tone }: { label: string; tone: Semantic }) {
         // Encode state in FORM as well as color: a tone-matched hairline ring.
         borderColor: fgMap[tone],
         borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
-        borderRadius: Number(theme.tokens.radii.pill ?? 999),
+        borderRadius: Number(theme.neumorphic?.radii.pill ?? theme.tokens.radii.pill ?? 999),
         paddingVertical: Number(theme.tokens.spacingCompact['1']),
         paddingHorizontal: Number(theme.tokens.spacingCompact['3']),
         alignSelf: 'flex-start',
@@ -341,13 +388,15 @@ export function Segmented<T extends string>({
             hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
             style={{
               backgroundColor: active ? theme.colors.accent : theme.colors.surfaceAlt,
-              borderRadius: Number(theme.tokens.radii.sm),
+              // Softer neumorphic control radius (~12).
+              borderRadius: neuRadius(theme, 'control', Number(theme.tokens.radii.sm)),
               paddingVertical: Number(theme.tokens.spacingCompact['2']),
               paddingHorizontal: Number(theme.tokens.spacingCompact['3']),
               marginEnd: Number(theme.tokens.spacingCompact['2']),
               marginBottom: Number(theme.tokens.spacingCompact['2']),
-              // Active selection reads as a live/data element: teal glow.
-              ...(active ? accentGlow(theme) : null),
+              // Active reads as a live element (teal glow); inactive chips sit as a
+              // soft RAISED neumorphic control (subtle drop-shadow).
+              ...(active ? accentGlow(theme) : raisedSm(theme)),
             }}
           >
             <Text style={{ color: active ? theme.colors.onAccent : theme.colors.textSecondary }}>

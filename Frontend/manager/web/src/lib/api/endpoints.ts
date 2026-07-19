@@ -239,6 +239,35 @@ export const salaryApi = {
   }) => http.post<SalaryResult>('/salary/calculate', body),
 };
 
+/* ── Payslip sharing (MANAGER-only, worker-scoped) ────────────────────────
+ * Both take the same period the salary screen already computed (from/to are
+ * ISO datetimes) plus an optional siteId and a lang for the rendered PDF.
+ * - email    → server emails the payslip PDF to the WORKER'S OWN stored email.
+ * - whatsapp → server returns a SIGNED PDF link (~30min TTL); the FE then opens
+ *   WhatsApp with that link in the message text (WhatsApp can't attach files). */
+export interface PayslipShareBody {
+  workerId: string;
+  from: string;
+  to: string;
+  siteId?: string;
+  lang?: 'he' | 'en' | 'tr';
+}
+export interface PayslipEmailResult {
+  sent: boolean;
+  to: string;
+}
+export interface PayslipWhatsappLink {
+  phone: string;
+  url: string;
+  expiresInSeconds: number;
+}
+export const payslipApi = {
+  email: (body: PayslipShareBody) =>
+    http.post<PayslipEmailResult>('/reports/payslip/email', body),
+  whatsappLink: (body: PayslipShareBody) =>
+    http.post<PayslipWhatsappLink>('/reports/payslip/whatsapp-link', body),
+};
+
 /* ── Personnel companies (FR-MGR-EMP-2): org-wide staffing companies ─────
  * ADMIN/MANAGER only. Duplicate name → 409; archive/unarchive toggles state. */
 export const personnelCompaniesApi = {

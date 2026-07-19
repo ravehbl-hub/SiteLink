@@ -49,6 +49,16 @@ describe('FlatSalaryStrategy (mode: fixed) — real v1 math', () => {
     expect(r.gross).toBe(800);
     expect(r.breakdown[0].amount).toBe(800);
     expect(r.breakdown[0].label).toContain('16h');
+    // hourlyWage exposed on the result reconciles: gross === hours × hourlyWage.
+    expect(r.hourlyWage).toBe(50);
+    expect(r.gross).toBe(16 * r.hourlyWage);
+  });
+
+  it('exposes the resolved hourlyWage even for a fixed MONTHLY salary (informational)', () => {
+    // gross is the fixed amount, NOT hourlyWage × hours — but the rate is still carried.
+    const r = engine.compute(baseInput({ fixedSalary: 12000, hourlyWage: 50 }));
+    expect(r.gross).toBe(12000);
+    expect(r.hourlyWage).toBe(50);
   });
 
   it('rounds money to 2 decimals', () => {
@@ -76,6 +86,7 @@ describe('IsraeliLaborLawStrategy — STUB (FR-MGR-SRE-4, R-1 mitigation)', () =
     const r = engine.compute(baseInput({ mode: 'israeli-labor-law' }));
     expect(r.gross).toBe(800); // 16h × 50
     expect(r.mode).toBe('israeli-labor-law');
+    expect(r.hourlyWage).toBe(50);
   });
 
   it('exposes deferred placeholder lines set to 0 (overtime/statutory/deductions)', () => {
@@ -114,6 +125,8 @@ describe('SalaryEngineFactory — strategy resolved by mode, not by caller (FR-M
       expect(r).toHaveProperty('gross');
       expect(Array.isArray(r.breakdown)).toBe(true);
       expect(r).toHaveProperty('currency');
+      expect(r).toHaveProperty('hourlyWage');
+      expect(r.hourlyWage).toBe(50);
       expect(r.mode).toBe(mode);
       expect(typeof r.engineVersion).toBe('string');
       expect(() => new Date(r.computedAt).toISOString()).not.toThrow();

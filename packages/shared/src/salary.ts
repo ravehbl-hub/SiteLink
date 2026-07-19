@@ -85,6 +85,17 @@ export interface SalaryResult {
   breakdown: SalaryBreakdownLine[];
   currency: string;
   mode: SalaryMode;
+  /**
+   * The resolved hourly rate the calc used (the same `SalaryInput.hourlyWage`,
+   * resolved per-worker or by profession). Exposed so clients can render the
+   * rate + per-row line totals (hours × hourlyWage) that reconcile with `gross`.
+   *
+   * NOTE: for a fixed MONTHLY salary calc there is no per-hour rate driving the
+   * total — `gross` is the fixed amount, not `hourlyWage × hours`. In that case
+   * `hourlyWage` is informational (the resolved rate) and does NOT reconcile with
+   * `gross`. For a flat hourly calc, `gross === attendanceHours × hourlyWage`.
+   */
+  hourlyWage: number;
   /** Includes a 'stub' marker in v1 (FR-MGR-SRE-4). */
   engineVersion: string;
   computedAt: ISODate;

@@ -54,6 +54,7 @@ export class FlatSalaryStrategy implements SalaryRuleEngine {
       breakdown,
       currency: input.currency,
       mode: 'fixed',
+      hourlyWage: input.hourlyWage,
       engineVersion: FLAT_VERSION,
       computedAt: new Date().toISOString(),
     };
@@ -86,6 +87,7 @@ export class IsraeliLaborLawStrategy implements SalaryRuleEngine {
       breakdown,
       currency: input.currency,
       mode: 'israeli-labor-law',
+      hourlyWage: input.hourlyWage,
       // Explicit stub marker — R-1 mitigation.
       engineVersion: ISRAELI_STUB_VERSION,
       computedAt: new Date().toISOString(),

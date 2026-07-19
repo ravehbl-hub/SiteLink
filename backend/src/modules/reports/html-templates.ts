@@ -15,6 +15,76 @@
 import type { ProfitLoss, SalaryResult, WorkingHours } from '@sitelink/shared';
 import type { ReportHeaderMeta, AttendanceSummaryRow } from './templates.js';
 
+/**
+ * i18n labels for the working-hours breakdown section on the payslip. The
+ * payslip already renders per `meta.direction`; we derive the language the same
+ * way the shell does (rtl → he, otherwise en) plus a lightweight `tr` opt-in via
+ * meta.lang when present. Kept local & minimal — no dependency on the FE catalog.
+ */
+type HoursLang = 'he' | 'en' | 'tr';
+
+interface HoursLabels {
+  section: string;
+  date: string;
+  hours: string;
+  type: string;
+  hourlyPrice: string;
+  lineTotal: string;
+  total: string;
+  attendance: string;
+  vacation: string;
+  disease: string;
+  reconcileNote: string;
+}
+
+const HOURS_LABELS: Record<HoursLang, HoursLabels> = {
+  he: {
+    section: 'פירוט שעות עבודה',
+    date: 'תאריך',
+    hours: 'שעות',
+    type: 'סוג',
+    hourlyPrice: 'מחיר לשעה',
+    lineTotal: 'סה"כ שורה',
+    total: 'סה"כ',
+    attendance: 'נוכחות',
+    vacation: 'חופשה',
+    disease: 'מחלה',
+    reconcileNote: 'סכום השורות תואם לשכר ברוטו',
+  },
+  en: {
+    section: 'Working hours details',
+    date: 'Date',
+    hours: 'Hours',
+    type: 'Type',
+    hourlyPrice: 'Hourly price',
+    lineTotal: 'Line total',
+    total: 'Total',
+    attendance: 'Attendance',
+    vacation: 'Vacation',
+    disease: 'Disease',
+    reconcileNote: 'Line totals reconcile with gross',
+  },
+  tr: {
+    section: 'Çalışma saatleri ayrıntıları',
+    date: 'Tarih',
+    hours: 'Saat',
+    type: 'Tür',
+    hourlyPrice: 'Saatlik ücret',
+    lineTotal: 'Satır toplamı',
+    total: 'Toplam',
+    attendance: 'Devam',
+    vacation: 'İzin',
+    disease: 'Hastalık',
+    reconcileNote: 'Satır toplamları brüt ile uyumlu',
+  },
+};
+
+function hoursLangFor(meta: ReportHeaderMeta): HoursLang {
+  const lang = (meta as { lang?: string }).lang;
+  if (lang === 'tr') return 'tr';
+  return meta.direction === 'rtl' ? 'he' : 'en';
+}
+
 /** Escape the five HTML-significant characters. All dynamic text passes through. */
 function esc(value: unknown): string {
   return String(value)
@@ -39,6 +109,15 @@ const STYLES = `
   .total { display: flex; flex-direction: row; justify-content: space-between; margin-top: 10px; }
   .warn { margin-top: 12px; font-size: 9px; color: #a00; }
   [dir="rtl"] .row, [dir="rtl"] .total { flex-direction: row-reverse; }
+  .section-title { font-size: 13px; font-weight: bold; margin: 16px 0 6px 0; }
+  table.hours { width: 100%; border-collapse: collapse; font-size: 10px; }
+  table.hours th, table.hours td { border-bottom: 0.5px solid #ddd; padding: 4px 6px; text-align: left; }
+  table.hours thead th { border-bottom: 1px solid #000; font-weight: bold; }
+  table.hours tfoot td { border-top: 1px solid #000; font-weight: bold; }
+  table.hours td.num, table.hours th.num { text-align: right; }
+  [dir="rtl"] table.hours th, [dir="rtl"] table.hours td { text-align: right; }
+  [dir="rtl"] table.hours td.num, [dir="rtl"] table.hours th.num { text-align: left; }
+  .reconcile { margin-top: 6px; font-size: 9px; color: #060; }
 `;
 
 /**
@@ -79,24 +158,120 @@ function rowHtml(left: string, right: string): string {
   return `<div class="row"><span>${left}</span><span>${right}</span></div>`;
 }
 
+/**
+ * Working-hours breakdown table (per-DAY) for the payslip. Mirrors the on-screen
+ * "Working hours details" section. Columns: DATE | HOURS | TYPE | HOURLY PRICE |
+ * LINE TOTAL. TYPE is derived from the day flags (vacation/disease/attendance).
+ * LINE TOTAL = totalHours × hourlyWage for ATTENDANCE rows; '—' for non-work.
+ * A TOTAL row sums hours + money. Reconciliation: for a flat-hourly calc the sum
+ * of line totals equals `result.gross` (same rate & data the calc used); for a
+ * fixed-monthly calc it may not, so the reconcile note only shows when they match.
+ */
+function workingHoursSectionHtml(
+  meta: ReportHeaderMeta,
+  hours: WorkingHours[],
+  hourlyWage: number,
+  currency: string,
+  gross: number,
+): string {
+  if (!hours.length) return '';
+  const L = HOURS_LABELS[hoursLangFor(meta)];
+  const sorted = [...hours].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
+  const money = (v: number): string => `${esc(v.toFixed(2))} ${esc(currency)}`;
+
+  let totalHours = 0;
+  let totalMoney = 0;
+
+  const bodyRows = sorted
+    .map((r) => {
+      const isVacation = r.vacationDays >= 1;
+      const isDisease = r.diseaseDays >= 1;
+      const isAttendance = !isVacation && !isDisease;
+      const typeLabel = isVacation ? L.vacation : isDisease ? L.disease : L.attendance;
+
+      const rowHours = isAttendance ? r.totalHours : 0;
+      const lineTotal = isAttendance ? rowHours * hourlyWage : 0;
+      totalHours += rowHours;
+      totalMoney += lineTotal;
+
+      const hoursCell = isAttendance ? esc(rowHours.toFixed(1)) : '—';
+      const priceCell = isAttendance ? money(hourlyWage) : '—';
+      const lineCell = isAttendance ? money(lineTotal) : '—';
+
+      return `<tr>
+  <td>${esc(r.periodStart)}</td>
+  <td class="num">${hoursCell}</td>
+  <td>${esc(typeLabel)}</td>
+  <td class="num">${priceCell}</td>
+  <td class="num">${lineCell}</td>
+</tr>`;
+    })
+    .join('\n');
+
+  // Reconcile note only when the summed line totals match gross (flat-hourly
+  // case). For fixed-monthly the Gross line stays authoritative and no claim of
+  // equality is made — mirrors the on-screen behaviour.
+  const reconciles = Math.abs(totalMoney - gross) < 0.005;
+  const note = reconciles ? `<p class="reconcile">${esc(L.reconcileNote)}</p>` : '';
+
+  return `
+<h2 class="section-title">${esc(L.section)}</h2>
+<table class="hours">
+  <thead>
+    <tr>
+      <th>${esc(L.date)}</th>
+      <th class="num">${esc(L.hours)}</th>
+      <th>${esc(L.type)}</th>
+      <th class="num">${esc(L.hourlyPrice)}</th>
+      <th class="num">${esc(L.lineTotal)}</th>
+    </tr>
+  </thead>
+  <tbody>
+${bodyRows}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td>${esc(L.total)}</td>
+      <td class="num">${esc(totalHours.toFixed(1))}</td>
+      <td></td>
+      <td></td>
+      <td class="num">${money(totalMoney)}</td>
+    </tr>
+  </tfoot>
+</table>
+${note}`;
+}
+
 /** Payslip HTML (mirror of PayslipDocument). */
 export function payslipHtml(props: {
   meta: ReportHeaderMeta;
   workerName: string;
   result: SalaryResult;
   warnings: string[];
+  /** Per-DAY working-hours aggregate (grain='DAY') for the breakdown table. */
+  hours?: WorkingHours[];
+  /** Resolved hourly rate the calc used (result.hourlyWage). */
+  hourlyWage?: number;
 }): string {
-  const { meta, workerName, result, warnings } = props;
+  const { meta, workerName, result, warnings, hours, hourlyWage } = props;
   const lines = result.breakdown
     .map((l) => rowHtml(esc(l.label), `${esc(l.amount.toFixed(2))} ${esc(result.currency)}`))
     .join('\n');
   const warns = warnings
     .map((w) => `<p class="warn">⚠ ${esc(w)}</p>`)
     .join('\n');
+  const hoursSection = workingHoursSectionHtml(
+    meta,
+    hours ?? [],
+    hourlyWage ?? result.hourlyWage,
+    result.currency,
+    result.gross,
+  );
   const body = `
 <p class="bold">Worker: ${esc(workerName)}</p>
 <p class="meta">Mode: ${esc(result.mode)}  ·  Engine: ${esc(result.engineVersion)}</p>
 <div>${lines}</div>
+${hoursSection}
 <div class="total"><span class="bold">Gross</span><span class="bold">${esc(result.gross.toFixed(2))} ${esc(result.currency)}</span></div>
 ${warns}`;
   return documentShell(meta, body);

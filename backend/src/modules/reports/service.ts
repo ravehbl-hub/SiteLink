@@ -81,6 +81,18 @@ export class ReportsService {
       periodEnd: params.to,
     });
 
+    // Per-DAY working-hours aggregate — the SAME /working-hours derivation the
+    // on-screen "Working hours details" section uses (as workingHoursPdf does).
+    // `workerId` is ALREADY the resolved id (route-forced), so we call caller-less:
+    // identity is settled and the query filter is trusted (no re-scoping).
+    const hours = await this.attendance.workingHours({
+      workerId: params.workerId,
+      siteId: params.siteId,
+      from: params.from,
+      to: params.to,
+      grain: 'DAY',
+    });
+
     const meta: ReportHeaderMeta = {
       title: 'Payslip',
       from: toDateOnly(new Date(params.from)),
@@ -89,7 +101,14 @@ export class ReportsService {
     };
 
     const workerName = `${worker.firstName} ${worker.lastName}`;
-    const data = { meta, workerName, result, warnings: result.warnings };
+    const data = {
+      meta,
+      workerName,
+      result,
+      warnings: result.warnings,
+      hours,
+      hourlyWage: result.hourlyWage,
+    };
     return this.renderPdf(
       () => payslipHtml(data),
       () => PayslipDocument(data),

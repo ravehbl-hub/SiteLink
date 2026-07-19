@@ -90,6 +90,76 @@ describe('reports HTML templates (CloudConvert path, key-independent)', () => {
     expect(html).toContain('Site: &lt;b&gt;A&amp;B&lt;/b&gt;');
   });
 
+  it('payslip HTML renders the WORKING-HOURS breakdown that reconciles with gross (Dimitar 108h × 50 = 5400)', () => {
+    // 12 attendance days × 9h = 108h at rate 50 → gross 5400 (flat-hourly).
+    const hours = Array.from({ length: 12 }, (_, i) => ({
+      workerId: 'w1',
+      grain: 'DAY' as const,
+      periodStart: `2026-05-${String(i + 1).padStart(2, '0')}`,
+      periodEnd: `2026-05-${String(i + 1).padStart(2, '0')}`,
+      totalHours: 9,
+      attendanceDays: 1,
+      vacationDays: 0,
+      diseaseDays: 0,
+    }));
+    const html = payslipHtml({
+      meta: rtlMeta, // he / RTL — the key quality bar
+      workerName: 'Dimitar',
+      result: {
+        gross: 5400,
+        currency: 'ILS',
+        mode: 'israeli-labor-law',
+        engineVersion: 'v1',
+        breakdown: [{ label: 'Base', amount: 5400 }],
+        hourlyWage: 50,
+        warnings: [],
+      } as never,
+      warnings: [],
+      hours: hours as never,
+      hourlyWage: 50,
+    });
+
+    // RTL shell wraps the whole thing (Hebrew).
+    expect(html).toContain('lang="he" dir="rtl"');
+    // Section present (Hebrew title).
+    expect(html).toContain('פירוט שעות עבודה');
+    // Per-day rows (first + last day dates).
+    expect(html).toContain('2026-05-01');
+    expect(html).toContain('2026-05-12');
+    // Hourly price on attendance rows.
+    expect(html).toContain('50.00 ILS');
+    // Per-line total (9h × 50 = 450).
+    expect(html).toContain('450.00 ILS');
+    // TOTAL row: total hours 108.0 and total money == gross 5400.
+    expect(html).toContain('108.0');
+    expect(html).toContain('5400.00 ILS');
+    // Reconciliation asserted (sum of line totals == gross → note shown).
+    expect(html).toContain('סכום השורות תואם לשכר ברוטו');
+  });
+
+  it('payslip working-hours: fixed-monthly (sum≠gross) still renders table but NO reconcile note', () => {
+    const hours = [
+      { workerId: 'w', grain: 'DAY' as const, periodStart: '2026-05-01', periodEnd: '2026-05-01', totalHours: 8, attendanceDays: 1, vacationDays: 0, diseaseDays: 0 },
+      { workerId: 'w', grain: 'DAY' as const, periodStart: '2026-05-02', periodEnd: '2026-05-02', totalHours: 0, attendanceDays: 0, vacationDays: 1, diseaseDays: 0 },
+    ];
+    const html = payslipHtml({
+      meta: ltrMeta,
+      workerName: 'Fixed',
+      result: {
+        gross: 8000, currency: 'ILS', mode: 'fixed', engineVersion: 'v1',
+        breakdown: [{ label: 'Fixed', amount: 8000 }], hourlyWage: 50, warnings: [],
+      } as never,
+      warnings: [],
+      hours: hours as never,
+      hourlyWage: 50,
+    });
+    expect(html).toContain('Working hours details');
+    expect(html).toContain('Vacation'); // vacation TYPE label
+    expect(html).toContain('—'); // vacation row shows dash for hours/price/line
+    expect(html).not.toContain('Line totals reconcile with gross'); // sum 400 ≠ 8000
+    expect(html).toContain('8000.00 ILS'); // Gross stays authoritative
+  });
+
   it('profit-loss + working-hours producers render their totals', () => {
     const pl = profitLossHtml({
       meta: { ...ltrMeta, title: 'Profit & Loss' },

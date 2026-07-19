@@ -60,14 +60,20 @@ export function PayslipDocument(props: {
   workerName: string;
   result: SalaryResult;
   warnings: string[];
+  /** Per-DAY working-hours aggregate for the breakdown table (parity w/ HTML). */
+  hours?: WorkingHours[];
+  /** Resolved hourly rate (result.hourlyWage). */
+  hourlyWage?: number;
 }): React.ReactElement<DocumentProps> {
-  const { meta, workerName, result, warnings } = props;
+  const { meta, workerName, result, warnings, hours, hourlyWage } = props;
+  const rate = hourlyWage ?? result.hourlyWage;
   const lines = result.breakdown.map((l, i) =>
     e(View, { key: `l${i}`, style: styles.row }, [
       e(Text, { key: 'lbl' }, l.label),
       e(Text, { key: 'amt' }, `${l.amount.toFixed(2)} ${result.currency}`),
     ]),
   );
+  const hoursSection = hoursBreakdown(hours ?? [], rate, result.currency);
   return e(
     Document,
     {},
@@ -76,6 +82,7 @@ export function PayslipDocument(props: {
       e(Text, { key: 'w', style: styles.bold }, `Worker: ${workerName}`),
       e(Text, { key: 'mode', style: styles.meta }, `Mode: ${result.mode}  ·  Engine: ${result.engineVersion}`),
       e(View, { key: 'lines' }, lines),
+      ...(hoursSection ? [hoursSection] : []),
       e(View, { key: 'g', style: styles.total }, [
         e(Text, { key: 'gl', style: styles.bold }, 'Gross'),
         e(Text, { key: 'gv', style: styles.bold }, `${result.gross.toFixed(2)} ${result.currency}`),
@@ -83,6 +90,50 @@ export function PayslipDocument(props: {
       ...warnings.map((w, i) => e(Text, { key: `warn${i}`, style: styles.warn }, `⚠ ${w}`)),
     ]),
   );
+}
+
+/**
+ * Working-hours breakdown block for the react-pdf payslip fallback (parity with
+ * the HTML/CloudConvert template). Per-DAY rows DATE | HOURS | TYPE | HOURLY
+ * PRICE | LINE TOTAL + a TOTAL row; LINE TOTAL = totalHours × rate for
+ * ATTENDANCE, '—' otherwise. Kept minimal (English labels; the RTL-critical
+ * Hebrew rendering path is CloudConvert/HTML, which is active).
+ */
+function hoursBreakdown(
+  hours: WorkingHours[],
+  rate: number,
+  currency: string,
+): React.ReactElement | null {
+  if (!hours.length) return null;
+  const sorted = [...hours].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
+  const money = (v: number): string => `${v.toFixed(2)} ${currency}`;
+  let totalHours = 0;
+  let totalMoney = 0;
+  const rows = sorted.map((r, i) => {
+    const isVacation = r.vacationDays >= 1;
+    const isDisease = r.diseaseDays >= 1;
+    const isAttendance = !isVacation && !isDisease;
+    const type = isVacation ? 'Vacation' : isDisease ? 'Disease' : 'Attendance';
+    const rowHours = isAttendance ? r.totalHours : 0;
+    const lineTotal = isAttendance ? rowHours * rate : 0;
+    totalHours += rowHours;
+    totalMoney += lineTotal;
+    return e(View, { key: `hr${i}`, style: styles.row }, [
+      e(Text, { key: 'd' }, r.periodStart),
+      e(Text, { key: 'h' }, isAttendance ? rowHours.toFixed(1) : '—'),
+      e(Text, { key: 't' }, type),
+      e(Text, { key: 'p' }, isAttendance ? money(rate) : '—'),
+      e(Text, { key: 'lt' }, isAttendance ? money(lineTotal) : '—'),
+    ]);
+  });
+  return e(View, { key: 'hoursSection' }, [
+    e(Text, { key: 'ht', style: styles.bold }, 'Working hours details'),
+    ...rows,
+    e(View, { key: 'htot', style: styles.total }, [
+      e(Text, { key: 'l', style: styles.bold }, `Total  ${totalHours.toFixed(1)}h`),
+      e(Text, { key: 'v', style: styles.bold }, money(totalMoney)),
+    ]),
+  ]);
 }
 
 /** Profit & Loss PDF from a computed ProfitLoss (FR-MGR-PNL / SM-6). */

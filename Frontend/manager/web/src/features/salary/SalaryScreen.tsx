@@ -8,7 +8,7 @@ import { salaryApi } from '../../lib/api/endpoints';
 import { apiUrl, bearerToken } from '../../lib/api/client';
 import { useWorkersList } from '../../lib/api/hooks';
 import { currentMonthRange, formatCurrency, formatDate, toDateInput, dateInputToISO } from '../../lib/format';
-import i18n, { dirForLocale } from '../../i18n';
+import i18n from '../../i18n';
 
 export function SalaryScreen() {
   const { t } = useTranslation();
@@ -37,12 +37,15 @@ export function SalaryScreen() {
     setDownloading(true);
     setError(null);
     try {
+      // The /reports/payslip.pdf endpoint expects `from`/`to`/`lang` (NOT
+      // periodStart/periodEnd/locale). Sending the wrong names left from/to
+      // undefined → the PDF rendered an empty period (0 hours). Map to the
+      // backend contract.
       const url = apiUrl('/reports/payslip.pdf', {
         workerId,
-        periodStart,
-        periodEnd,
-        locale: i18n.language,
-        dir: dirForLocale(i18n.language),
+        from: periodStart,
+        to: periodEnd,
+        lang: i18n.language,
       });
       const token = await bearerToken();
       const res = await fetch(url, {

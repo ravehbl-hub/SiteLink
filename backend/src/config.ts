@@ -35,6 +35,19 @@ const EnvSchema = z.object({
   // @react-pdf renderer, so local/dev/CI boot + pass without it. When PRESENT,
   // report PDFs are produced via CloudConvert. Never logged or echoed.
   CLOUDCONVERT_API_KEY: z.string().min(1).optional(),
+
+  // Email (payslip-share). SMTP via nodemailer — universal: point it at any
+  // provider (Gmail app-password, SendGrid SMTP, Mailgun, SES, Postmark, …).
+  // ALL OPTIONAL + KEY-GATED like CloudConvert: the email-share feature is
+  // DISABLED until SMTP_HOST + SMTP_USER + SMTP_PASS + EMAIL_FROM are set. When
+  // absent, POST /reports/payslip/email returns a clean 503 (never attempts a
+  // send). SMTP_USER/SMTP_PASS are SECRET — read here, never logged or echoed.
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().min(1).optional(),
+  SMTP_PASS: z.string().min(1).optional(),
+  // The From: address/display (e.g. "SiteLink <no-reply@yourco.com>").
+  EMAIL_FROM: z.string().min(1).optional(),
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;

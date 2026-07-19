@@ -112,11 +112,11 @@ export function SalaryScreen() {
   /**
    * Flat hourly reconciles: sum(hours × hourlyWage) === gross. For a fixed-monthly
    * calc (or any mismatch) the rate is informational and gross stays authoritative.
+   * Detect by the AMOUNT MATCH only — NOT result.mode: FlatSalaryStrategy stamps
+   * mode:'fixed' for BOTH the hourly and monthly paths (no distinct 'hourly' mode),
+   * so a mode check would wrongly flag the common flat-hourly case as non-reconciling.
    */
-  const reconciles =
-    result != null &&
-    result.mode !== 'fixed' &&
-    Math.abs(moneyTotal - result.gross) < 0.01;
+  const reconciles = result != null && Math.abs(moneyTotal - result.gross) < 0.01;
 
   const workerOptions = ((workersQ.data?.items ?? []) as Worker[]).map((w) => ({
     value: w.id,

@@ -190,13 +190,14 @@ export function SalaryScreen() {
     [whRows, hourlyWage],
   );
 
-  // Reconciliation: for a flat hourly calc sum(line totals) === gross. For a
-  // fixed monthly salary the rate is informational and won't sum to gross —
-  // detect via mode OR a mismatch (allow a cent of float slack).
+  // Reconciliation: for a flat hourly calc sum(line totals) === gross; for a
+  // fixed monthly salary the rate is informational and won't sum to gross.
+  // Detect purely by the AMOUNT MATCH — NOT result.mode: FlatSalaryStrategy stamps
+  // mode:'fixed' for BOTH the hourly AND the monthly path (there is no distinct
+  // 'hourly' mode), so a mode check would wrongly mark the common flat-hourly case
+  // as non-reconciling. The amount match alone correctly distinguishes them.
   const reconciles =
-    result != null &&
-    result.mode !== 'fixed' &&
-    Math.abs(whTotals.money - result.gross) < 0.01;
+    result != null && Math.abs(whTotals.money - result.gross) < 0.01;
 
   async function downloadPayslip() {
     setDownloading(true);

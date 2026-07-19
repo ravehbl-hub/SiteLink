@@ -21,6 +21,49 @@ import { useTheme } from '../theme/ThemeProvider';
 
 type Semantic = 'success' | 'warning' | 'danger' | 'info';
 
+/**
+ * Neumorphic token accessors with safe fallbacks. The active theme is always a
+ * neumorphic variant (ThemeProvider selects neumorphicLight/Dark), so
+ * `theme.neumorphic` is present — but these helpers degrade gracefully to the
+ * base scale so the primitives never crash if a Deck theme is ever passed. All
+ * values remain token-only (no hard-coded hex/size).
+ *
+ * RN limitation (docs/NEUMORPHIC.md): shadows are outer-only and cannot be inset.
+ * A RAISED surface uses the closest single dark drop-shadow (`.native`); an
+ * "inset"/well look falls back to surfaceAlt fill + a hairline border.
+ */
+type Neu = NonNullable<TokenTheme['neumorphic']>;
+
+/**
+ * Softer neumorphic radii scale (card 20 / control 12 / well 14 / chip 999).
+ * Falls back to base-scale-derived equivalents so the primitives never crash if
+ * a Deck theme (no `.neumorphic`) is ever passed — token-only either way.
+ */
+function neuRadii(theme: TokenTheme): Record<keyof Neu['radii'], number> {
+  const r = theme.tokens.radii;
+  return (
+    theme.neumorphic?.radii ?? {
+      none: 0,
+      control: Number(r.md),
+      controlLg: Number(r.lg),
+      chip: Number(r.pill),
+      card: Number(r.xl),
+      cardLg: Number(r['2xl']),
+      well: Number(r.md),
+      pill: Number(r.pill),
+    }
+  );
+}
+
+/** Raised drop-shadow (native approximation of the dual-shadow). */
+function raisedShadow(theme: TokenTheme, size: 'sm' | 'md' = 'md'): ViewStyle {
+  const s =
+    size === 'sm'
+      ? theme.neumorphic?.shadows.raisedSm.native
+      : theme.neumorphic?.shadows.raised.native;
+  return (s ?? theme.elevation.sm.native) as ViewStyle;
+}
+
 export function Screen({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme();
   return (
@@ -68,13 +111,13 @@ export function Card({
     <View
       style={[
         {
+          // Cream surface, softly RAISED via the neumorphic drop-shadow. No heavy
+          // border — the shadow provides separation (docs/NEUMORPHIC.md Card).
           backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
-          borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
-          borderRadius: Number(theme.tokens.radii.md),
+          borderRadius: Number(neuRadii(theme).card ?? theme.tokens.radii.xl),
           padding: Number(theme.tokens.spacing['4']),
           marginBottom: Number(theme.tokens.spacing['3']),
-          ...theme.elevation.sm.native,
+          ...raisedShadow(theme, 'md'),
         },
         glowStyle,
         style,
@@ -165,13 +208,15 @@ export function Field({
         placeholderTextColor={theme.colors.textMuted}
         {...props}
         style={{
+          // "Well" look — native can't inset-shadow, so surfaceAlt fill + a
+          // hairline border reads as a sunken input (docs/NEUMORPHIC.md).
           borderColor: theme.colors.border,
-          borderWidth: 1,
-          borderRadius: Number(theme.tokens.radii.sm),
+          borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+          borderRadius: Number(neuRadii(theme).well ?? theme.tokens.radii.sm),
           paddingVertical: Number(theme.tokens.spacing['2']),
           paddingHorizontal: Number(theme.tokens.spacing['3']),
           color: theme.colors.textPrimary,
-          backgroundColor: theme.colors.surface,
+          backgroundColor: theme.colors.surfaceAlt,
           textAlign: 'auto',
         }}
       />
@@ -193,13 +238,18 @@ export function Button({
   loading?: boolean;
 }) {
   const { theme } = useTheme();
+  // Secondary sits on the surface (RAISED) so it reads as a neumorphic control;
+  // primary = teal fill, danger = danger fill. Pressed flattens (see below).
   const bg =
     variant === 'primary'
       ? theme.colors.accent
       : variant === 'danger'
         ? theme.colors.danger
-        : theme.colors.surfaceAlt;
+        : theme.colors.surface;
+  const bgPressed =
+    variant === 'secondary' ? theme.colors.surfaceAlt : bg;
   const fg = variant === 'secondary' ? theme.colors.textPrimary : theme.colors.onAccent;
+  const raised = raisedShadow(theme, 'sm');
   return (
     <Pressable
       onPress={onPress}
@@ -208,17 +258,20 @@ export function Button({
       // Compact VISUAL chrome (matches the Segmented) but keep a ~44px accessible
       // tap area: the vertical hitSlop expands the touch region above/below.
       hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-      style={{
-        backgroundColor: bg,
+      style={({ pressed }) => ({
+        // RAISED by default; PRESSED flattens (drop the shadow / secondary sinks
+        // to surfaceAlt) — the native approximation of the inset press-in.
+        backgroundColor: pressed ? bgPressed : bg,
         opacity: disabled ? 0.5 : 1,
-        borderRadius: Number(theme.tokens.radii.sm),
+        borderRadius: Number(neuRadii(theme).control ?? theme.tokens.radii.sm),
         // Match the language Segmented control height (less tall).
         paddingVertical: Number(theme.tokens.spacing['2']),
         paddingHorizontal: Number(theme.tokens.spacing['4']),
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: Number(theme.tokens.spacing['2']),
-      }}
+        ...(pressed ? null : raised),
+      })}
     >
       {loading ? (
         <ActivityIndicator color={fg} />
@@ -361,10 +414,14 @@ export function Segmented<T extends string>({
             // Compact select trigger, but preserve a ~44px accessible tap area.
             hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
             style={{
+              // Active = teal fill; inactive = surfaceAlt "well". controlSm (32)
+              // height preserved. Soft control radius.
               height: Number(theme.tokens.sizing.controlSm),
               justifyContent: 'center',
               backgroundColor: active ? theme.colors.accent : theme.colors.surfaceAlt,
-              borderRadius: Number(theme.tokens.radii.sm),
+              borderColor: active ? theme.colors.accent : theme.colors.border,
+              borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+              borderRadius: Number(neuRadii(theme).control ?? theme.tokens.radii.sm),
               paddingHorizontal: Number(theme.tokens.spacing['3']),
               marginEnd: Number(theme.tokens.spacing['2']),
               marginBottom: Number(theme.tokens.spacing['2']),
@@ -425,11 +482,15 @@ export function MultiSelectChips<T extends string>({
             accessibilityState={{ checked: active, disabled: isLocked }}
             hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
             style={{
+              // Soft full-radius chips: selected = teal fill, resting =
+              // surfaceAlt "well" + hairline. controlSm min-height preserved.
               minHeight: Number(theme.tokens.sizing.controlSm),
               justifyContent: 'center',
               opacity: isLocked ? 0.6 : 1,
               backgroundColor: active ? theme.colors.accent : theme.colors.surfaceAlt,
-              borderRadius: Number(theme.tokens.radii.sm),
+              borderColor: active ? theme.colors.accent : theme.colors.border,
+              borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+              borderRadius: Number(neuRadii(theme).chip ?? theme.tokens.radii.pill),
               paddingHorizontal: Number(theme.tokens.spacing['3']),
               paddingVertical: Number(theme.tokens.spacing['1']),
               marginEnd: Number(theme.tokens.spacing['2']),
@@ -498,10 +559,11 @@ export function Select<T extends string>({
           justifyContent: 'space-between',
           alignSelf: 'flex-start',
           height: Number(theme.tokens.sizing.controlSm),
+          // "Well" trigger: surfaceAlt + hairline border, soft well radius.
           backgroundColor: theme.colors.surfaceAlt,
           borderColor: theme.colors.border,
           borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
-          borderRadius: Number(theme.tokens.radii.sm),
+          borderRadius: Number(neuRadii(theme).well ?? theme.tokens.radii.sm),
           paddingHorizontal: Number(theme.tokens.spacing['3']),
         }}
       >
@@ -552,12 +614,11 @@ export function Select<T extends string>({
           />
           <View
             style={{
+              // Raised popover panel over the dimmed scrim (cardLg radius).
               backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-              borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
-              borderRadius: Number(theme.tokens.radii.md),
+              borderRadius: Number(neuRadii(theme).cardLg ?? theme.tokens.radii.md),
               padding: Number(theme.tokens.spacing['4']),
-              ...theme.elevation.sm.native,
+              ...(theme.neumorphic?.shadows.raisedLg.native ?? theme.elevation.md.native),
             }}
           >
             {placeholder ? (

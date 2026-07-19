@@ -5,7 +5,11 @@
  * applied on language change (RTL for Hebrew).
  */
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { lightTheme, darkTheme, defaultThemeName, type Theme as TokenTheme } from '@sitelink/tokens';
+import {
+  neumorphicLightTheme,
+  neumorphicDarkTheme,
+  type Theme as TokenTheme,
+} from '@sitelink/tokens';
 import { Language, Theme } from '@sitelink/shared';
 import i18n, { toLocale } from '../i18n';
 import { applyDirection, reloadForDirection } from '../i18n/rtl';
@@ -37,15 +41,15 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 /**
- * Operations Deck is dark-first (tokens `defaultThemeName === 'dark'`): SiteLink
- * LEADS with dark. Seed DARK unless the system explicitly asks for light; an
- * explicit persisted user override still wins (applied after prefs load) and the
- * Settings toggle remains available.
+ * Cream/teal NEUMORPHIC reskin: the app LEADS with the neumorphic LIGHT (cream)
+ * palette so it opens soft/light like manager-web did. Seed LIGHT; a persisted
+ * user override still wins (applied after prefs load) and the Settings toggle
+ * remains available, so neumorphic DARK stays reachable.
  */
 function seedThemeMode(): Theme {
-  // Dark-first from tokens (matches Foreman/Worker apps); a persisted user
-  // override still wins after prefs load, and the Settings toggle remains.
-  return defaultThemeName === 'dark' ? Theme.DARK : Theme.LIGHT;
+  // Neumorphic-light-first (cream). A persisted user override still wins after
+  // prefs load, and the Settings toggle remains available (dark → neumorphicDark).
+  return Theme.LIGHT;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -106,7 +110,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<ThemeContextValue>(
     () => ({
-      theme: themeMode === Theme.DARK ? darkTheme : lightTheme,
+      theme: themeMode === Theme.DARK ? neumorphicDarkTheme : neumorphicLightTheme,
       themeMode,
       language,
       toggleTheme,

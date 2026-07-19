@@ -57,7 +57,12 @@ export const updatePersonnelCompanySchema = createPersonnelCompanySchema.partial
  * binds cleanly.
  */
 export const listPersonnelCompaniesQuery = z.object({
-  includeArchived: z.coerce.boolean().default(false),
+  // NOTE: query-string values are strings — z.coerce.boolean('false') === true (any
+  // non-empty string is truthy), which made `?includeArchived=false` read as true and
+  // ALWAYS return archived-only. Parse the string explicitly: only 'true' → true.
+  includeArchived: z
+    .preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean())
+    .default(false),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });

@@ -59,11 +59,13 @@ function isUniqueViolation(err: unknown): boolean {
 
 export class PersonnelCompaniesService {
   /**
-   * List staffing companies. Org-wide (no site scope). Excludes archived unless
-   * `includeArchived`. Ordered by name asc so the picker reads alphabetically.
+   * List staffing companies. Org-wide (no site scope). The archived toggle is a
+   * VIEW switch (mirrors the workers Active/Archived view): `includeArchived` shows
+   * ONLY archived companies; otherwise ONLY active ones. Name asc so the picker reads
+   * alphabetically. (The worker-form picker never passes the flag → active only.)
    */
   async list(query: ListQuery): Promise<Paginated<PersonnelCompany>> {
-    const where = query.includeArchived ? {} : { isArchived: false };
+    const where = query.includeArchived ? { isArchived: true } : { isArchived: false };
     const skip = (query.page - 1) * query.pageSize;
     const [rows, total] = await Promise.all([
       prisma.personnelCompany.findMany({

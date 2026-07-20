@@ -133,6 +133,17 @@ model User {
   theme         Theme     @default(LIGHT)
   lastLoginAt   DateTime?
 
+  // ── Multi-tenancy (Phase 1) — the tenant this user belongs to (the app's biggest
+  // security boundary). Every User carries a DIRECT companyId (Manager sees ONLY
+  // same-company users/data; ADMIN is super-admin above all companies). Nullable in the
+  // schema history for a zero-orphan backfill (add nullable → backfill to Default Company
+  // → verify zero nulls → SET NOT NULL, all in ONE migration) — the FINAL DB state is
+  // NOT NULL. onDelete: Restrict — a Company with users can never be hard-deleted
+  // (tenants are retired via Company.isArchived soft-archive, never cascade). Servio's
+  // resolveCompanyScope + Users-surface scoping AND this with site/self scope.
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId String
+
   primarySite   Site?     @relation("UserPrimarySite", fields: [primarySiteId], references: [id])
   primarySiteId String?
 
@@ -156,6 +167,11 @@ model User {
   @@index([authUserId])
   @@index([role])
   @@index([primarySiteId])
+  // Multi-tenancy scope indexes: companyId is the hot filter on EVERY scoped query
+  // (where: { companyId }); [companyId, role] serves the role-visibility hot path
+  // (e.g. list MANAGERs/FOREMEN within a company).
+  @@index([companyId])
+  @@index([companyId, role])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -571,6 +587,47 @@ model Customer {
   billings Billing[]
   usages   Usage[]
   pnl      BusinessProfitLoss[]
+
+  // ── Multi-tenancy (Phase 1) — inverse of the Company↔Customer 1:1 link.
+  // A billing Customer MAY be linked to at most one tenant Company (the @unique on
+  // Company.customerId enforces at-most-1:1). Optional: a Customer can exist without a
+  // Company and vice-versa (the authz boundary is DECOUPLED from the optional billing model).
+  company Company?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isArchived])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Multi-tenancy — Company (the TENANT)  [v1]  (docs/MULTI-TENANCY-DECISIONS.md)
+// The app's primary security boundary. Company → Manager/Foreman/Worker users.
+// A Manager sees ONLY same-company data; System Admin (ADMIN) is a super-admin
+// above all companies. Every tenant-owned row carries a DIRECT companyId (Phase 1:
+// only User; Worker/Site/etc. are Phase 2). This is a NEW model linked 1:1 to the
+// billing Customer — NOT a rename — so the authz boundary stays decoupled from the
+// nullable/optional billing model (DECISION 1). Follows Site/Customer conventions.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Company {
+  id   String @id @default(cuid())
+  name String
+
+  // Optional 1:1 link to the billing Customer (DECISION 5: enforce 1:1). NULLABLE +
+  // @unique makes it AT-MOST-1:1 — a Company MAY link to a Customer; @unique forbids two
+  // Companies sharing one Customer. onDelete: SetNull — deleting a billing Customer UNLINKS
+  // the tenant (never nukes the Company); a Company is retired only via isArchived
+  // soft-archive, never cascade. The Default Company (backfill) leaves customerId NULL.
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId String?   @unique
+
+  // Tenant lifecycle: retire by SOFT-ARCHIVE, never cascade-delete (users would orphan).
+  isArchived Boolean   @default(false)
+  archivedAt DateTime?
+
+  // Back-relation: all users belonging to this tenant (User.companyId, onDelete: Restrict).
+  users User[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

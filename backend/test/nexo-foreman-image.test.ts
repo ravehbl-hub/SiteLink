@@ -71,6 +71,7 @@ beforeAll(async () => {
   const foreman = await prisma.user.create({
     data: {
       authUserId: FOREMAN_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.FOREMAN,
       fullName: 'NFI Foreman',
       email: `nfi-for-${randomUUID().slice(0, 8)}@sitelink.test`,

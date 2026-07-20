@@ -16,6 +16,13 @@ export interface AuthUser {
   id: string;
   /** Supabase auth user id (JWT `sub`). */
   authUserId: string;
+  /**
+   * The tenant this caller belongs to (multi-tenancy boundary). SERVER-derived from
+   * the app User row loaded by `authenticate` — NEVER a client-supplied companyId.
+   * Every request carries the caller's own companyId; scope resolution (lib/scope.ts)
+   * turns it into the query filter. NOT NULL in the DB post-migration.
+   */
+  companyId: string;
   role: Role;
   email: string;
   fullName: string;

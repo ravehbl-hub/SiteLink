@@ -9,6 +9,7 @@ import type {
   AdvancePayment as PAdvance,
   AttendanceRecord as PAttendance,
   Billing as PBilling,
+  Company as PCompany,
   Customer as PCustomer,
   Loan as PLoan,
   ProfessionWageRate as PWageRate,
@@ -52,6 +53,7 @@ import type {
   WorkerRequest,
   WorkerSalaryData,
   BillingStatus,
+  Company,
 } from '@sitelink/shared';
 import { toISO, toISORequired } from './dates.js';
 import { toNumber, toNumberOrNull } from './money.js';
@@ -60,6 +62,7 @@ export function mapUser(u: PUser): User {
   return {
     id: u.id,
     authUserId: u.authUserId,
+    companyId: u.companyId,
     role: u.role as Role,
     fullName: u.fullName,
     email: u.email,
@@ -70,6 +73,18 @@ export function mapUser(u: PUser): User {
     lastLoginAt: toISO(u.lastLoginAt),
     createdAt: toISORequired(u.createdAt),
     updatedAt: toISORequired(u.updatedAt),
+  };
+}
+
+export function mapCompany(c: PCompany): Company {
+  return {
+    id: c.id,
+    name: c.name,
+    customerId: c.customerId ?? null,
+    isArchived: c.isArchived,
+    archivedAt: toISO(c.archivedAt),
+    createdAt: toISORequired(c.createdAt),
+    updatedAt: toISORequired(c.updatedAt),
   };
 }
 

@@ -17,6 +17,7 @@ import errorHandlerPlugin from './plugins/error-handler.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { userRoutes } from './modules/users/routes.js';
+import { companyRoutes } from './modules/companies/routes.js';
 import { siteRoutes } from './modules/sites/routes.js';
 import { workerRoutes } from './modules/workers/routes.js';
 import { personnelCompanyRoutes } from './modules/personnel-companies/routes.js';
@@ -60,6 +61,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     async (api) => {
       await api.register(authRoutes);
       await api.register(userRoutes);
+      await api.register(companyRoutes);
       await api.register(siteRoutes);
       await api.register(workerRoutes);
       await api.register(personnelCompanyRoutes);

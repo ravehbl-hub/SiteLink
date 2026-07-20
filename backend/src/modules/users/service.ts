@@ -17,6 +17,12 @@ import type { SupabaseService } from '../../lib/supabase.js';
 import { manageableRolesFor } from '../../plugins/auth.js';
 import type { AuthUser } from '../../plugins/types.js';
 import { paginate, type PaginationParams, toSkipTake } from '../../lib/pagination.js';
+import {
+  companyWhere,
+  effectiveCompanyScope,
+  resolveCompanyScope,
+  type CompanyScope,
+} from '../../lib/scope.js';
 import type { createUserSchema, listUsersQuerySchema, updateUserSchema } from './schemas.js';
 
 type CreateInput = z.infer<typeof createUserSchema>;
@@ -24,11 +30,13 @@ type UpdateInput = z.infer<typeof updateUserSchema>;
 type ListInput = z.infer<typeof listUsersQuerySchema>;
 
 /**
- * The caller identity threaded from the route into every service method. Only the
- * role is load-bearing for the users-module privilege boundary, but we accept the
- * full AuthUser for clarity/future use.
+ * The caller identity threaded from the route into every service method. BOTH
+ * `role` (the privilege boundary — manageableRolesFor) AND `companyId` (the
+ * multi-tenancy boundary — company scope) are load-bearing: every list where,
+ * every target load, and every create-stamp derives from these SERVER-side values.
+ * A client-supplied companyId NEVER reaches this — only req.appUser.companyId does.
  */
-type Caller = Pick<AuthUser, 'role'>;
+type Caller = Pick<AuthUser, 'role' | 'companyId'>;
 
 export class UsersService {
   constructor(private readonly supabase: SupabaseService) {}
@@ -45,12 +53,27 @@ export class UsersService {
   }
 
   /**
-   * Load a target user and enforce that the caller may act on it. If the target's
-   * CURRENT role is outside the caller's manageable set → 403 (prevents acting on a
-   * hidden user by guessing its id). Returns the row for the caller to mutate.
+   * Load a target user and enforce that the caller may act on it. TWO boundaries,
+   * BOTH must pass (ANDed):
+   *   1. TENANT: the target must be inside the caller's company scope. For a
+   *      non-admin this is their OWN company; a cross-company target is treated as
+   *      NOT-FOUND (404) — never confirming the row exists in another tenant. ADMIN
+   *      (allCompanies) skips the tenant filter.
+   *   2. ROLE-VISIBILITY: the target's CURRENT role must be in the caller's
+   *      manageable set (else 403 — prevents acting on a hidden role by id-guessing).
+   *
+   * The tenant check runs FIRST and 404s, so a Manager can never even distinguish a
+   * company-B ADMIN from a non-existent id. Returns the row for the caller to mutate.
    */
   private async loadManageableTarget(caller: Caller, id: string) {
-    const row = await prisma.user.findUnique({ where: { id } });
+    const scope = resolveCompanyScope(caller);
+    // Fetch WITH the company filter baked into the where (a manager's query can only
+    // ever return a same-company row). ADMIN → {} → any company.
+    const row = await prisma.user.findFirst({
+      where: { id, ...companyWhere(scope) },
+    });
+    // A cross-company (or non-existent) id → 404: never confirm existence in another
+    // tenant, and NEVER mutate. This is the catastrophic-leak guard.
     if (!row) throw AppError.notFound('User not found');
     if (!manageableRolesFor(caller).includes(row.role as Role)) {
       throw AppError.forbidden();
@@ -64,7 +87,12 @@ export class UsersService {
     // Empty effective set (e.g. MANAGER + ?role=ADMIN) → empty page, no query.
     if (roles.length === 0) return paginate<User>([], 0, params);
 
-    const where = { role: { in: roles } };
+    // TENANT filter ANDed with role-visibility. ADMIN may narrow to one company via
+    // ?companyId (READ narrowing); a non-admin's ?companyId is IGNORED — they always
+    // see ONLY their own company. So a manager's list = role IN manageable AND
+    // companyId = own; a company-B row can NEVER appear.
+    const scope = effectiveCompanyScope(caller, params.companyId);
+    const where = { ...companyWhere(scope), role: { in: roles } };
     const [rows, total] = await Promise.all([
       prisma.user.findMany({ where, skip, take, orderBy: { createdAt: 'desc' } }),
       prisma.user.count({ where }),
@@ -77,6 +105,33 @@ export class UsersService {
     return mapUser(row);
   }
 
+  /**
+   * Resolve the SERVER-authoritative tenant a new user is stamped with (never a
+   * blindly-trusted client value):
+   *   - MANAGER (non-admin) → the creator's OWN companyId. Any `input.companyId`
+   *     is IGNORED — a Manager can NEVER create into another company by request
+   *     shaping. (resolveCompanyScope pins a non-admin to their own company.)
+   *   - ADMIN → the REQUIRED `input.companyId` (creating a Manager INTO a company).
+   *     The company must exist and NOT be archived; otherwise the create is refused.
+   */
+  private async resolveCreateCompanyId(caller: Caller, input: CreateInput): Promise<string> {
+    const scope = resolveCompanyScope(caller);
+    if ('companyId' in scope) {
+      // Non-admin: own company, full stop. input.companyId is never read here.
+      return scope.companyId;
+    }
+    // ADMIN (allCompanies): must name a valid, live target company — a Manager must
+    // belong to a company, so the field is mandatory for an admin create.
+    if (!input.companyId) {
+      throw AppError.validation('companyId is required when an admin creates a user');
+    }
+    const company = await prisma.company.findUnique({ where: { id: input.companyId } });
+    if (!company || company.isArchived) {
+      throw AppError.validation('Target company does not exist or is archived');
+    }
+    return company.id;
+  }
+
   async create(caller: Caller, input: CreateInput): Promise<User> {
     // Privilege boundary: a caller may only create a role within their manageable
     // set (validated against manageableRolesFor, not just the Zod enum). A MANAGER
@@ -84,6 +139,11 @@ export class UsersService {
     if (!manageableRolesFor(caller).includes(input.role)) {
       throw AppError.forbidden();
     }
+
+    // TENANT stamp (server-derived). MANAGER → own company (client companyId ignored);
+    // ADMIN → the validated target company. Resolved BEFORE the Supabase write so an
+    // invalid company never provisions an orphan identity.
+    const companyId = await this.resolveCreateCompanyId(caller, input);
 
     // Guard the app-side unique constraint up front (email is unique). Use the
     // dedicated USER_EMAIL_EXISTS code so the client shows the friendly message —
@@ -104,6 +164,7 @@ export class UsersService {
       const row = await prisma.user.create({
         data: {
           authUserId,
+          companyId,
           role: input.role,
           fullName: input.fullName,
           email: input.email,

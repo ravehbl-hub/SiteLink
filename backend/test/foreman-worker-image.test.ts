@@ -100,6 +100,7 @@ beforeAll(async () => {
   const admin = await prisma.user.create({
     data: {
       authUserId: ADMIN_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.ADMIN,
       fullName: 'FWI Admin',
       email: `fwi-admin-${randomUUID().slice(0, 8)}@sitelink.test`,
@@ -110,6 +111,7 @@ beforeAll(async () => {
   const mgr = await prisma.user.create({
     data: {
       authUserId: MGR_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.MANAGER,
       fullName: 'FWI Manager',
       email: `fwi-mgr-${randomUUID().slice(0, 8)}@sitelink.test`,
@@ -121,6 +123,7 @@ beforeAll(async () => {
   const foreman = await prisma.user.create({
     data: {
       authUserId: FOREMAN_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.FOREMAN,
       fullName: 'FWI Foreman',
       email: `fwi-for-${randomUUID().slice(0, 8)}@sitelink.test`,
@@ -133,6 +136,7 @@ beforeAll(async () => {
   const empty = await prisma.user.create({
     data: {
       authUserId: EMPTY_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.FOREMAN,
       fullName: 'FWI Empty',
       email: `fwi-empty-${randomUUID().slice(0, 8)}@sitelink.test`,

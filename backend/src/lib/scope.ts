@@ -31,6 +31,89 @@ import type { AuthUser } from '../plugins/types.js';
  */
 export type SiteScope = { siteIds: string[] } | { all: true };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MULTI-TENANCY — COMPANY SCOPE (Phase 1, THE app's biggest security boundary).
+//
+// This is the tenant isolation layer. It is INDEPENDENT of the site scope above:
+// site scope narrows a Foreman WITHIN a company; company scope isolates ONE tenant
+// from another. On the Phase-1 Users surface both are ANDed with role-visibility.
+//
+// The scope is ALWAYS derived from `user.companyId` (server truth, hydrated by the
+// auth plugin from the app User row) — a client-supplied companyId can only NARROW
+// an ADMIN's read; it can NEVER widen a non-admin beyond their own company.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A caller's tenant reach: a single company, or every company (ADMIN super-admin).
+ *   - `{ companyId }`   → constrain queries to that ONE tenant.
+ *   - `{ allCompanies }`→ no company filter (ADMIN cross-company).
+ */
+export type CompanyScope = { companyId: string } | { allCompanies: true };
+
+/**
+ * The backfill Default Company id (migration): every pre-multi-tenancy user lives
+ * here. Used only as a last-resort tenant stamp on internal writes that have no
+ * caller context (should not happen on a real authenticated request path).
+ */
+export const DEFAULT_COMPANY_ID = 'cl000000000000000000default';
+
+/**
+ * Base company scope for a caller (SYNC — companyId is already on req.appUser):
+ *   - ADMIN                       → { allCompanies: true } (super-admin).
+ *   - MANAGER | FOREMAN | WORKER  → { companyId: user.companyId } (own tenant).
+ *   - PARTNER                     → { companyId: user.companyId } (own tenant).
+ *   - missing companyId (impossible post-migration, NOT NULL) → 403 (FAIL-CLOSED).
+ *
+ * A non-admin is ALWAYS pinned to their own company here; nothing a client sends can
+ * change it.
+ */
+export function resolveCompanyScope(user: Pick<AuthUser, 'role' | 'companyId'>): CompanyScope {
+  if (user.role === Role.ADMIN) {
+    return { allCompanies: true };
+  }
+  if (!user.companyId) {
+    // Should be impossible (User.companyId is NOT NULL) — fail closed rather than
+    // leak cross-company by treating an absent tenant as "all".
+    throw AppError.forbidden();
+  }
+  return { companyId: user.companyId };
+}
+
+/**
+ * Effective company scope for a request, honouring an optional client-requested
+ * companyId (DECISION #4 — ADMIN READ-narrowing ONLY):
+ *   - ADMIN + ?companyId   → { companyId: requested }  (narrow one company; READS).
+ *   - ADMIN + none         → { allCompanies: true }.
+ *   - NON-ADMIN            → { companyId: user.companyId } ALWAYS. A requested
+ *     companyId is IGNORED — it can NEVER widen a manager into another tenant.
+ *
+ * SECURITY: for a non-admin the `requestedCompanyId` argument is never even read; a
+ * Manager passing ?companyId=B (or companyId=B in a body) gets their OWN company.
+ */
+export function effectiveCompanyScope(
+  user: Pick<AuthUser, 'role' | 'companyId'>,
+  requestedCompanyId?: string,
+): CompanyScope {
+  if (user.role === Role.ADMIN) {
+    if (requestedCompanyId !== undefined && requestedCompanyId !== '') {
+      return { companyId: requestedCompanyId };
+    }
+    return { allCompanies: true };
+  }
+  // Non-admin: pinned to own company. Requested companyId is deliberately ignored.
+  return resolveCompanyScope(user);
+}
+
+/**
+ * Turn a CompanyScope into a Prisma where-fragment:
+ *   - { companyId }    → { companyId }        (single-tenant filter).
+ *   - { allCompanies } → {}                    (no company constraint — ADMIN).
+ * Spread into any users where-clause: `{ ...companyWhere(scope), role: {...} }`.
+ */
+export function companyWhere(scope: CompanyScope): { companyId?: string } {
+  return 'allCompanies' in scope ? {} : { companyId: scope.companyId };
+}
+
 /** True when the caller is a FOREMAN (the only role we site-scope in Stage B). */
 export function isForeman(user: AuthUser): boolean {
   return user.role === Role.FOREMAN;

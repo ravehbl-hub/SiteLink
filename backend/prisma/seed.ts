@@ -72,14 +72,24 @@ async function main() {
     },
   });
 
+  // ── Default Company (multi-tenancy backfill tenant) ─────────────────────────
+  // Every pre-multi-tenancy user belongs to this Default Company (User.companyId is
+  // NOT NULL). The id matches the migration backfill constant.
+  const defaultCompany = await prisma.company.upsert({
+    where: { id: 'cl000000000000000000default' },
+    update: {},
+    create: { id: 'cl000000000000000000default', name: 'Default Company' },
+  });
+
   // ── Users (Supabase-backed; placeholder authUserId, NO password) ────────────
   // Real users come from Supabase Auth provisioning (Admin API, §5.4). These rows
-  // only carry app-side authorization (role + primary site scope).
+  // only carry app-side authorization (role + primary site scope + tenant).
   await prisma.user.upsert({
     where: { email: 'manager@sitelink.example' },
     update: {},
     create: {
       authUserId: `seed-${randomUUID()}`, // placeholder Supabase identity id
+      companyId: defaultCompany.id,
       role: Role.MANAGER,
       fullName: 'Dana Manager',
       email: 'manager@sitelink.example',
@@ -92,6 +102,7 @@ async function main() {
     update: {},
     create: {
       authUserId: `seed-${randomUUID()}`, // placeholder Supabase identity id
+      companyId: defaultCompany.id,
       role: Role.ADMIN,
       fullName: 'Avi Admin',
       email: 'admin@sitelink.example',
@@ -106,6 +117,7 @@ async function main() {
     update: {},
     create: {
       authUserId: `seed-${randomUUID()}`, // placeholder Supabase identity id
+      companyId: defaultCompany.id,
       role: Role.WORKER,
       fullName: 'Worker',
       email: 'Worker@sitelink.example',

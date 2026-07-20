@@ -19,6 +19,12 @@ export interface User extends Timestamped {
   id: ID;
   /** Supabase Auth user id — the identity this app-level record authorizes. */
   authUserId: ID;
+  /**
+   * The tenant this user belongs to (multi-tenancy security boundary). Always
+   * SERVER-derived; a Manager/Foreman/Worker only ever sees users of their OWN
+   * company. NOT NULL in the DB (every user is on a company post-migration).
+   */
+  companyId: ID;
   role: Role;
   fullName: string;
   email: string;
@@ -50,6 +56,13 @@ export interface CreateUserInput {
   email: string;
   /** Optional — omit to send a Supabase invite; the user sets their own password. */
   password?: string;
+  /**
+   * TENANT for the new user. ADMIN-ONLY and MANDATORY for an ADMIN (creating a
+   * Manager INTO a company): the target company must exist and not be archived.
+   * IGNORED for a MANAGER — the back end always stamps the MANAGER'S OWN companyId,
+   * never a client-supplied one (a Manager can never create into another company).
+   */
+  companyId?: ID;
   primarySiteId?: ID | null;
   language?: Language;
   theme?: Theme;

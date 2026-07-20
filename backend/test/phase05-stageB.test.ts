@@ -105,6 +105,7 @@ beforeAll(async () => {
     update: { role: Role.ADMIN, isLockedOut: false, authUserId: ADMIN_AUTH },
     create: {
       authUserId: ADMIN_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.ADMIN,
       fullName: 'StageB Admin',
       email: 'stageB-admin@sitelink.test',
@@ -117,6 +118,7 @@ beforeAll(async () => {
     update: { role: Role.MANAGER, isLockedOut: false, authUserId: MGR_AUTH },
     create: {
       authUserId: MGR_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.MANAGER,
       fullName: 'StageB Manager',
       email: 'stageB-manager@sitelink.test',
@@ -131,10 +133,12 @@ beforeAll(async () => {
       role: Role.FOREMAN,
       isLockedOut: false,
       authUserId: FOREMAN_A_AUTH,
+      companyId: 'cl000000000000000000default',
       primarySiteId: SITE_A,
     },
     create: {
       authUserId: FOREMAN_A_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.FOREMAN,
       fullName: 'StageB Foreman A',
       email: 'stageB-foremanA@sitelink.test',
@@ -150,10 +154,12 @@ beforeAll(async () => {
       role: Role.FOREMAN,
       isLockedOut: false,
       authUserId: FOREMAN_B_AUTH,
+      companyId: 'cl000000000000000000default',
       primarySiteId: SITE_B,
     },
     create: {
       authUserId: FOREMAN_B_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.FOREMAN,
       fullName: 'StageB Foreman B',
       email: 'stageB-foremanB@sitelink.test',
@@ -1131,6 +1137,7 @@ describe('FR-MGR-USER — /users privilege boundary (no privilege escalation)', 
       update: { role: Role.PARTNER, isLockedOut: false, authUserId: PARTNER_AUTH },
       create: {
         authUserId: PARTNER_AUTH,
+        companyId: 'cl000000000000000000default',
         role: Role.PARTNER,
         fullName: 'StageB Partner',
         email: 'stageB-partner@sitelink.test',
@@ -1144,6 +1151,7 @@ describe('FR-MGR-USER — /users privilege boundary (no privilege escalation)', 
       update: { role: Role.ADMIN, isLockedOut: false, authUserId: ADMIN2_AUTH },
       create: {
         authUserId: ADMIN2_AUTH,
+        companyId: 'cl000000000000000000default',
         role: Role.ADMIN,
         fullName: 'StageB Admin2',
         email: 'stageB-admin2@sitelink.test',
@@ -1345,7 +1353,15 @@ describe('FR-MGR-USER — /users privilege boundary (no privilege escalation)', 
       method: 'POST',
       url: '/api/v1/users',
       headers: auth(adminToken),
-      payload: { role: 'ADMIN', fullName: 'Admin Made Admin', email, password: `Pw-${randomUUID()}` },
+      // Multi-tenancy Phase 1: an ADMIN create must name the target company (a user
+      // must belong to a company). This ADMIN lives on the Default Company.
+      payload: {
+        role: 'ADMIN',
+        fullName: 'Admin Made Admin',
+        email,
+        password: `Pw-${randomUUID()}`,
+        companyId: 'cl000000000000000000default',
+      },
     });
     expect(create.statusCode).toBe(201);
     const created = create.json();

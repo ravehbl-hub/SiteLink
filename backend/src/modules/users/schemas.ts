@@ -15,6 +15,12 @@ import { PaginationQuery } from '../../lib/pagination.js';
  */
 export const listUsersQuerySchema = PaginationQuery.extend({
   role: z.nativeEnum(Role).optional(),
+  /**
+   * ADMIN-ONLY READ narrowing: an ADMIN may pass ?companyId to view a single
+   * tenant's users. IGNORED for a MANAGER (effectiveCompanyScope pins a non-admin
+   * to their own company regardless — a Manager can never widen via this field).
+   */
+  companyId: z.string().min(1).optional(),
 });
 
 export const createUserSchema = z.object({
@@ -23,6 +29,12 @@ export const createUserSchema = z.object({
   email: z.string().email(),
   // Optional: omit to send a Supabase invite (user sets own password).
   password: z.string().min(8).optional(),
+  /**
+   * TENANT for the new user. ADMIN-only + REQUIRED for an ADMIN (create a Manager
+   * INTO a company). IGNORED for a MANAGER — the service stamps the MANAGER'S OWN
+   * companyId, never this client value.
+   */
+  companyId: z.string().min(1).optional(),
   primarySiteId: z.string().nullish(),
   language: z.nativeEnum(Language).optional(),
   theme: z.nativeEnum(Theme).optional(),

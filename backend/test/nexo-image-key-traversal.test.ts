@@ -85,6 +85,7 @@ beforeAll(async () => {
   const mgr = await prisma.user.create({
     data: {
       authUserId: MGR_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.MANAGER,
       fullName: 'NIKT Manager',
       email: `nikt-mgr-${randomUUID().slice(0, 8)}@sitelink.test`,

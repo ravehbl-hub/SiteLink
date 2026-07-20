@@ -72,6 +72,7 @@ function asUser(role: Role) {
   userFindUnique.mockImplementation(async () => ({
     id: 'user-' + role,
     authUserId: sub,
+    companyId: 'cl000000000000000000default',
     role,
     email: `${role}@t.local`,
     fullName: role,

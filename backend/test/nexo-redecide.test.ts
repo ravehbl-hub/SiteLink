@@ -49,6 +49,7 @@ beforeAll(async () => {
     update: { role: Role.MANAGER, isLockedOut: false, authUserId: MGR_AUTH },
     create: {
       authUserId: MGR_AUTH,
+      companyId: 'cl000000000000000000default',
       role: Role.MANAGER,
       fullName: 'Nexo Redecide Manager',
       email: 'nexo-redecide-mgr@sitelink.test',

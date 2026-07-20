@@ -91,6 +91,9 @@ export default fp(
       const appUser: AuthUser = {
         id: user.id,
         authUserId: user.authUserId,
+        // Multi-tenancy: the caller's SERVER-side tenant. Every scoped query derives
+        // its company filter from this — never from a client-supplied companyId.
+        companyId: user.companyId,
         role: user.role as Role,
         email: user.email,
         fullName: user.fullName,

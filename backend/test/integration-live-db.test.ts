@@ -68,6 +68,7 @@ beforeAll(async () => {
     update: { role: Role.MANAGER, isLockedOut: false, authUserId: MGR_AUTH_ID },
     create: {
       authUserId: MGR_AUTH_ID,
+      companyId: 'cl000000000000000000default',
       role: Role.MANAGER,
       fullName: 'Live Test Manager',
       email: 'live-manager@sitelink.test',

@@ -57,6 +57,7 @@ async function makeUser(authUserId: string, role: Role): Promise<void> {
     update: { role, isLockedOut: false, authUserId },
     create: {
       authUserId,
+      companyId: 'cl000000000000000000default',
       role,
       fullName: `PC Test ${role}`,
       email: `${authUserId}@sitelink.test`,

@@ -26,6 +26,7 @@ import { mapSalaryData, mapWorker, mapWorkerDoc } from '../../lib/mappers.js';
 import { paginate } from '../../lib/pagination.js';
 import {
   assertWorkerInScope,
+  DEFAULT_COMPANY_ID,
   effectiveSiteScope,
   isForeman,
   resolveSiteScope,
@@ -302,7 +303,7 @@ export class WorkersService {
     // The whole thing is one unit of work: if ANY step fails we roll back everything
     // we created (Supabase identity, User row, and the Worker itself) so no orphaned
     // Supabase identity, no half-linked login, and no login-less ghost worker survive.
-    await this.provisionAndLinkLogin(created.id, input);
+    await this.provisionAndLinkLogin(created.id, input, caller);
 
     return this.getWithDetails(created.id);
   }
@@ -318,7 +319,14 @@ export class WorkersService {
   private async provisionAndLinkLogin(
     workerId: string,
     input: CreateInput,
+    caller?: AuthUser,
   ): Promise<void> {
+    // Multi-tenancy (Phase 1): the worker's WORKER-login User row MUST carry a
+    // companyId (User.companyId is NOT NULL). Stamp it with the creating caller's
+    // OWN company (server-derived) — the worker login belongs to the same tenant as
+    // the manager/foreman who created the worker. Full worker-module company scoping
+    // is Phase 2; this stamp only keeps the mandatory login dual-write tenant-correct.
+    const companyId = caller?.companyId ?? DEFAULT_COMPANY_ID;
     // Guard the app-side unique constraint up front (User.email is unique).
     const existing = await prisma.user.findUnique({ where: { email: input.email } });
     if (existing) {
@@ -343,6 +351,7 @@ export class WorkersService {
         const user = await tx.user.create({
           data: {
             authUserId,
+            companyId,
             role: Role.WORKER,
             fullName: `${input.firstName} ${input.lastName}`.trim(),
             email: input.email,

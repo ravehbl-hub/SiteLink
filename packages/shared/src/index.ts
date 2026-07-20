@@ -6,6 +6,7 @@
  */
 export * from './enums';
 export * from './common';
+export * from './company';
 export * from './user';
 export * from './site';
 export * from './foreman-site-assignment';

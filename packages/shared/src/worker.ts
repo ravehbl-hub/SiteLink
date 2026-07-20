@@ -10,6 +10,12 @@ import { Profession, RateType, WorkerDocType, WorkerLevel } from './enums';
  */
 export interface Worker extends Timestamped, Archivable {
   id: ID;
+  /**
+   * MULTI-TENANCY (P2): the tenant this worker belongs to. READ-ONLY on the wire — the
+   * FE never sends it to widen scope; the server stamps it from the creating caller's
+   * own company. Present so the FE can display/verify tenant, never mutate it.
+   */
+  companyId?: ID;
   /** Profile image (upload or camera). Access-controlled file (FR-MGR-EMP-2). */
   image?: FileRef | null;
   firstName: string; // required (FR-MGR-EMP-7)

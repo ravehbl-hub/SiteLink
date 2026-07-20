@@ -13,7 +13,13 @@ import type { Archivable, ID, Timestamped } from './common';
 /** A staffing / personnel company (FR-MGR-EMP-2). Org-wide, Manager-managed. */
 export interface PersonnelCompany extends Timestamped, Archivable {
   id: ID;
-  /** Unique display name (e.g. the agency name). Required. */
+  /**
+   * MULTI-TENANCY (P2): the tenant this staffing company belongs to. READ-ONLY on the
+   * wire — the server stamps it from the caller's own company; per-company uniqueness
+   * is @@unique([companyId, name]). The FE never sends it.
+   */
+  companyId?: ID;
+  /** Unique (per company) display name (e.g. the agency name). Required. */
   name: string;
   /** Optional primary contact person. */
   contactName?: string | null;
@@ -63,6 +69,8 @@ export const listPersonnelCompaniesQuery = z.object({
   includeArchived: z
     .preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean())
     .default(false),
+  // MULTI-TENANCY (P2): ADMIN read-narrow to one company; IGNORED for a non-admin.
+  companyId: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });

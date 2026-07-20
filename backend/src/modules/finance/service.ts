@@ -19,6 +19,16 @@ import { mapAdvance, mapLoan } from '../../lib/mappers.js';
 import { round2, toNumber } from '../../lib/money.js';
 import { paginate } from '../../lib/pagination.js';
 import { toISORequired } from '../../lib/dates.js';
+import {
+  assertCompanyScopeMatch,
+  companyWhere,
+  effectiveCompanyScope,
+  resolveCompanyScope,
+  resolveStampCompanyId,
+  type CompanyScope,
+} from '../../lib/scope.js';
+import { Role } from '@sitelink/shared';
+import type { AuthUser } from '../../plugins/types.js';
 import { SalaryService } from '../salary/service.js';
 import type {
   createAdvanceSchema,
@@ -39,10 +49,32 @@ type PnlQuery = z.infer<typeof profitLossQuery>;
 export class FinanceService {
   constructor(private readonly salary = new SalaryService()) {}
 
+  private companyScope(caller?: AuthUser): CompanyScope {
+    return caller ? resolveCompanyScope(caller) : { allCompanies: true };
+  }
+
+  /**
+   * P2: stamp a ledger row (Loan/Advance) with the WORKER's company (server-derived,
+   * never the client) and assert the worker is in the caller's company (404 else).
+   * Loan/AdvancePayment carry a DIRECT companyId (= worker's).
+   */
+  private async companyForWorker(workerId: string, caller?: AuthUser): Promise<string> {
+    const worker = await prisma.worker.findUnique({
+      where: { id: workerId },
+      select: { companyId: true },
+    });
+    assertCompanyScopeMatch(this.companyScope(caller), worker?.companyId);
+    if (!worker) throw AppError.notFound('Worker not found');
+    return worker.companyId;
+  }
+
   // ── Loans (FR-MGR-LOAN) ──────────────────────────────────────────────────
 
-  async listLoans(query: ListQuery): Promise<Paginated<Loan>> {
-    const where = query.workerId ? { workerId: query.workerId } : {};
+  async listLoans(query: ListQuery, caller?: AuthUser): Promise<Paginated<Loan>> {
+    const companyClause = caller
+      ? companyWhere(effectiveCompanyScope(caller, query.companyId))
+      : {};
+    const where = { ...companyClause, ...(query.workerId ? { workerId: query.workerId } : {}) };
     const skip = (query.page - 1) * query.pageSize;
     const [rows, total] = await Promise.all([
       prisma.loan.findMany({ where, skip, take: query.pageSize, orderBy: { date: 'desc' } }),
@@ -54,10 +86,12 @@ export class FinanceService {
     });
   }
 
-  async createLoan(input: CreateLoan): Promise<Loan> {
+  async createLoan(input: CreateLoan, caller?: AuthUser): Promise<Loan> {
+    const companyId = await this.companyForWorker(input.workerId, caller);
     const row = await prisma.loan.create({
       data: {
         workerId: input.workerId,
+        companyId,
         amount: input.amount,
         currency: input.currency,
         date: new Date(input.date),
@@ -68,8 +102,8 @@ export class FinanceService {
     return mapLoan(row);
   }
 
-  async updateLoan(id: string, input: UpdateLoan): Promise<Loan> {
-    await this.ensureLoan(id);
+  async updateLoan(id: string, input: UpdateLoan, caller?: AuthUser): Promise<Loan> {
+    await this.ensureLoan(id, caller);
     const row = await prisma.loan.update({
       where: { id },
       data: {
@@ -83,15 +117,18 @@ export class FinanceService {
     return mapLoan(row);
   }
 
-  async removeLoan(id: string): Promise<void> {
-    await this.ensureLoan(id);
+  async removeLoan(id: string, caller?: AuthUser): Promise<void> {
+    await this.ensureLoan(id, caller);
     await prisma.loan.delete({ where: { id } });
   }
 
   // ── Advances (FR-MGR-ADV) ────────────────────────────────────────────────
 
-  async listAdvances(query: ListQuery): Promise<Paginated<AdvancePayment>> {
-    const where = query.workerId ? { workerId: query.workerId } : {};
+  async listAdvances(query: ListQuery, caller?: AuthUser): Promise<Paginated<AdvancePayment>> {
+    const companyClause = caller
+      ? companyWhere(effectiveCompanyScope(caller, query.companyId))
+      : {};
+    const where = { ...companyClause, ...(query.workerId ? { workerId: query.workerId } : {}) };
     const skip = (query.page - 1) * query.pageSize;
     const [rows, total] = await Promise.all([
       prisma.advancePayment.findMany({
@@ -108,10 +145,12 @@ export class FinanceService {
     });
   }
 
-  async createAdvance(input: CreateAdvance): Promise<AdvancePayment> {
+  async createAdvance(input: CreateAdvance, caller?: AuthUser): Promise<AdvancePayment> {
+    const companyId = await this.companyForWorker(input.workerId, caller);
     const row = await prisma.advancePayment.create({
       data: {
         workerId: input.workerId,
+        companyId,
         amount: input.amount,
         currency: input.currency,
         date: new Date(input.date),
@@ -122,8 +161,8 @@ export class FinanceService {
     return mapAdvance(row);
   }
 
-  async updateAdvance(id: string, input: UpdateAdvance): Promise<AdvancePayment> {
-    await this.ensureAdvance(id);
+  async updateAdvance(id: string, input: UpdateAdvance, caller?: AuthUser): Promise<AdvancePayment> {
+    await this.ensureAdvance(id, caller);
     const row = await prisma.advancePayment.update({
       where: { id },
       data: {
@@ -137,8 +176,8 @@ export class FinanceService {
     return mapAdvance(row);
   }
 
-  async removeAdvance(id: string): Promise<void> {
-    await this.ensureAdvance(id);
+  async removeAdvance(id: string, caller?: AuthUser): Promise<void> {
+    await this.ensureAdvance(id, caller);
     await prisma.advancePayment.delete({ where: { id } });
   }
 
@@ -150,13 +189,19 @@ export class FinanceService {
    * for every non-archived worker in scope; loans/advances cost = their outstanding
    * within the date window.
    */
-  async profitLoss(query: PnlQuery): Promise<ProfitLoss> {
+  async profitLoss(query: PnlQuery, companyScope?: CompanyScope): Promise<ProfitLoss> {
     const from = new Date(query.from);
     const to = new Date(query.to);
+
+    // MULTI-TENANCY (P2, TOP FLAGGED LEAK): every underlying aggregate is company-scoped
+    // so a P&L NEVER silently sums across tenants. AttendanceRecord/Loan/AdvancePayment
+    // all carry a DIRECT companyId; the salary batch is scoped via `companyScope`.
+    const companyClause = companyScope ? companyWhere(companyScope) : {};
 
     // Workers in scope: those with attendance (optionally on the given site) in range.
     const attendance = await prisma.attendanceRecord.findMany({
       where: {
+        ...companyClause,
         date: { gte: from, lte: to },
         ...(query.siteId ? { siteId: query.siteId } : {}),
       },
@@ -166,19 +211,24 @@ export class FinanceService {
     const workerIds = attendance.map((a) => a.workerId);
 
     // BATCH: one bulk salary calc for the in-scope worker set (was an N+1 loop of
-    // 3 queries per worker). Workers without a configured wage are absent from the
-    // map — same "skip" behaviour the per-worker try/catch used to give.
-    const salaryByWorker = await this.salary.calculateMany(workerIds, {
-      siteId: query.siteId,
-      periodStart: query.from,
-      periodEnd: query.to,
-    });
+    // 3 queries per worker). Company-scoped so a cross-tenant worker can never be
+    // summed; workers without a configured wage are absent from the map.
+    const salaryByWorker = await this.salary.calculateMany(
+      workerIds,
+      {
+        siteId: query.siteId,
+        periodStart: query.from,
+        periodEnd: query.to,
+      },
+      companyScope,
+    );
     let salaryCost = 0;
     for (const result of salaryByWorker.values()) salaryCost += result.gross;
 
     const loanAgg = await prisma.loan.aggregate({
       _sum: { outstanding: true },
       where: {
+        ...companyClause,
         date: { gte: from, lte: to },
         ...(query.siteId
           ? { worker: { assignments: { some: { siteId: query.siteId } } } }
@@ -188,6 +238,7 @@ export class FinanceService {
     const advanceAgg = await prisma.advancePayment.aggregate({
       _sum: { outstanding: true },
       where: {
+        ...companyClause,
         date: { gte: from, lte: to },
         ...(query.siteId
           ? { worker: { assignments: { some: { siteId: query.siteId } } } }
@@ -220,16 +271,22 @@ export class FinanceService {
 
   // ── internals ──────────────────────────────────────────────────────────
 
-  private async ensureLoan(id: string): Promise<void> {
-    const exists = await prisma.loan.findUnique({ where: { id }, select: { id: true } });
-    if (!exists) throw AppError.notFound('Loan not found');
+  private async ensureLoan(id: string, caller?: AuthUser): Promise<void> {
+    const row = await prisma.loan.findUnique({
+      where: { id },
+      select: { id: true, companyId: true },
+    });
+    // P2: cross-company loan → 404 (no existence leak) before any mutation.
+    assertCompanyScopeMatch(this.companyScope(caller), row?.companyId);
+    if (!row) throw AppError.notFound('Loan not found');
   }
 
-  private async ensureAdvance(id: string): Promise<void> {
-    const exists = await prisma.advancePayment.findUnique({
+  private async ensureAdvance(id: string, caller?: AuthUser): Promise<void> {
+    const row = await prisma.advancePayment.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, companyId: true },
     });
-    if (!exists) throw AppError.notFound('Advance payment not found');
+    assertCompanyScopeMatch(this.companyScope(caller), row?.companyId);
+    if (!row) throw AppError.notFound('Advance payment not found');
   }
 }

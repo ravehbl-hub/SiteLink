@@ -34,9 +34,9 @@ export async function requestRoutes(app: FastifyInstance): Promise<void> {
     if (req.appUser!.role === Role.WORKER) {
       // A WORKER sees only their own requests. No linked Worker → empty page.
       const selfWorkerId = await requireWorkerId(req.appUser!);
-      return service.list(query, selfWorkerId);
+      return service.list(query, selfWorkerId, req.appUser!);
     }
-    return service.list(query);
+    return service.list(query, undefined, req.appUser!);
   });
 
   app.post('/requests', selfGuard, async (req, reply) => {
@@ -47,10 +47,12 @@ export async function requestRoutes(app: FastifyInstance): Promise<void> {
       const selfWorkerId = await requireWorkerId(req.appUser!);
       return reply
         .status(201)
-        .send(await service.create(body, req.appUser!.id, selfWorkerId));
+        .send(await service.create(body, req.appUser!.id, selfWorkerId, req.appUser!));
     }
     // ADMIN/MANAGER model a request on a worker's behalf; requestedById = acting user.
-    return reply.status(201).send(await service.create(body, req.appUser!.id));
+    return reply
+      .status(201)
+      .send(await service.create(body, req.appUser!.id, undefined, req.appUser!));
   });
 
   app.patch('/requests/:id/approve', guard, async (req) => {
@@ -60,7 +62,7 @@ export async function requestRoutes(app: FastifyInstance): Promise<void> {
       resolutionNotes: (req.body as { resolutionNotes?: string } | undefined)
         ?.resolutionNotes,
     });
-    return service.resolve(id, body, req.appUser!.id);
+    return service.resolve(id, body, req.appUser!.id, req.appUser!);
   });
 
   app.patch('/requests/:id/reject', guard, async (req) => {
@@ -70,7 +72,7 @@ export async function requestRoutes(app: FastifyInstance): Promise<void> {
       resolutionNotes: (req.body as { resolutionNotes?: string } | undefined)
         ?.resolutionNotes,
     });
-    return service.resolve(id, body, req.appUser!.id);
+    return service.resolve(id, body, req.appUser!.id, req.appUser!);
   });
 
   // RE-DECIDE an already-RESOLVED request (ADMIN/MANAGER only). Flips APPROVED↔REJECTED
@@ -81,6 +83,6 @@ export async function requestRoutes(app: FastifyInstance): Promise<void> {
   app.patch('/requests/:id/redecide', guard, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = redecideRequestSchema.parse(req.body);
-    return service.redecide(id, body, req.appUser!.id);
+    return service.redecide(id, body, req.appUser!.id, req.appUser!);
   });
 }

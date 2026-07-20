@@ -25,11 +25,17 @@ import { AppError } from '../../lib/errors.js';
 import { mapSalaryData, mapWorker, mapWorkerDoc } from '../../lib/mappers.js';
 import { paginate } from '../../lib/pagination.js';
 import {
+  assertCompanyScopeMatch,
   assertWorkerInScope,
+  companyWhere,
   DEFAULT_COMPANY_ID,
+  effectiveCompanyScope,
   effectiveSiteScope,
   isForeman,
+  resolveCompanyScope,
   resolveSiteScope,
+  resolveStampCompanyId,
+  type CompanyScope,
 } from '../../lib/scope.js';
 import { SupabaseService } from '../../lib/supabase.js';
 import type { AuthUser } from '../../plugins/types.js';
@@ -94,6 +100,29 @@ export class WorkersService {
   constructor(private readonly supabase: SupabaseService) {}
 
   /**
+   * MULTI-TENANCY (P2) — the caller's company scope for a WRITE/READ-by-id path
+   * (no ?companyId narrowing; that's only for list). Non-admin → own company; ADMIN →
+   * allCompanies. Undefined caller (internal/legacy) → allCompanies (unscoped).
+   */
+  private companyScope(caller?: AuthUser): CompanyScope {
+    return caller ? resolveCompanyScope(caller) : { allCompanies: true };
+  }
+
+  /**
+   * Load a worker by id and ASSERT it is inside the caller's company (404 otherwise —
+   * never a cross-tenant existence leak). Returns the row's companyId for reuse.
+   */
+  private async assertWorkerCompany(id: string, caller?: AuthUser): Promise<void> {
+    if (!caller) return;
+    const row = await prisma.worker.findUnique({
+      where: { id },
+      select: { companyId: true },
+    });
+    // Non-existent OR cross-company both surface as 404 (no existence leak).
+    assertCompanyScopeMatch(this.companyScope(caller), row?.companyId);
+  }
+
+  /**
    * List workers. FOREMAN-scoped (FR-MGR-EMP LIST): when the caller is a FOREMAN the
    * result is HARD-scoped to workers assigned to one of their UNION sites via
    * `assignments.some.siteId IN union` — a Foreman NEVER sees the whole roster.
@@ -143,7 +172,13 @@ export class WorkersService {
       : query.includeArchived
         ? {}
         : { isArchived: false };
+    // MULTI-TENANCY (P2): company filter ANDs with archived + site + search. A
+    // non-admin is pinned to their own company; ADMIN unscoped (+ ?companyId narrow).
+    const companyClause = caller
+      ? companyWhere(effectiveCompanyScope(caller, query.companyId))
+      : {};
     const where: Record<string, unknown> = {
+      ...companyClause,
       ...archivedClause,
       ...siteFilter,
     };
@@ -201,6 +236,9 @@ export class WorkersService {
    * the endpoint never confirms/denies a worker's existence to a Foreman probing ids.
    */
   async getWithDetails(id: string, caller?: AuthUser): Promise<WorkerWithDetails> {
+    // MULTI-TENANCY (P2): cross-company worker → 404 FIRST (before the site-scope 403),
+    // so a manager of another tenant never learns the worker exists.
+    await this.assertWorkerCompany(id, caller);
     if (caller) await assertWorkerInScope(caller, id);
     const row = await prisma.worker.findUnique({
       where: { id },
@@ -253,14 +291,24 @@ export class WorkersService {
     if (caller && isForeman(caller)) {
       await this.assertForemanCreateScope(caller, input.siteIds);
     }
+    // MULTI-TENANCY (P2): stamp the Worker row with the caller's OWN company
+    // (server-derived). A body/query companyId is NEVER trusted to widen a non-admin;
+    // resolveStampCompanyId pins a non-admin to their own tenant. Derived children
+    // (salaryData/assignments) inherit this company via the parent Worker.
+    const companyId = resolveStampCompanyId(
+      caller ?? { role: Role.ADMIN, companyId: DEFAULT_COMPANY_ID },
+    );
     // Resolve/validate the managed personnel-company FK (if the field was supplied) and
-    // derive the mirrored free-text name. See `resolvePersonnelCompany` for the policy.
+    // derive the mirrored free-text name. Scoped to the worker's company so a caller can
+    // never link to another tenant's personnel-company (P2).
     const pc = await this.resolvePersonnelCompany(
       input.personnelCompanyId,
       input.personnelCompany,
+      this.companyScope(caller),
     );
     const created = await prisma.worker.create({
       data: {
+        companyId,
         firstName: input.firstName,
         lastName: input.lastName,
         profession: input.profession,
@@ -303,7 +351,7 @@ export class WorkersService {
     // The whole thing is one unit of work: if ANY step fails we roll back everything
     // we created (Supabase identity, User row, and the Worker itself) so no orphaned
     // Supabase identity, no half-linked login, and no login-less ghost worker survive.
-    await this.provisionAndLinkLogin(created.id, input, caller);
+    await this.provisionAndLinkLogin(created.id, input, companyId);
 
     return this.getWithDetails(created.id);
   }
@@ -319,14 +367,11 @@ export class WorkersService {
   private async provisionAndLinkLogin(
     workerId: string,
     input: CreateInput,
-    caller?: AuthUser,
+    companyId: string,
   ): Promise<void> {
-    // Multi-tenancy (Phase 1): the worker's WORKER-login User row MUST carry a
-    // companyId (User.companyId is NOT NULL). Stamp it with the creating caller's
-    // OWN company (server-derived) — the worker login belongs to the same tenant as
-    // the manager/foreman who created the worker. Full worker-module company scoping
-    // is Phase 2; this stamp only keeps the mandatory login dual-write tenant-correct.
-    const companyId = caller?.companyId ?? DEFAULT_COMPANY_ID;
+    // Multi-tenancy (P2): the worker's WORKER-login User row MUST carry the SAME
+    // companyId as its Worker row (server-derived at create) — the login and the
+    // worker are one tenant. `companyId` is the resolved stamp passed from create().
     // Guard the app-side unique constraint up front (User.email is unique).
     const existing = await prisma.user.findUnique({ where: { email: input.email } });
     if (existing) {
@@ -384,6 +429,8 @@ export class WorkersService {
    * EDIT. ADMIN/MANAGER keep the full-replace setAssignments behavior.
    */
   async update(id: string, input: UpdateInput, caller?: AuthUser): Promise<WorkerWithDetails> {
+    // MULTI-TENANCY (P2): cross-company worker → 404 before any mutation or read.
+    await this.assertWorkerCompany(id, caller);
     const foreman = !!caller && isForeman(caller);
     if (foreman) {
       // Scope check BEFORE any read/mutation of an out-of-scope worker.
@@ -435,6 +482,7 @@ export class WorkersService {
       const pc = await this.resolvePersonnelCompany(
         input.personnelCompanyId,
         input.personnelCompany,
+        this.companyScope(caller),
       );
       companyData = { personnelCompanyId: pc.id, personnelCompany: pc.name };
     } else if (input.personnelCompany !== undefined) {
@@ -476,7 +524,8 @@ export class WorkersService {
   }
 
   /** Archive (move-to-archives, FR-MGR-EMP-5/6). Excluded from active rosters. */
-  async archive(id: string): Promise<Worker> {
+  async archive(id: string, caller?: AuthUser): Promise<Worker> {
+    await this.assertWorkerCompany(id, caller);
     await this.ensureExists(id);
     const row = await prisma.worker.update({
       where: { id },
@@ -486,7 +535,8 @@ export class WorkersService {
   }
 
   /** Unarchive (restore-from-archives, FR-MGR-EMP-5/6). Returns to active rosters. */
-  async unarchive(id: string): Promise<Worker> {
+  async unarchive(id: string, caller?: AuthUser): Promise<Worker> {
+    await this.assertWorkerCompany(id, caller);
     await this.ensureExists(id);
     const row = await prisma.worker.update({
       where: { id },
@@ -496,7 +546,8 @@ export class WorkersService {
   }
 
   /** Hard delete (FR-MGR-EMP-5). Also purge stored objects to stay in sync. */
-  async remove(id: string): Promise<void> {
+  async remove(id: string, caller?: AuthUser): Promise<void> {
+    await this.assertWorkerCompany(id, caller);
     const worker = await prisma.worker.findUnique({
       where: { id },
       include: { docs: true },
@@ -517,7 +568,13 @@ export class WorkersService {
 
   // ── Salary data (FR-MGR-EMP-4) ───────────────────────────────────────────
 
-  async upsertSalaryData(workerId: string, input: SalaryInput): Promise<WorkerSalaryData> {
+  async upsertSalaryData(
+    workerId: string,
+    input: SalaryInput,
+    caller?: AuthUser,
+  ): Promise<WorkerSalaryData> {
+    // Derived model: tenant via the parent Worker. Cross-company → 404.
+    await this.assertWorkerCompany(workerId, caller);
     await this.ensureExists(workerId);
     const row = await prisma.workerSalaryData.upsert({
       where: { workerId },
@@ -540,7 +597,8 @@ export class WorkersService {
 
   // ── Docs (FR-MGR-EMP-3, Architecture §7a) ────────────────────────────────
 
-  async listDocs(workerId: string): Promise<WorkerDoc[]> {
+  async listDocs(workerId: string, caller?: AuthUser): Promise<WorkerDoc[]> {
+    await this.assertWorkerCompany(workerId, caller);
     await this.ensureExists(workerId);
     const rows = await prisma.workerDoc.findMany({
       where: { workerId },
@@ -556,7 +614,10 @@ export class WorkersService {
   async requestDocUpload(
     workerId: string,
     input: DocUploadInput,
+    caller?: AuthUser,
   ): Promise<SignedUploadResponse> {
+    // Cross-company → 404 BEFORE any signed URL is minted (no cross-tenant capability).
+    await this.assertWorkerCompany(workerId, caller);
     await this.ensureExists(workerId);
     this.supabase.assertAllowedMime(input.mimeType);
     const storageKey = `${workerId}/${input.type}/${randomUUID()}.${extFor(input.mimeType)}`;
@@ -574,7 +635,12 @@ export class WorkersService {
    * upload. Only accepts a key that matches the server-chosen prefix for this
    * worker (defense against a client claiming an arbitrary key).
    */
-  async confirmDoc(workerId: string, input: DocConfirmInput): Promise<WorkerDoc> {
+  async confirmDoc(
+    workerId: string,
+    input: DocConfirmInput,
+    caller?: AuthUser,
+  ): Promise<WorkerDoc> {
+    await this.assertWorkerCompany(workerId, caller);
     await this.ensureExists(workerId);
     this.supabase.assertAllowedMime(input.mimeType);
     if (!input.storageKey.startsWith(`${workerId}/`)) {
@@ -596,7 +662,13 @@ export class WorkersService {
   }
 
   /** Mint a short-lived signed READ URL for a stored doc. */
-  async getDocReadUrl(workerId: string, docId: string): Promise<SignedReadResponse> {
+  async getDocReadUrl(
+    workerId: string,
+    docId: string,
+    caller?: AuthUser,
+  ): Promise<SignedReadResponse> {
+    // Cross-company → 404 BEFORE any signed READ URL is minted.
+    await this.assertWorkerCompany(workerId, caller);
     const doc = await prisma.workerDoc.findFirst({ where: { id: docId, workerId } });
     if (!doc) throw AppError.notFound('Document not found');
     const signed = await this.supabase.createSignedRead({
@@ -606,7 +678,8 @@ export class WorkersService {
     return { url: signed.url, expiresInSeconds: signed.expiresInSeconds };
   }
 
-  async removeDoc(workerId: string, docId: string): Promise<void> {
+  async removeDoc(workerId: string, docId: string, caller?: AuthUser): Promise<void> {
+    await this.assertWorkerCompany(workerId, caller);
     const doc = await prisma.workerDoc.findFirst({ where: { id: docId, workerId } });
     if (!doc) throw AppError.notFound('Document not found');
     await this.supabase
@@ -633,6 +706,8 @@ export class WorkersService {
     input: ImageUploadInput,
     caller?: AuthUser,
   ): Promise<SignedUploadResponse> {
+    // MULTI-TENANCY (P2): cross-company → 404 BEFORE the site-scope check + any URL mint.
+    await this.assertWorkerCompany(workerId, caller);
     if (caller) await assertWorkerInScope(caller, workerId);
     const worker = await prisma.worker.findUnique({
       where: { id: workerId },
@@ -668,6 +743,7 @@ export class WorkersService {
     input: ImageConfirmInput,
     caller?: AuthUser,
   ): Promise<Worker> {
+    await this.assertWorkerCompany(workerId, caller);
     if (caller) await assertWorkerInScope(caller, workerId);
     const worker = await prisma.worker.findUnique({ where: { id: workerId } });
     if (!worker) throw AppError.notFound('Worker not found');
@@ -710,6 +786,8 @@ export class WorkersService {
    * union sites (403 otherwise). ADMIN/MANAGER (or no caller) → no-op / unscoped.
    */
   async getImageReadUrl(workerId: string, caller?: AuthUser): Promise<SignedReadResponse> {
+    // Cross-company → 404 BEFORE the site-scope check + any signed image URL is minted.
+    await this.assertWorkerCompany(workerId, caller);
     if (caller) await assertWorkerInScope(caller, workerId);
     const worker = await prisma.worker.findUnique({
       where: { id: workerId },
@@ -851,6 +929,7 @@ export class WorkersService {
   private async resolvePersonnelCompany(
     personnelCompanyId: string | null | undefined,
     freeText: string | null | undefined,
+    scope: CompanyScope,
   ): Promise<{ id: string | null; name: string | null }> {
     if (personnelCompanyId === undefined) {
       // No managed link requested — preserve legacy free-text behavior.
@@ -860,8 +939,10 @@ export class WorkersService {
       // Explicit unlink: clear FK and mirror together.
       return { id: null, name: null };
     }
+    // P2: only link to a personnel-company inside the caller's company (a cross-tenant
+    // id resolves to no match → the same 400 as nonexistent, no cross-tenant link).
     const company = await prisma.personnelCompany.findFirst({
-      where: { id: personnelCompanyId, isArchived: false },
+      where: { id: personnelCompanyId, isArchived: false, ...companyWhere(scope) },
       select: { id: true, name: true },
     });
     if (!company) {

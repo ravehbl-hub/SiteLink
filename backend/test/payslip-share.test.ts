@@ -84,6 +84,10 @@ function asUser(role: Role) {
 
 const WORKER_WITH_ALL = {
   id: 'w1',
+  // MULTI-TENANCY (P2): the payslip-share routes now assert the worker is in the
+  // caller's company BEFORE minting any signed URL — same company as the mocked
+  // manager (Default Company) so the share proceeds to the phone/email checks.
+  companyId: 'cl000000000000000000default',
   firstName: 'Jane',
   lastName: 'Doe',
   email: 'jane@example.com',

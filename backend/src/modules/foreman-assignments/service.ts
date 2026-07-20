@@ -19,7 +19,12 @@ import type { ForemanSiteAssignment, PickableSite } from '@sitelink/shared';
 import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { toISO, toISORequired } from '../../lib/dates.js';
-import { resolveSiteScope } from '../../lib/scope.js';
+import {
+  assertCompanyScopeMatch,
+  resolveCompanyScope,
+  resolveSiteScope,
+  type CompanyScope,
+} from '../../lib/scope.js';
 import type { AuthUser } from '../../plugins/types.js';
 
 type AssignmentRow = {
@@ -45,13 +50,29 @@ function mapAssignment(row: AssignmentRow): ForemanSiteAssignment {
 }
 
 export class ForemanAssignmentsService {
+  private companyScope(caller?: AuthUser): CompanyScope {
+    return caller ? resolveCompanyScope(caller) : { allCompanies: true };
+  }
+
   /**
    * Assign a foreman to a site (idempotent upsert). Validates the target is a FOREMAN
    * and the site exists. Reactivates a previously-unassigned pair; otherwise inserts.
+   *
+   * MULTI-TENANCY (P2, DERIVED MODEL): ForemanSiteAssignment has no companyId column —
+   * its tenant derives from BOTH endpoints. We assert (a) the foreman AND the site are
+   * each inside the CALLER's company (404 otherwise, no cross-tenant existence leak) and
+   * (b) the foreman and the site are the SAME company (400 otherwise) — a foreman can
+   * NEVER be assigned to another company's site.
    */
-  async assign(input: { foremanId: string; siteId: string }): Promise<ForemanSiteAssignment> {
-    await this.ensureForeman(input.foremanId);
-    await this.ensureSite(input.siteId);
+  async assign(
+    input: { foremanId: string; siteId: string },
+    caller?: AuthUser,
+  ): Promise<ForemanSiteAssignment> {
+    const foremanCompanyId = await this.ensureForeman(input.foremanId, caller);
+    const siteCompanyId = await this.ensureSite(input.siteId, caller);
+    if (foremanCompanyId !== siteCompanyId) {
+      throw AppError.validation('Foreman and site belong to different companies');
+    }
 
     const existing = await prisma.foremanSiteAssignment.findUnique({
       where: { foremanId_siteId: { foremanId: input.foremanId, siteId: input.siteId } },
@@ -77,7 +98,13 @@ export class ForemanAssignmentsService {
    * missing or already-unassigned pair → 404 (nothing active to end). Removing the
    * assignment removes that site from the foreman's scope union (fail-closed).
    */
-  async unassign(input: { foremanId: string; siteId: string }): Promise<ForemanSiteAssignment> {
+  async unassign(
+    input: { foremanId: string; siteId: string },
+    caller?: AuthUser,
+  ): Promise<ForemanSiteAssignment> {
+    // P2: both endpoints must be in the caller's company (404 otherwise) before touch.
+    await this.ensureForeman(input.foremanId, caller);
+    await this.ensureSite(input.siteId, caller);
     const existing = await prisma.foremanSiteAssignment.findUnique({
       where: { foremanId_siteId: { foremanId: input.foremanId, siteId: input.siteId } },
     });
@@ -92,8 +119,9 @@ export class ForemanAssignmentsService {
   }
 
   /** List a foreman's ACTIVE assignments (unassignedAt = null). */
-  async listForForeman(foremanId: string): Promise<ForemanSiteAssignment[]> {
-    await this.ensureForeman(foremanId);
+  async listForForeman(foremanId: string, caller?: AuthUser): Promise<ForemanSiteAssignment[]> {
+    // P2: a manager can only list a foreman in their OWN company (404 otherwise).
+    await this.ensureForeman(foremanId, caller);
     const rows = await prisma.foremanSiteAssignment.findMany({
       where: { foremanId, unassignedAt: null },
       orderBy: { assignedAt: 'desc' },
@@ -135,20 +163,28 @@ export class ForemanAssignmentsService {
     }));
   }
 
-  private async ensureForeman(foremanId: string): Promise<void> {
+  private async ensureForeman(foremanId: string, caller?: AuthUser): Promise<string> {
     const user = await prisma.user.findUnique({
       where: { id: foremanId },
-      select: { id: true, role: true },
+      select: { id: true, role: true, companyId: true },
     });
+    // P2: cross-company foreman → 404 (no existence leak) before the role check.
+    assertCompanyScopeMatch(this.companyScope(caller), user?.companyId);
     if (!user) throw AppError.notFound('Foreman user not found');
     if (user.role !== Role.FOREMAN) {
       // Only FOREMAN users may hold a foreman site scope. Refuse anything else.
       throw AppError.validation('Target user is not a FOREMAN');
     }
+    return user.companyId;
   }
 
-  private async ensureSite(siteId: string): Promise<void> {
-    const site = await prisma.site.findUnique({ where: { id: siteId }, select: { id: true } });
+  private async ensureSite(siteId: string, caller?: AuthUser): Promise<string> {
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: { id: true, companyId: true },
+    });
+    assertCompanyScopeMatch(this.companyScope(caller), site?.companyId);
     if (!site) throw AppError.notFound('Site not found');
+    return site.companyId;
   }
 }

@@ -11,7 +11,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { FOREMAN_ROLES } from '../../plugins/auth.js';
-import { effectiveSiteScope } from '../../lib/scope.js';
+import { effectiveCompanyScope, effectiveSiteScope } from '../../lib/scope.js';
 import { DashboardService } from './service.js';
 import { dashboardQuery } from './schemas.js';
 
@@ -25,13 +25,19 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     // For a FOREMAN this throws 403 on a cross-site probe; a requested site narrows to
     // that site, none = their WHOLE union. ADMIN/MANAGER: requested narrows, none = all.
     const scope = await effectiveSiteScope(req.appUser!, query.siteId);
-    return service.rollup({ ...query, siteId: query.siteId }, scope);
+    // MULTI-TENANCY (P2): non-admin pinned to own company; ADMIN unscoped (+ ?companyId
+    // read-narrow). Every dashboard aggregate is company-scoped in the service.
+    const companyScope = effectiveCompanyScope(req.appUser!, query.companyId);
+    return service.rollup({ ...query, siteId: query.siteId }, scope, companyScope);
   });
 
-  // Worker-count report — same site-scoping stance as /dashboard.
+  // Worker-count report — same site- + company-scoping stance as /dashboard.
   app.get('/worker-count', guard, async (req) => {
-    const { siteId: requested } = dashboardQuery.pick({ siteId: true }).parse(req.query);
+    const { siteId: requested, companyId } = dashboardQuery
+      .pick({ siteId: true, companyId: true })
+      .parse(req.query);
     const scope = await effectiveSiteScope(req.appUser!, requested);
-    return service.workerCount(scope);
+    const companyScope = effectiveCompanyScope(req.appUser!, companyId);
+    return service.workerCount(scope, companyScope);
   });
 }

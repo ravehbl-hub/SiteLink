@@ -24,6 +24,8 @@ export const updateAttendanceSchema = z.object({
 export const listAttendanceQuery = z.object({
   workerId: z.string().optional(),
   siteId: z.string().optional(),
+  // MULTI-TENANCY (P2): ADMIN read-narrow; IGNORED for a non-admin.
+  companyId: z.string().optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -33,6 +35,7 @@ export const listAttendanceQuery = z.object({
 export const workingHoursQuery = z.object({
   workerId: z.string().optional(),
   siteId: z.string().optional(),
+  companyId: z.string().optional(),
   from: z.string().datetime(),
   to: z.string().datetime(),
   grain: z.enum(['DAY', 'WEEK', 'MONTH']).default('DAY'),

@@ -12,16 +12,33 @@ import type { CreateWorkerRatingInput, WorkerRating } from '@sitelink/shared';
 import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { mapRating } from '../../lib/mappers.js';
-import { assertWorkerInScope } from '../../lib/scope.js';
+import {
+  assertCompanyScopeMatch,
+  assertWorkerInScope,
+  resolveCompanyScope,
+} from '../../lib/scope.js';
 import type { AuthUser } from '../../plugins/types.js';
 
 export class RatingsService {
+  /**
+   * MULTI-TENANCY (P2, DERIVED MODEL): WorkerRating has no companyId column — its tenant
+   * derives from the parent Worker. A rating's worker MUST be in the caller's company;
+   * a cross-company worker → 404 (no existence leak) BEFORE the site-scope check.
+   */
+  private async assertWorkerCompany(workerId: string, caller: AuthUser): Promise<void> {
+    const w = await prisma.worker.findUnique({
+      where: { id: workerId },
+      select: { companyId: true },
+    });
+    assertCompanyScopeMatch(resolveCompanyScope(caller), w?.companyId);
+  }
   /**
    * List a worker's ratings (most recent first). The path `workerId` is validated
    * against the caller's scope: a FOREMAN off their site → 403, never another site's
    * ratings.
    */
   async listForWorker(workerId: string, caller: AuthUser): Promise<WorkerRating[]> {
+    await this.assertWorkerCompany(workerId, caller);
     await this.ensureWorker(workerId);
     await assertWorkerInScope(caller, workerId);
     const rows = await prisma.workerRating.findMany({
@@ -36,6 +53,7 @@ export class RatingsService {
    * the caller. A FOREMAN may only rate a worker on their site (403 otherwise).
    */
   async create(input: CreateWorkerRatingInput, caller: AuthUser): Promise<WorkerRating> {
+    await this.assertWorkerCompany(input.workerId, caller);
     await this.ensureWorker(input.workerId);
     await assertWorkerInScope(caller, input.workerId);
     const row = await prisma.workerRating.create({

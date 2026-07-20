@@ -221,6 +221,7 @@ beforeAll(async () => {
     const rec = await prisma.attendanceRecord.create({
       data: {
         workerId,
+        companyId: 'cl000000000000000000default',
         siteId: SITE_A,
         date: new Date(`${iso}T00:00:00.000Z`),
         type: AttendanceType.ATTENDANCE,
@@ -763,7 +764,7 @@ describe('FR-REQ-REDECIDE — re-decide + reverse-by-requestId', () => {
     }
     // Manual loan: SAME worker + SAME amount, but requestId null (untagged).
     const manual = await prisma.loan.create({
-      data: { workerId, amount: 333, currency: 'ILS', date: new Date('2026-07-01'), outstanding: 333 },
+      data: { workerId, companyId: 'cl000000000000000000default', amount: 333, currency: 'ILS', date: new Date('2026-07-01'), outstanding: 333 },
     });
     createdLoanIds.push(manual.id);
 
@@ -1492,6 +1493,7 @@ describe('FR-MGR-EMP — worker create mandatorily provisions a WORKER login', (
     // Created directly at the DB layer (bypassing the now-mandatory create schema).
     const legacy = await prisma.worker.create({
       data: {
+        companyId: 'cl000000000000000000default',
         firstName: 'Legacy',
         lastName: `NoLogin-${randomUUID().slice(0, 8)}`,
         profession: 'OTHER',

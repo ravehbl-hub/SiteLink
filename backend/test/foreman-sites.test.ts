@@ -66,8 +66,8 @@ beforeAll(async () => {
   app = await buildApp(loadConfig());
   await app.ready();
 
-  await prisma.site.create({ data: { id: SITE_A, name: NAME_A, status: SiteStatus.ACTIVE } });
-  await prisma.site.create({ data: { id: SITE_B, name: NAME_B, status: SiteStatus.ACTIVE } });
+  await prisma.site.create({ data: { id: SITE_A, companyId: 'cl000000000000000000default', name: NAME_A, status: SiteStatus.ACTIVE } });
+  await prisma.site.create({ data: { id: SITE_B, companyId: 'cl000000000000000000default', name: NAME_B, status: SiteStatus.ACTIVE } });
 
   const foreman = await prisma.user.create({
     data: {

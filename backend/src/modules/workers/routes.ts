@@ -68,55 +68,55 @@ export async function workerRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/workers/:id/archive', guard, async (req) => {
     const { id } = idParam.parse(req.params);
-    return service.archive(id);
+    return service.archive(id, req.appUser!);
   });
 
   // Restore an archived worker. MANAGER-only (same `guard` as archive) — a FOREMAN can
   // VIEW archived workers via GET /workers?archivedOnly but cannot restore them.
   app.post('/workers/:id/unarchive', guard, async (req) => {
     const { id } = idParam.parse(req.params);
-    return service.unarchive(id);
+    return service.unarchive(id, req.appUser!);
   });
 
   app.delete('/workers/:id', guard, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    await service.remove(id);
+    await service.remove(id, req.appUser!);
     return reply.status(204).send();
   });
 
   app.put('/workers/:id/salary-data', guard, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = salaryDataSchema.parse(req.body);
-    return service.upsertSalaryData(id, body);
+    return service.upsertSalaryData(id, body, req.appUser!);
   });
 
   // ── Docs ──────────────────────────────────────────────────────────────
   app.get('/workers/:id/docs', guard, async (req) => {
     const { id } = idParam.parse(req.params);
-    return service.listDocs(id);
+    return service.listDocs(id, req.appUser!);
   });
 
   app.post('/workers/:id/docs/upload-url', guard, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = requestDocUploadSchema.parse(req.body);
-    return service.requestDocUpload(id, body);
+    return service.requestDocUpload(id, body, req.appUser!);
   });
 
   app.post('/workers/:id/docs', guard, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     const body = confirmDocSchema.parse(req.body);
-    const doc = await service.confirmDoc(id, body);
+    const doc = await service.confirmDoc(id, body, req.appUser!);
     return reply.status(201).send(doc);
   });
 
   app.get('/workers/:id/docs/:docId/url', guard, async (req) => {
     const { id, docId } = docParam.parse(req.params);
-    return service.getDocReadUrl(id, docId);
+    return service.getDocReadUrl(id, docId, req.appUser!);
   });
 
   app.delete('/workers/:id/docs/:docId', guard, async (req, reply) => {
     const { id, docId } = docParam.parse(req.params);
-    await service.removeDoc(id, docId);
+    await service.removeDoc(id, docId, req.appUser!);
     return reply.status(204).send();
   });
 

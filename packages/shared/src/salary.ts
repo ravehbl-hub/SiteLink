@@ -17,6 +17,13 @@ import { RateType, SalaryCalcMode } from './enums';
 /** Wage rule keyed by profession, with the salary calculation mode to apply. */
 export interface ProfessionWageRate extends Timestamped {
   id: ID;
+  /**
+   * MULTI-TENANCY (P2): the tenant this rate belongs to. READ-ONLY on the wire — the
+   * server stamps it from the caller's own company; uniqueness is
+   * @@unique([companyId, profession, siteId]). A worker only ever resolves a rate in
+   * their OWN company. The FE never sends it.
+   */
+  companyId?: ID;
   /** Profession this rate applies to (matches Profession enum values). */
   profession: string;
   /** Hourly (or monthly) wage for the profession (FR-MGR-PAY-1). */

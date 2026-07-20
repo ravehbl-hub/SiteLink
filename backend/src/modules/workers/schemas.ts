@@ -62,6 +62,10 @@ export const listWorkersQuery = z.object({
   // archivedOnly=true always narrows to archived-only regardless of includeArchived.
   archivedOnly: z.preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean()).default(false),
   siteId: z.string().optional(),
+  // MULTI-TENANCY (P2): ADMIN read-narrow to one company. IGNORED for a non-admin
+  // (effectiveCompanyScope never reads it for MANAGER/FOREMAN/WORKER — they are pinned
+  // to their own company); it can NEVER widen a non-admin into another tenant.
+  companyId: z.string().optional(),
   // SERVER-SIDE search over the human-searchable text fields (firstName/lastName/
   // phone). Trimmed + length-capped. This is an ADDITIONAL AND filter layered on top
   // of the foreman site-scope + archived filters — it can NEVER widen scope.

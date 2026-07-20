@@ -130,6 +130,7 @@ describe('NEXO redecide — concurrency / TOCTOU (CHECK 7)', () => {
     const req = await prisma.workerRequest.create({
       data: {
         workerId: WORKER_ID,
+        companyId: 'cl000000000000000000default',
         type: RequestType.LOAN,
         amount: 4321,
         currency: 'ILS',

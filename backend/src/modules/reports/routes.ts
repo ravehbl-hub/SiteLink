@@ -11,7 +11,12 @@ import type { FastifyInstance } from 'fastify';
 import { Role } from '@sitelink/shared';
 import { prisma } from '../../db/client.js';
 import { MANAGER_ROLES } from '../../plugins/auth.js';
-import { requireWorkerId } from '../../lib/scope.js';
+import {
+  assertCompanyScopeMatch,
+  effectiveCompanyScope,
+  requireWorkerId,
+  resolveCompanyScope,
+} from '../../lib/scope.js';
 import { AppError } from '../../lib/errors.js';
 import { SHARE_URL_TTL_SECONDS } from '../../lib/supabase.js';
 import { EmailService, EmailNotConfiguredError } from '../../lib/email.js';
@@ -23,6 +28,8 @@ const payslipQuery = z.object({
   // caller, whose workerId is forced to their own resolved Worker id.
   workerId: z.string().min(1).optional(),
   siteId: z.string().optional(),
+  // MULTI-TENANCY (P2): ADMIN read-narrow; IGNORED for a non-admin.
+  companyId: z.string().optional(),
   from: z.string().datetime(),
   to: z.string().datetime(),
   // Hebrew renders RTL; en/tr LTR (FR-X-PDF-2).
@@ -64,6 +71,7 @@ function nameSlug(first: string, last: string): string {
 const GRAIN = { day: 'DAY', week: 'WEEK', month: 'MONTH' } as const;
 const workingHoursReportQuery = z.object({
   workerId: z.string().min(1).optional(),
+  companyId: z.string().optional(),
   from: z.string().datetime(),
   to: z.string().datetime(),
   grain: z.enum(['day', 'week', 'month']).default('day'),
@@ -72,6 +80,7 @@ const workingHoursReportQuery = z.object({
 
 const attendanceQuery = z.object({
   siteId: z.string().optional(),
+  companyId: z.string().optional(),
   from: z.string().datetime(),
   to: z.string().datetime(),
   lang: z.enum(['he', 'en', 'tr']).default('en'),
@@ -81,6 +90,7 @@ const attendanceQuery = z.object({
 // currency default 'ILS') plus the shared `lang` direction control.
 const profitLossReportQuery = z.object({
   siteId: z.string().optional(),
+  companyId: z.string().optional(),
   from: z.string().datetime(),
   to: z.string().datetime(),
   revenue: z.coerce.number().nonnegative().default(0),
@@ -114,14 +124,19 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       workerId = q.workerId;
       siteId = q.siteId;
     }
-    const pdf = await service.payslipPdf({
-      workerId,
-      siteId,
-      from: q.from,
-      to: q.to,
-      direction: dirFor(q.lang),
-      lang: q.lang,
-    });
+    // MULTI-TENANCY (P2): non-admin pinned to own company; ADMIN unscoped (+ ?companyId).
+    const companyScope = effectiveCompanyScope(req.appUser!, q.companyId);
+    const pdf = await service.payslipPdf(
+      {
+        workerId,
+        siteId,
+        from: q.from,
+        to: q.to,
+        direction: dirFor(q.lang),
+        lang: q.lang,
+      },
+      companyScope,
+    );
     return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', 'attachment; filename="payslip.pdf"')
@@ -140,7 +155,11 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
   app.post('/reports/payslip/email', guard, async (req, reply) => {
     const body = payslipShareBody.parse(req.body);
 
+    // MULTI-TENANCY (P2): the payslip recipient MUST be in the caller's company — a
+    // cross-company worker → 404 (no PDF generated, no email sent, no existence leak).
+    const companyScope = resolveCompanyScope(req.appUser!);
     const worker = await prisma.worker.findUnique({ where: { id: body.workerId } });
+    assertCompanyScopeMatch(companyScope, worker?.companyId);
     if (!worker) throw AppError.notFound('Worker not found');
     const to = worker.email?.trim();
     if (!to) throw AppError.validation('Worker has no email address');
@@ -152,14 +171,17 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
         .send({ error: { code: 'INTERNAL', message: 'Email sending is not configured', requestId: req.id } });
     }
 
-    const pdf = await service.payslipPdf({
-      workerId: body.workerId,
-      siteId: body.siteId,
-      from: body.from,
-      to: body.to,
-      direction: dirFor(body.lang),
-      lang: body.lang,
-    });
+    const pdf = await service.payslipPdf(
+      {
+        workerId: body.workerId,
+        siteId: body.siteId,
+        from: body.from,
+        to: body.to,
+        direction: dirFor(body.lang),
+        lang: body.lang,
+      },
+      companyScope,
+    );
 
     const filename = `payslip-${nameSlug(worker.firstName, worker.lastName)}-${periodTag(
       body.from,
@@ -198,7 +220,11 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
   app.post('/reports/payslip/whatsapp-link', guard, async (req, reply) => {
     const body = payslipShareBody.parse(req.body);
 
+    // MULTI-TENANCY (P2): cross-company worker → 404 BEFORE any PDF upload or signed URL
+    // is minted (no cross-tenant capability leaks through the WhatsApp share).
+    const companyScope = resolveCompanyScope(req.appUser!);
     const worker = await prisma.worker.findUnique({ where: { id: body.workerId } });
+    assertCompanyScopeMatch(companyScope, worker?.companyId);
     if (!worker) throw AppError.notFound('Worker not found');
     const rawPhone = worker.phone?.trim();
     if (!rawPhone) throw AppError.validation('Worker has no phone number');
@@ -206,14 +232,17 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     const phone = normalizePhoneForWhatsApp(rawPhone);
     if (!phone) throw AppError.validation('Worker phone number is not valid');
 
-    const pdf = await service.payslipPdf({
-      workerId: body.workerId,
-      siteId: body.siteId,
-      from: body.from,
-      to: body.to,
-      direction: dirFor(body.lang),
-      lang: body.lang,
-    });
+    const pdf = await service.payslipPdf(
+      {
+        workerId: body.workerId,
+        siteId: body.siteId,
+        from: body.from,
+        to: body.to,
+        direction: dirFor(body.lang),
+        lang: body.lang,
+      },
+      companyScope,
+    );
 
     // SERVER-generated key on the worker-docs bucket under a payslips/ prefix
     // (traversal-safe; uuid avoids collisions). Upload, then mint a signed READ URL.
@@ -254,13 +283,17 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       if (!q.workerId) throw AppError.validation('workerId is required');
       workerId = q.workerId;
     }
-    const pdf = await service.workingHoursPdf({
-      workerId,
-      from: q.from,
-      to: q.to,
-      grain: GRAIN[q.grain],
-      direction: dirFor(q.lang),
-    });
+    const companyScope = effectiveCompanyScope(req.appUser!, q.companyId);
+    const pdf = await service.workingHoursPdf(
+      {
+        workerId,
+        from: q.from,
+        to: q.to,
+        grain: GRAIN[q.grain],
+        direction: dirFor(q.lang),
+      },
+      companyScope,
+    );
     return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', 'attachment; filename="working-hours.pdf"')
@@ -269,12 +302,16 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/reports/attendance.pdf', guard, async (req, reply) => {
     const q = attendanceQuery.parse(req.query);
-    const pdf = await service.attendanceSummaryPdf({
-      siteId: q.siteId,
-      from: q.from,
-      to: q.to,
-      direction: dirFor(q.lang),
-    });
+    const companyScope = effectiveCompanyScope(req.appUser!, q.companyId);
+    const pdf = await service.attendanceSummaryPdf(
+      {
+        siteId: q.siteId,
+        from: q.from,
+        to: q.to,
+        direction: dirFor(q.lang),
+      },
+      companyScope,
+    );
     return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', 'attachment; filename="attendance.pdf"')
@@ -283,14 +320,18 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/reports/profit-loss.pdf', guard, async (req, reply) => {
     const q = profitLossReportQuery.parse(req.query);
-    const pdf = await service.profitLossPdf({
-      siteId: q.siteId,
-      from: q.from,
-      to: q.to,
-      revenue: q.revenue,
-      currency: q.currency,
-      direction: dirFor(q.lang),
-    });
+    const companyScope = effectiveCompanyScope(req.appUser!, q.companyId);
+    const pdf = await service.profitLossPdf(
+      {
+        siteId: q.siteId,
+        from: q.from,
+        to: q.to,
+        revenue: q.revenue,
+        currency: q.currency,
+        direction: dirFor(q.lang),
+      },
+      companyScope,
+    );
     return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', 'attachment; filename="profit-loss.pdf"')

@@ -107,12 +107,18 @@ beforeAll(async () => {
   mgrToken = await signFor(MGR_AUTH);
 
   activeCompanyName = `WPC Active ${randomUUID().slice(0, 8)}`;
-  const active = await prisma.personnelCompany.create({ data: { name: activeCompanyName } });
+  const active = await prisma.personnelCompany.create({
+    data: { companyId: 'cl000000000000000000default', name: activeCompanyName },
+  });
   activeCompanyId = active.id;
   createdCompanyIds.push(activeCompanyId);
 
   const archived = await prisma.personnelCompany.create({
-    data: { name: `WPC Archived ${randomUUID().slice(0, 8)}`, isArchived: true },
+    data: {
+      companyId: 'cl000000000000000000default',
+      name: `WPC Archived ${randomUUID().slice(0, 8)}`,
+      isArchived: true,
+    },
   });
   archivedCompanyId = archived.id;
   createdCompanyIds.push(archivedCompanyId);

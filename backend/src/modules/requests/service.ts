@@ -14,6 +14,14 @@ import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { mapRequest } from '../../lib/mappers.js';
 import { paginate } from '../../lib/pagination.js';
+import {
+  assertCompanyScopeMatch,
+  companyWhere,
+  effectiveCompanyScope,
+  resolveCompanyScope,
+  type CompanyScope,
+} from '../../lib/scope.js';
+import type { AuthUser } from '../../plugins/types.js';
 import type {
   createRequestSchema,
   listRequestsQuery,
@@ -27,13 +35,25 @@ type RedecideInput = z.infer<typeof redecideRequestSchema>;
 type ListQuery = z.infer<typeof listRequestsQuery>;
 
 export class RequestsService {
+  private companyScope(caller?: AuthUser): CompanyScope {
+    return caller ? resolveCompanyScope(caller) : { allCompanies: true };
+  }
+
   /**
    * List requests. When `forcedWorkerId` is provided (a WORKER self-scoping) the
    * result is HARD-filtered to that worker id, ignoring any client ?workerId — a
-   * WORKER can only ever see their OWN requests.
+   * WORKER can only ever see their OWN requests. P2: company filter ANDs on top.
    */
-  async list(query: ListQuery, forcedWorkerId?: string): Promise<Paginated<WorkerRequest>> {
+  async list(
+    query: ListQuery,
+    forcedWorkerId?: string,
+    caller?: AuthUser,
+  ): Promise<Paginated<WorkerRequest>> {
+    const companyClause = caller
+      ? companyWhere(effectiveCompanyScope(caller, query.companyId))
+      : {};
     const where = {
+      ...companyClause,
       ...(forcedWorkerId
         ? { workerId: forcedWorkerId }
         : query.workerId
@@ -66,14 +86,25 @@ export class RequestsService {
     input: CreateInput,
     requestedById?: string,
     forcedWorkerId?: string,
+    caller?: AuthUser,
   ): Promise<WorkerRequest> {
     // WORKER self-submit forces workerId to the caller's own; the manager path uses
     // the explicit body workerId (validated present at the route).
     const workerId = forcedWorkerId ?? input.workerId;
     if (!workerId) throw AppError.validation('workerId is required');
+    // MULTI-TENANCY (P2): the request's companyId is STAMPED from the worker
+    // (worker.companyId) — never the client. A cross-company workerId → 404 (no leak);
+    // side-effect rows created on approval inherit this companyId (= worker's).
+    const worker = await prisma.worker.findUnique({
+      where: { id: workerId },
+      select: { companyId: true },
+    });
+    assertCompanyScopeMatch(this.companyScope(caller), worker?.companyId);
+    if (!worker) throw AppError.notFound('Worker not found');
     const row = await prisma.workerRequest.create({
       data: {
         workerId,
+        companyId: worker.companyId,
         requestedById: requestedById ?? null,
         type: input.type,
         amount: input.amount ?? null,
@@ -102,8 +133,11 @@ export class RequestsService {
     id: string,
     input: ResolveInput,
     resolvedById: string,
+    caller?: AuthUser,
   ): Promise<WorkerRequest> {
     const current = await prisma.workerRequest.findUnique({ where: { id } });
+    // P2: a manager can't decide another company's request → 404 (no existence leak).
+    assertCompanyScopeMatch(this.companyScope(caller), current?.companyId);
     if (!current) throw AppError.notFound('Request not found');
     if (current.status !== RequestStatus.PENDING) {
       throw AppError.conflict('Request has already been resolved');
@@ -161,8 +195,11 @@ export class RequestsService {
     id: string,
     input: RedecideInput,
     resolvedById: string,
+    caller?: AuthUser,
   ): Promise<WorkerRequest> {
     const current = await prisma.workerRequest.findUnique({ where: { id } });
+    // P2: a manager can't re-decide another company's request → 404 (no existence leak).
+    assertCompanyScopeMatch(this.companyScope(caller), current?.companyId);
     if (!current) throw AppError.notFound('Request not found');
 
     // Re-decide is the RESOLVED→other path. A still-PENDING request must go through the
@@ -296,6 +333,8 @@ export class RequestsService {
         await tx.attendanceRecord.create({
           data: {
             workerId: req.workerId,
+            // P2: inherit the request's tenant (= worker's company) on the side-effect.
+            companyId: req.companyId,
             date: day,
             type: AttendanceType.VACATION,
             notes: req.notes ?? 'Approved vacation request',
@@ -313,6 +352,8 @@ export class RequestsService {
       }
       const data = {
         workerId: req.workerId,
+        // P2: inherit the request's tenant (= worker's company) on the ledger row.
+        companyId: req.companyId,
         amount: req.amount,
         currency: req.currency ?? 'ILS',
         date: req.startDate ?? new Date(),

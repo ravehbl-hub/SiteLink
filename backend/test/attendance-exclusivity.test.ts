@@ -12,8 +12,15 @@ import { AttendanceType } from '@sitelink/shared';
 
 const findUnique = vi.fn();
 const create = vi.fn();
+// MULTI-TENANCY (P2): create() now loads the worker to STAMP companyId from it (and to
+// 404 a cross-company worker). With no caller (as here) the company scope is unscoped,
+// so the worker only needs to resolve with a companyId for the stamp.
+const workerFindUnique = vi.fn(async () => ({ companyId: 'cl000000000000000000default' }));
 vi.mock('../src/db/client.js', () => ({
   prisma: {
+    worker: {
+      findUnique: (...a: unknown[]) => workerFindUnique(...a),
+    },
     attendanceRecord: {
       findUnique: (...a: unknown[]) => findUnique(...a),
       create: (...a: unknown[]) => create(...a),

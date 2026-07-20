@@ -45,12 +45,22 @@ function d(iso: string): Date {
 async function main() {
   console.log('▶ Seeding SiteLink database…');
 
+  // ── Default Company (multi-tenancy backfill tenant) ─────────────────────────
+  // Every seed row belongs to this Default Company (companyId is NOT NULL across the
+  // operational tables post-P2). The id matches the migration backfill constant.
+  const defaultCompany = await prisma.company.upsert({
+    where: { id: 'cl000000000000000000default' },
+    update: {},
+    create: { id: 'cl000000000000000000default', name: 'Default Company' },
+  });
+
   // ── Sites ──────────────────────────────────────────────────────────────────
   const siteA = await prisma.site.upsert({
     where: { id: 'seed-site-tower' },
     update: {},
     create: {
       id: 'seed-site-tower',
+      companyId: defaultCompany.id,
       name: 'Rothschild Tower',
       code: 'TLV-01',
       status: SiteStatus.ACTIVE,
@@ -64,21 +74,13 @@ async function main() {
     update: {},
     create: {
       id: 'seed-site-bridge',
+      companyId: defaultCompany.id,
       name: 'Ayalon Overpass',
       code: 'TLV-02',
       status: SiteStatus.ACTIVE,
       address: 'Ayalon Hwy, Tel Aviv',
       startedAt: d('2026-03-01'),
     },
-  });
-
-  // ── Default Company (multi-tenancy backfill tenant) ─────────────────────────
-  // Every pre-multi-tenancy user belongs to this Default Company (User.companyId is
-  // NOT NULL). The id matches the migration backfill constant.
-  const defaultCompany = await prisma.company.upsert({
-    where: { id: 'cl000000000000000000default' },
-    update: {},
-    create: { id: 'cl000000000000000000default', name: 'Default Company' },
   });
 
   // ── Users (Supabase-backed; placeholder authUserId, NO password) ────────────
@@ -152,6 +154,7 @@ async function main() {
       update: {},
       create: {
         id,
+        companyId: defaultCompany.id,
         profession: wr.profession,
         wage: wr.wage,
         rateType: wr.rateType,
@@ -205,6 +208,7 @@ async function main() {
       update: {},
       create: {
         id: w.id,
+        companyId: defaultCompany.id,
         firstName: w.firstName,
         lastName: w.lastName,
         country: w.country,
@@ -272,6 +276,7 @@ async function main() {
         update: {},
         create: {
           workerId: w.id,
+          companyId: defaultCompany.id,
           siteId: w.site.id,
           date: d(date),
           type,

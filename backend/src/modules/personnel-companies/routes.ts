@@ -38,41 +38,41 @@ export async function personnelCompanyRoutes(app: FastifyInstance): Promise<void
 
   app.get('/personnel-companies', readGuard, async (req) => {
     const query = listPersonnelCompaniesQuery.parse(req.query);
-    return service.list(query);
+    return service.list(query, req.appUser!);
   });
 
   app.post('/personnel-companies', guard, async (req, reply) => {
     const body = createPersonnelCompanySchema.parse(req.body);
-    const created = await service.create(body);
+    const created = await service.create(body, req.appUser!);
     return reply.status(201).send(created);
   });
 
   app.get('/personnel-companies/:id', readGuard, async (req) => {
     const { id } = idParam.parse(req.params);
-    return service.get(id);
+    return service.get(id, req.appUser!);
   });
 
   app.patch('/personnel-companies/:id', guard, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = updatePersonnelCompanySchema.parse(req.body);
-    return service.update(id, body);
+    return service.update(id, body, req.appUser!);
   });
 
   app.post('/personnel-companies/:id/archive', guard, async (req) => {
     const { id } = idParam.parse(req.params);
-    return service.archive(id);
+    return service.archive(id, req.appUser!);
   });
 
   app.post('/personnel-companies/:id/unarchive', guard, async (req) => {
     const { id } = idParam.parse(req.params);
-    return service.unarchive(id);
+    return service.unarchive(id, req.appUser!);
   });
 
   // HARD delete (MANAGER-only `guard`). 204 on success (workers DELETE convention).
   // Linked workers are un-linked by the FK (onDelete: SetNull), never deleted.
   app.delete('/personnel-companies/:id', guard, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    await service.remove(id);
+    await service.remove(id, req.appUser!);
     return reply.status(204).send();
   });
 }

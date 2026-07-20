@@ -33,6 +33,8 @@ export const redecideRequestSchema = z.object({
 export const listRequestsQuery = z.object({
   workerId: z.string().optional(),
   status: z.nativeEnum(RequestStatus).optional(),
+  // MULTI-TENANCY (P2): ADMIN read-narrow; IGNORED for a non-admin.
+  companyId: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });

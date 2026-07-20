@@ -30,17 +30,17 @@ export async function foremanAssignmentRoutes(app: FastifyInstance): Promise<voi
 
   app.post('/foreman-assignments', guard, async (req, reply) => {
     const body = createForemanSiteAssignmentSchema.parse(req.body);
-    const assignment = await service.assign(body);
+    const assignment = await service.assign(body, req.appUser!);
     return reply.status(201).send(assignment);
   });
 
   app.delete('/foreman-assignments', guard, async (req) => {
     const query = unassignForemanQuery.parse(req.query);
-    return service.unassign(query);
+    return service.unassign(query, req.appUser!);
   });
 
   app.get('/foreman-assignments', guard, async (req) => {
     const { foremanId } = listForemanAssignmentsQuery.parse(req.query);
-    return service.listForForeman(foremanId);
+    return service.listForForeman(foremanId, req.appUser!);
   });
 }

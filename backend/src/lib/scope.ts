@@ -114,6 +114,52 @@ export function companyWhere(scope: CompanyScope): { companyId?: string } {
   return 'allCompanies' in scope ? {} : { companyId: scope.companyId };
 }
 
+/**
+ * MULTI-TENANCY PHASE 2 — WRITE-stamp company (server-derived, never client-widened).
+ *
+ * The companyId every operational CREATE must stamp on the new row:
+ *   - NON-ADMIN (MANAGER/FOREMAN/WORKER) → their OWN companyId (resolveCompanyScope
+ *     pins them; any client-supplied companyId is IGNORED — never widens a tenant).
+ *   - ADMIN → own companyId when present, else the Default Company (ADMIN acts as
+ *     super-admin; an operational create by an ADMIN with no company falls back to the
+ *     backfill Default Company — the P2 create surfaces are non-admin in practice).
+ *
+ * Callers that need an ADMIN to create INTO a specific company pass `requestedCompanyId`
+ * — honoured ONLY for an ADMIN (mirrors the Users create semantics). A non-admin's
+ * requestedCompanyId is never read.
+ */
+export function resolveStampCompanyId(
+  user: Pick<AuthUser, 'role' | 'companyId'>,
+  requestedCompanyId?: string,
+): string {
+  const scope = resolveCompanyScope(user);
+  if ('companyId' in scope) return scope.companyId; // non-admin → own, full stop.
+  // ADMIN (allCompanies). Honour an explicit requested company; else own; else default.
+  if (requestedCompanyId !== undefined && requestedCompanyId !== '') return requestedCompanyId;
+  return user.companyId || DEFAULT_COMPANY_ID;
+}
+
+/**
+ * MULTI-TENANCY PHASE 2 — DERIVED-MODEL company assertion (no direct companyId column).
+ *
+ * WorkerSalaryData/WorkerDoc/WorkerRating/SiteAssignment/ForemanSiteAssignment/ProfitLoss
+ * derive their tenant via a PARENT (Worker/Site). A caller may only touch such a row
+ * when the parent's companyId is inside the caller's company scope. ADMIN (allCompanies)
+ * → always allowed (optionally narrowed via a supplied scope). A non-admin whose scope
+ * companyId != the parent's companyId → 404 (no cross-tenant existence leak). A null
+ * parent company (impossible post-migration) fails closed.
+ */
+export function assertCompanyScopeMatch(
+  scope: CompanyScope,
+  rowCompanyId: string | null | undefined,
+): void {
+  if ('allCompanies' in scope) return; // ADMIN unscoped.
+  if (!rowCompanyId || rowCompanyId !== scope.companyId) {
+    // 404 (not 403) — never confirm a cross-tenant row's existence.
+    throw AppError.notFound('Not found');
+  }
+}
+
 /** True when the caller is a FOREMAN (the only role we site-scope in Stage B). */
 export function isForeman(user: AuthUser): boolean {
   return user.role === Role.FOREMAN;

@@ -17,7 +17,7 @@ import { AttendanceType } from '@sitelink/shared';
 import { prisma } from '../../db/client.js';
 import { toISORequired } from '../../lib/dates.js';
 import { round2, toNumber } from '../../lib/money.js';
-import type { SiteScope } from '../../lib/scope.js';
+import { companyWhere, type CompanyScope, type SiteScope } from '../../lib/scope.js';
 import { FinanceService } from '../finance/service.js';
 import { SalaryService } from '../salary/service.js';
 import type { DashboardQuery } from './schemas.js';
@@ -46,7 +46,16 @@ export class DashboardService {
     private readonly finance = new FinanceService(),
   ) {}
 
-  async rollup(query: DashboardQuery, scope: SiteScope): Promise<DashboardRollup> {
+  async rollup(
+    query: DashboardQuery,
+    scope: SiteScope,
+    companyScope: CompanyScope,
+  ): Promise<DashboardRollup> {
+    // MULTI-TENANCY (P2, TOP FLAGGED LEAK): a plain company filter fragment ANDed into
+    // EVERY underlying aggregate below (workers/attendance/loans/advances/salary/P&L) so
+    // a manager's dashboard sums ONLY their tenant. Worker/Site/Attendance/Loan/Advance
+    // all carry a DIRECT companyId; workers-per-site joins via the site's company.
+    const companyClause = companyWhere(companyScope);
     const fallback = defaultWindow();
     const fromISO = query.from ?? fallback.from;
     const toISO = query.to ?? fallback.to;
@@ -63,23 +72,27 @@ export class DashboardService {
 
     // ── WORKERS: active headcount in scope ────────────────────────────────
     const workerWhere = {
+      ...companyClause,
       isArchived: false,
       ...(siteIn ? { assignments: { some: { siteId: siteIn } } } : {}),
     };
     const amountOfWorkers = await prisma.worker.count({ where: workerWhere });
 
     // Workers-per-site breakdown (active workers only). For a scoped filter this is
-    // the site(s) in scope; all-sites lists every active site.
-    const siteWhere = siteIn ? { id: siteIn } : { isArchived: false };
+    // the site(s) in scope; all-sites lists every active site IN THE COMPANY.
+    const siteWhere = siteIn
+      ? { id: siteIn, ...companyClause }
+      : { isArchived: false, ...companyClause };
     const sites = await prisma.site.findMany({
       where: siteWhere,
       select: { id: true, name: true },
     });
-    const workersPerSite = await this.countWorkersPerSite(sites);
+    const workersPerSite = await this.countWorkersPerSite(sites, companyClause);
 
     // ── WORKERS: attendance/vacation/disease counts + total worked hours ──
     const attendance = await prisma.attendanceRecord.findMany({
       where: {
+        ...companyClause,
         date: { gte: from, lte: to },
         ...(siteIn ? { siteId: siteIn } : {}),
       },
@@ -104,6 +117,7 @@ export class DashboardService {
     const loanAgg = await prisma.loan.aggregate({
       _sum: { outstanding: true },
       where: {
+        ...companyClause,
         date: { gte: from, lte: to },
         ...(siteIn
           ? { worker: { assignments: { some: { siteId: siteIn } } } }
@@ -113,6 +127,7 @@ export class DashboardService {
     const advanceAgg = await prisma.advancePayment.aggregate({
       _sum: { outstanding: true },
       where: {
+        ...companyClause,
         date: { gte: from, lte: to },
         ...(siteIn
           ? { worker: { assignments: { some: { siteId: siteIn } } } }
@@ -126,28 +141,35 @@ export class DashboardService {
     // Worker set is scoped to the site(s) in scope (single site, foreman union, or
     // all). `filterSiteId` (single site or null) is passed to per-worker calc — for a
     // multi-site union the salary calc runs unfiltered by site over the scoped workers.
-    const scopedWorkerIds = await this.workersWithActivity(from, to, siteIn);
+    const scopedWorkerIds = await this.workersWithActivity(from, to, companyClause, siteIn);
     const salarySiteId = filterSiteId ?? undefined;
     // BATCH: one bulk calc for the whole scoped worker set (was an N+1 loop issuing
-    // 3 queries per worker). Workers without a configured wage are simply absent from
-    // the map — same skip semantics the old per-worker try/catch produced.
-    const salaryByWorker = await this.salary.calculateMany(scopedWorkerIds, {
-      siteId: salarySiteId,
-      periodStart: fromISO,
-      periodEnd: toISO,
-    });
+    // 3 queries per worker). Company-scoped so a cross-tenant worker can never be summed;
+    // workers without a configured wage are simply absent from the map.
+    const salaryByWorker = await this.salary.calculateMany(
+      scopedWorkerIds,
+      {
+        siteId: salarySiteId,
+        periodStart: fromISO,
+        periodEnd: toISO,
+      },
+      companyScope,
+    );
     let salaryTotal = 0;
     for (const result of salaryByWorker.values()) salaryTotal += result.gross;
     salaryTotal = round2(salaryTotal);
 
     // ── FINANCE: P&L (manual revenue, delegated to FinanceService) ───────
-    const profitAndLoss = await this.finance.profitLoss({
-      siteId: filterSiteId ?? undefined,
-      from: fromISO,
-      to: toISO,
-      revenue: query.revenue,
-      currency: query.currency,
-    });
+    const profitAndLoss = await this.finance.profitLoss(
+      {
+        siteId: filterSiteId ?? undefined,
+        from: fromISO,
+        to: toISO,
+        revenue: query.revenue,
+        currency: query.currency,
+      },
+      companyScope,
+    );
 
     return {
       filter: { siteId: filterSiteId, from: fromISO, to: toISO },
@@ -176,14 +198,17 @@ export class DashboardService {
    * passes their own site(s) here — a single narrowed site or their whole union;
    * ADMIN/MANAGER pass `{ all: true }` (every active site).
    */
-  async workerCount(scope: SiteScope): Promise<WorkersPerSite[]> {
+  async workerCount(scope: SiteScope, companyScope: CompanyScope): Promise<WorkersPerSite[]> {
+    const companyClause = companyWhere(companyScope);
     const siteIn = siteIdFilter(scope);
-    const siteWhere = siteIn ? { id: siteIn } : { isArchived: false };
+    const siteWhere = siteIn
+      ? { id: siteIn, ...companyClause }
+      : { isArchived: false, ...companyClause };
     const sites = await prisma.site.findMany({
       where: siteWhere,
       select: { id: true, name: true },
     });
-    return this.countWorkersPerSite(sites);
+    return this.countWorkersPerSite(sites, companyClause);
   }
 
   /**
@@ -195,12 +220,19 @@ export class DashboardService {
    */
   private async countWorkersPerSite(
     sites: { id: string; name: string }[],
+    companyClause: { companyId?: string },
   ): Promise<WorkersPerSite[]> {
     if (sites.length === 0) return [];
     const siteIds = sites.map((s) => s.id);
+    // SiteAssignment is a DERIVED model (no companyId column) — scope via the worker's
+    // company. `sites` is already company-filtered by the caller, so this is
+    // belt-and-suspenders against a shared worker on an out-of-company site.
     const grouped = await prisma.siteAssignment.groupBy({
       by: ['siteId'],
-      where: { siteId: { in: siteIds }, worker: { isArchived: false } },
+      where: {
+        siteId: { in: siteIds },
+        worker: { isArchived: false, ...companyClause },
+      },
       _count: { workerId: true },
     });
     const countBySite = new Map(grouped.map((g) => [g.siteId, g._count.workerId]));
@@ -215,10 +247,12 @@ export class DashboardService {
   private async workersWithActivity(
     from: Date,
     to: Date,
+    companyClause: { companyId?: string },
     siteIn?: { in: string[] },
   ): Promise<string[]> {
     const rows = await prisma.attendanceRecord.findMany({
       where: {
+        ...companyClause,
         date: { gte: from, lte: to },
         ...(siteIn ? { siteId: siteIn } : {}),
       },

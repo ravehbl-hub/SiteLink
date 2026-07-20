@@ -64,6 +64,7 @@ const createdWorkerIds: string[] = [];
 async function makeWorker(): Promise<string> {
   const w = await prisma.worker.create({
     data: {
+      companyId: 'cl000000000000000000default',
       firstName: 'NIKT',
       lastName: `W-${randomUUID().slice(0, 8)}`,
       profession: 'PLUMBER',
@@ -79,7 +80,7 @@ beforeAll(async () => {
   await app.ready();
 
   await prisma.site.create({
-    data: { id: SITE_A, name: `NIKT ${SITE_A.slice(0, 10)}`, status: SiteStatus.ACTIVE },
+    data: { id: SITE_A, companyId: 'cl000000000000000000default', name: `NIKT ${SITE_A.slice(0, 10)}`, status: SiteStatus.ACTIVE },
   });
 
   const mgr = await prisma.user.create({

@@ -73,13 +73,14 @@ const createdWorkerIds: string[] = [];
 
 async function makeSite(id: string): Promise<void> {
   await prisma.site.create({
-    data: { id, name: `FWI ${id.slice(0, 12)}`, status: SiteStatus.ACTIVE },
+    data: { id, companyId: 'cl000000000000000000default', name: `FWI ${id.slice(0, 12)}`, status: SiteStatus.ACTIVE },
   });
 }
 
 async function makeWorkerOnSites(...siteIds: string[]): Promise<string> {
   const worker = await prisma.worker.create({
     data: {
+      companyId: 'cl000000000000000000default',
       firstName: 'FWI',
       lastName: `W-${randomUUID().slice(0, 8)}`,
       profession: 'PLUMBER',
@@ -381,6 +382,7 @@ describe('new-format storage key — slug from worker name', () => {
   beforeAll(async () => {
     const latin = await prisma.worker.create({
       data: {
+        companyId: 'cl000000000000000000default',
         firstName: 'Yossi',
         lastName: 'Cohen',
         profession: 'PLUMBER',
@@ -392,6 +394,7 @@ describe('new-format storage key — slug from worker name', () => {
 
     const hebrew = await prisma.worker.create({
       data: {
+        companyId: 'cl000000000000000000default',
         firstName: 'יוסי',
         lastName: 'כהן',
         profession: 'PLUMBER',
@@ -460,6 +463,7 @@ describe('back-compat — old-format imageStorageKey still readable', () => {
   it('a worker with a legacy `<id>/image/...` key → getImageReadUrl NOT 403 (signs it)', async () => {
     const legacy = await prisma.worker.create({
       data: {
+        companyId: 'cl000000000000000000default',
         firstName: 'Legacy',
         lastName: 'Worker',
         profession: 'PLUMBER',

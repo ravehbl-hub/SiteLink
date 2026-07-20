@@ -41,6 +41,9 @@ function appUser(role: Role, over: Record<string, unknown> = {}) {
   return {
     id: 'user-' + role,
     authUserId: 'auth-' + role,
+    // MULTI-TENANCY (P2): req.appUser.companyId is NOT NULL server-truth. Scope
+    // resolution fails CLOSED (403) without it — so the mocked user must carry one.
+    companyId: 'cl000000000000000000default',
     role,
     email: `${role.toLowerCase()}@test.local`,
     fullName: `${role} User`,

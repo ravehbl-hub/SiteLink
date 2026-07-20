@@ -57,7 +57,7 @@ const createdWorkerIds: string[] = [];
 
 async function makeSite(id: string): Promise<void> {
   await prisma.site.create({
-    data: { id, name: `NFI ${id.slice(0, 12)}`, status: SiteStatus.ACTIVE },
+    data: { id, companyId: 'cl000000000000000000default', name: `NFI ${id.slice(0, 12)}`, status: SiteStatus.ACTIVE },
   });
 }
 
@@ -85,6 +85,7 @@ beforeAll(async () => {
   // this worker as in-scope via the stale SITE_A row → leak.
   const w = await prisma.worker.create({
     data: {
+      companyId: 'cl000000000000000000default',
       firstName: 'NFI',
       lastName: `Soft-${randomUUID().slice(0, 8)}`,
       profession: 'PLUMBER',

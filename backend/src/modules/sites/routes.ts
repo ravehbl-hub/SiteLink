@@ -18,34 +18,34 @@ export async function siteRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/sites', guard, async (req) => {
     const query = listSitesQuery.parse(req.query);
-    return service.list(query);
+    return service.list(query, req.appUser!);
   });
 
   app.post('/sites', guard, async (req, reply) => {
     const body = createSiteSchema.parse(req.body);
-    const site = await service.create(body);
+    const site = await service.create(body, req.appUser!);
     return reply.status(201).send(site);
   });
 
   app.get('/sites/:id', guard, async (req) => {
     const { id } = idParam.parse(req.params);
-    return service.get(id);
+    return service.get(id, req.appUser!);
   });
 
   app.patch('/sites/:id', guard, async (req) => {
     const { id } = idParam.parse(req.params);
     const body = updateSiteSchema.parse(req.body);
-    return service.update(id, body);
+    return service.update(id, body, req.appUser!);
   });
 
   app.post('/sites/:id/archive', guard, async (req) => {
     const { id } = idParam.parse(req.params);
-    return service.archive(id);
+    return service.archive(id, req.appUser!);
   });
 
   app.delete('/sites/:id', guard, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    await service.remove(id);
+    await service.remove(id, req.appUser!);
     return reply.status(204).send();
   });
 }

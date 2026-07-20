@@ -27,12 +27,15 @@ export const updateAdvanceSchema = updateLoanSchema;
 
 export const listByWorkerQuery = z.object({
   workerId: z.string().optional(),
+  // MULTI-TENANCY (P2): ADMIN read-narrow; IGNORED for a non-admin.
+  companyId: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });
 
 export const profitLossQuery = z.object({
   siteId: z.string().optional(),
+  companyId: z.string().optional(),
   from: z.string().datetime(),
   to: z.string().datetime(),
   /** Revenue is a manual per-site input (PRD A-3 assumption). */

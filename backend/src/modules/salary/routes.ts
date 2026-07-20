@@ -24,8 +24,11 @@ export async function salaryRoutes(app: FastifyInstance): Promise<void> {
     if (req.appUser!.role === Role.WORKER) {
       // Fail-closed: 403 if the caller has no linked Worker row.
       const selfWorkerId = await requireWorkerId(req.appUser!);
-      return service.calculate({ ...body, workerId: selfWorkerId, siteId: undefined });
+      return service.calculate(
+        { ...body, workerId: selfWorkerId, siteId: undefined },
+        req.appUser!,
+      );
     }
-    return service.calculate(body);
+    return service.calculate(body, req.appUser!);
   });
 }

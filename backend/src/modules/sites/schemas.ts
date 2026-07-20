@@ -21,6 +21,8 @@ export const updateSiteSchema = z.object({
 
 export const listSitesQuery = z.object({
   includeArchived: z.preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean()).default(false),
+  // MULTI-TENANCY (P2): ADMIN read-narrow to one company; IGNORED for a non-admin.
+  companyId: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });

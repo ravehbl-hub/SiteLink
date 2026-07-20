@@ -8,6 +8,7 @@ import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { toDateOnly } from '../../lib/dates.js';
 import { toNumber } from '../../lib/money.js';
+import { assertCompanyScopeMatch, companyWhere, type CompanyScope } from '../../lib/scope.js';
 import { loadConfig } from '../../config.js';
 import { CloudConvertService } from '../../lib/cloudconvert.js';
 import { AttendanceType } from '@sitelink/shared';
@@ -31,6 +32,36 @@ import {
 } from './html-templates.js';
 
 export class ReportsService {
+  /**
+   * MULTI-TENANCY (P2): assert a worker is inside the caller's company (404 otherwise —
+   * a manager can never render another company's worker's payslip/working-hours PDF, and
+   * no signed URL is ever minted for a cross-company worker). Returns the worker row.
+   */
+  private async assertWorkerCompany(
+    workerId: string,
+    companyScope?: CompanyScope,
+  ): Promise<void> {
+    if (!companyScope) return;
+    const w = await prisma.worker.findUnique({
+      where: { id: workerId },
+      select: { companyId: true },
+    });
+    assertCompanyScopeMatch(companyScope, w?.companyId);
+  }
+
+  /** P2: assert a site (when supplied) is inside the caller's company (404 else). */
+  private async assertSiteCompany(
+    siteId: string | undefined,
+    companyScope?: CompanyScope,
+  ): Promise<void> {
+    if (!companyScope || !siteId) return;
+    const s = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: { companyId: true },
+    });
+    assertCompanyScopeMatch(companyScope, s?.companyId);
+  }
+
   /**
    * CloudConvert client, lazily constructed only when CLOUDCONVERT_API_KEY is
    * present. `null` => env-gate OFF => fall back to the in-process @react-pdf
@@ -64,14 +95,20 @@ export class ReportsService {
     return renderToBuffer(reactDoc());
   }
 
-  async payslipPdf(params: {
-    workerId: string;
-    siteId?: string;
-    from: string;
-    to: string;
-    direction: 'ltr' | 'rtl';
-    lang?: 'he' | 'en' | 'tr';
-  }): Promise<Buffer> {
+  async payslipPdf(
+    params: {
+      workerId: string;
+      siteId?: string;
+      from: string;
+      to: string;
+      direction: 'ltr' | 'rtl';
+      lang?: 'he' | 'en' | 'tr';
+    },
+    companyScope?: CompanyScope,
+  ): Promise<Buffer> {
+    // P2: cross-company worker/site → 404 BEFORE any query/render.
+    await this.assertWorkerCompany(params.workerId, companyScope);
+    await this.assertSiteCompany(params.siteId, companyScope);
     const worker = await prisma.worker.findUnique({ where: { id: params.workerId } });
     if (!worker) throw AppError.notFound('Worker not found');
 
@@ -118,14 +155,19 @@ export class ReportsService {
     );
   }
 
-  async workingHoursPdf(params: {
-    workerId: string;
-    siteId?: string;
-    from: string;
-    to: string;
-    grain: WorkingHoursGrain;
-    direction: 'ltr' | 'rtl';
-  }): Promise<Buffer> {
+  async workingHoursPdf(
+    params: {
+      workerId: string;
+      siteId?: string;
+      from: string;
+      to: string;
+      grain: WorkingHoursGrain;
+      direction: 'ltr' | 'rtl';
+    },
+    companyScope?: CompanyScope,
+  ): Promise<Buffer> {
+    await this.assertWorkerCompany(params.workerId, companyScope);
+    await this.assertSiteCompany(params.siteId, companyScope);
     const worker = await prisma.worker.findUnique({ where: { id: params.workerId } });
     if (!worker) throw AppError.notFound('Worker not found');
 
@@ -161,17 +203,25 @@ export class ReportsService {
     );
   }
 
-  async attendanceSummaryPdf(params: {
-    siteId?: string;
-    from: string;
-    to: string;
-    direction: 'ltr' | 'rtl';
-  }): Promise<Buffer> {
+  async attendanceSummaryPdf(
+    params: {
+      siteId?: string;
+      from: string;
+      to: string;
+      direction: 'ltr' | 'rtl';
+    },
+    companyScope?: CompanyScope,
+  ): Promise<Buffer> {
+    // P2: cross-company site → 404; the attendance query is company-scoped so the
+    // summary NEVER sums another tenant's rows (AttendanceRecord has a direct companyId).
+    await this.assertSiteCompany(params.siteId, companyScope);
+    const companyClause = companyScope ? companyWhere(companyScope) : {};
     const from = new Date(params.from);
     const to = new Date(params.to);
 
     const records = await prisma.attendanceRecord.findMany({
       where: {
+        ...companyClause,
         date: { gte: from, lte: to },
         ...(params.siteId ? { siteId: params.siteId } : {}),
       },
@@ -226,22 +276,29 @@ export class ReportsService {
     );
   }
 
-  async profitLossPdf(params: {
-    siteId?: string;
-    from: string;
-    to: string;
-    revenue: number;
-    currency: string;
-    direction: 'ltr' | 'rtl';
-  }): Promise<Buffer> {
-    // Reuse the existing on-demand P&L computation — do not duplicate it here.
-    const pnl = await this.finance.profitLoss({
-      siteId: params.siteId,
-      from: params.from,
-      to: params.to,
-      revenue: params.revenue,
-      currency: params.currency,
-    });
+  async profitLossPdf(
+    params: {
+      siteId?: string;
+      from: string;
+      to: string;
+      revenue: number;
+      currency: string;
+      direction: 'ltr' | 'rtl';
+    },
+    companyScope?: CompanyScope,
+  ): Promise<Buffer> {
+    await this.assertSiteCompany(params.siteId, companyScope);
+    // Reuse the existing on-demand P&L computation (company-scoped) — do not duplicate.
+    const pnl = await this.finance.profitLoss(
+      {
+        siteId: params.siteId,
+        from: params.from,
+        to: params.to,
+        revenue: params.revenue,
+        currency: params.currency,
+      },
+      companyScope,
+    );
 
     let siteName: string | undefined;
     if (params.siteId) {

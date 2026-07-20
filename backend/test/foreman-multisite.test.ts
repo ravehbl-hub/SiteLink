@@ -79,13 +79,14 @@ const createdAssignmentIds: string[] = [];
 
 async function makeSite(id: string): Promise<void> {
   await prisma.site.create({
-    data: { id, name: `FMS ${id.slice(0, 12)}`, status: SiteStatus.ACTIVE },
+    data: { id, companyId: 'cl000000000000000000default', name: `FMS ${id.slice(0, 12)}`, status: SiteStatus.ACTIVE },
   });
 }
 
 async function makeWorkerOnSite(siteId: string): Promise<string> {
   const worker = await prisma.worker.create({
     data: {
+      companyId: 'cl000000000000000000default',
       firstName: 'FMS',
       lastName: `W-${randomUUID().slice(0, 8)}`,
       profession: 'PLUMBER',

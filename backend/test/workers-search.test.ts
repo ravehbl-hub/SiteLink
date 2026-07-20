@@ -72,9 +72,16 @@ let outMatch: string; // OUT-of-scope, matches FIRST (must never leak on foreman
 const createdWorkerIds: string[] = [];
 const createdUserIds: string[] = [];
 
+const DEFAULT_COMPANY_ID = 'cl000000000000000000default';
+
 async function makeSite(id: string): Promise<void> {
   await prisma.site.create({
-    data: { id, name: `WS ${id.slice(0, 12)}`, status: SiteStatus.ACTIVE },
+    data: {
+      id,
+      companyId: DEFAULT_COMPANY_ID,
+      name: `WS ${id.slice(0, 12)}`,
+      status: SiteStatus.ACTIVE,
+    },
   });
 }
 
@@ -87,6 +94,7 @@ async function makeWorker(data: {
 }): Promise<string> {
   const worker = await prisma.worker.create({
     data: {
+      companyId: DEFAULT_COMPANY_ID,
       firstName: data.firstName,
       lastName: data.lastName,
       phone: data.phone ?? null,

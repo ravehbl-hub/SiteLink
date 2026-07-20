@@ -295,10 +295,13 @@ describe('PersonnelCompany REMOVE — HARD delete (MANAGER-only) + SetNull unlin
   it('DELETE a company LINKED to a worker → 204; worker survives, its personnelCompanyId is NULLed (SetNull)', async () => {
     // Company + a worker directly linked via the FK.
     const name = `Linked Co ${randomUUID().slice(0, 8)}`;
-    const company = await prisma.personnelCompany.create({ data: { name } });
+    const company = await prisma.personnelCompany.create({
+      data: { companyId: 'cl000000000000000000default', name },
+    });
 
     const worker = await prisma.worker.create({
       data: {
+        companyId: 'cl000000000000000000default',
         firstName: 'Link',
         lastName: 'Tester',
         profession: 'GENERAL_LABORER',

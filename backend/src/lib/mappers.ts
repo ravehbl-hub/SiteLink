@@ -91,6 +91,7 @@ export function mapCompany(c: PCompany): Company {
 export function mapSite(s: PSite): Site {
   return {
     id: s.id,
+    companyId: s.companyId,
     name: s.name,
     code: s.code ?? null,
     status: s.status as SiteStatus,
@@ -116,6 +117,7 @@ function workerImage(w: PWorker): FileRef | null {
 export function mapWorker(w: PWorker): Worker {
   return {
     id: w.id,
+    companyId: w.companyId,
     userId: w.userId ?? null,
     image: workerImage(w),
     firstName: w.firstName,
@@ -215,6 +217,7 @@ export function mapAdvance(a: PAdvance): AdvancePayment {
 export function mapWageRate(r: PWageRate): ProfessionWageRate {
   return {
     id: r.id,
+    companyId: r.companyId,
     profession: r.profession as Profession,
     wage: toNumber(r.wage),
     rateType: r.rateType as RateType,

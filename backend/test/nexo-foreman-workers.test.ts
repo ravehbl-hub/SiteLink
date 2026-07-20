@@ -56,7 +56,7 @@ beforeAll(async () => {
 
   for (const id of [SITE_A, SITE_C]) {
     await prisma.site.create({
-      data: { id, name: `NX ${id.slice(0, 10)}`, status: SiteStatus.ACTIVE },
+      data: { id, companyId: 'cl000000000000000000default', name: `NX ${id.slice(0, 10)}`, status: SiteStatus.ACTIVE },
     });
   }
 
@@ -78,6 +78,7 @@ beforeAll(async () => {
   // foreman's active sites, yet the stale SITE_A row bears a union siteId.
   const lw = await prisma.worker.create({
     data: {
+      companyId: 'cl000000000000000000default',
       firstName: 'NX',
       lastName: `Leak-${randomUUID().slice(0, 6)}`,
       profession: 'PLUMBER',
@@ -94,6 +95,7 @@ beforeAll(async () => {
 
   const iw = await prisma.worker.create({
     data: {
+      companyId: 'cl000000000000000000default',
       firstName: 'NX',
       lastName: `InScope-${randomUUID().slice(0, 6)}`,
       profession: 'PLUMBER',

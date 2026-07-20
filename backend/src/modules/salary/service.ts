@@ -19,6 +19,12 @@ import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { toDateOnly } from '../../lib/dates.js';
 import { toNumber } from '../../lib/money.js';
+import {
+  assertCompanyScopeMatch,
+  resolveCompanyScope,
+  type CompanyScope,
+} from '../../lib/scope.js';
+import type { AuthUser } from '../../plugins/types.js';
 import { SalaryEngineFactory } from './factory.js';
 import { SALARY_WARNINGS } from './strategies.js';
 import type { calculateSalarySchema } from './schemas.js';
@@ -33,16 +39,24 @@ export interface SalaryCalculation extends SalaryResult {
 export class SalaryService {
   constructor(private readonly factory = new SalaryEngineFactory()) {}
 
-  async calculate(input: CalcInput): Promise<SalaryCalculation> {
+  async calculate(input: CalcInput, caller?: AuthUser): Promise<SalaryCalculation> {
     const worker = await prisma.worker.findUnique({
       where: { id: input.workerId },
       include: { salaryData: true },
     });
+    // MULTI-TENANCY (P2): a cross-company worker → 404 (no cross-tenant pay computed).
+    const scope: CompanyScope = caller ? resolveCompanyScope(caller) : { allCompanies: true };
+    assertCompanyScopeMatch(scope, worker?.companyId);
     if (!worker) throw AppError.notFound('Worker not found');
 
     // Resolve the wage rule for this worker's profession (+ optional site scope).
+    // MULTI-TENANCY (P2, TOP FLAGGED LEAK): ProfessionWageRate is now PER-COMPANY
+    // (@@unique[companyId,profession,siteId]). The wage lookup MUST filter by the
+    // worker's OWN companyId so a worker NEVER resolves to another company's rate — a
+    // company-wide rate is (companyId = worker's, siteId = null).
     const wageRate = await prisma.professionWageRate.findFirst({
       where: {
+        companyId: worker.companyId,
         profession: worker.profession,
         OR: [{ siteId: input.siteId ?? null }, { siteId: null }],
       },
@@ -130,22 +144,35 @@ export class SalaryService {
   async calculateMany(
     workerIds: string[],
     period: { siteId?: string; periodStart: string; periodEnd: string },
+    companyScope?: CompanyScope,
   ): Promise<Map<string, SalaryCalculation>> {
     const out = new Map<string, SalaryCalculation>();
     if (workerIds.length === 0) return out;
     const ids = [...new Set(workerIds)];
 
     // ── 3 bulk reads (was 3 PER worker) ─────────────────────────────────────
+    // MULTI-TENANCY (P2, TOP FLAGGED LEAK): the worker set is HARD-filtered to the
+    // caller's company when a scope is supplied, so a workerId from another company
+    // can NEVER be computed here (it is simply absent from `workers`). ADMIN /
+    // no-scope callers see all (the caller — dashboard/finance — already company-scoped
+    // the id set upstream). Belt-and-suspenders: the wage lookup below is ALSO keyed on
+    // each worker's OWN companyId, so no worker resolves another company's rate.
+    const companyIdFilter =
+      companyScope && 'companyId' in companyScope ? { companyId: companyScope.companyId } : {};
     const workers = await prisma.worker.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, ...companyIdFilter },
       include: { salaryData: true },
     });
     const professions = [...new Set(workers.map((w) => w.profession))];
-    // All candidate wage rules for the professions in play: the site-specific rule
-    // for the given site AND the global (siteId=null) fallback — same OR the
-    // single-worker path uses, just batched across professions.
+    const companyIds = [...new Set(workers.map((w) => w.companyId))];
+    // All candidate wage rules for the professions AND companies in play: the
+    // site-specific rule for the given site AND the global (siteId=null) fallback,
+    // batched across professions+companies. We match PER worker on (companyId,
+    // profession, siteId) below, so a company-wide rate is (worker's companyId,
+    // siteId=null) — never another company's rate.
     const wageRates = await prisma.professionWageRate.findMany({
       where: {
+        companyId: { in: companyIds.length ? companyIds : ['__none__'] },
         profession: { in: professions },
         OR: [{ siteId: period.siteId ?? null }, { siteId: null }],
       },
@@ -169,8 +196,12 @@ export class SalaryService {
 
     for (const worker of workers) {
       // Resolve the wage rule exactly like calculate(): prefer a site-specific rule
-      // (siteId === period.siteId) over the global one (siteId === null).
-      const candidates = wageRates.filter((w) => w.profession === worker.profession);
+      // (siteId === period.siteId) over the global one (siteId === null). P2: candidates
+      // are restricted to the worker's OWN company — never another tenant's rate even
+      // for the same profession.
+      const candidates = wageRates.filter(
+        (w) => w.profession === worker.profession && w.companyId === worker.companyId,
+      );
       const wageRate =
         candidates.find((w) => w.siteId === (period.siteId ?? null)) ??
         candidates.find((w) => w.siteId === null) ??

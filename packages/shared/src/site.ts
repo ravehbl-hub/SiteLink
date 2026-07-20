@@ -7,6 +7,11 @@ import { SiteStatus } from './enums';
 /** A construction site. Workers may be assigned to one or more sites (FR-MGR-SITE-4). */
 export interface Site extends Timestamped, Archivable {
   id: ID;
+  /**
+   * MULTI-TENANCY (P2): the tenant this site belongs to. READ-ONLY on the wire — the
+   * server stamps it from the creating caller's own company; the FE never sends it.
+   */
+  companyId?: ID;
   name: string;
   /** Optional human/site code or identifier (FR-MGR-SITE-2). */
   code?: string | null;

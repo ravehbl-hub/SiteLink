@@ -20,12 +20,17 @@ import { mapAttendance } from '../../lib/mappers.js';
 import { toNumber } from '../../lib/money.js';
 import { paginate } from '../../lib/pagination.js';
 import {
+  assertCompanyScopeMatch,
   assertWorkerInScope,
+  companyWhere,
+  effectiveCompanyScope,
   effectiveSiteId,
   isForeman,
   isWorker,
+  resolveCompanyScope,
   resolveSiteScope,
   resolveWorkerId,
+  type CompanyScope,
 } from '../../lib/scope.js';
 import type { AuthUser } from '../../plugins/types.js';
 import type {
@@ -88,7 +93,25 @@ async function forceForemanSite(
   return (await effectiveSiteId(caller, requestedSiteId ?? undefined)) as string;
 }
 
+/**
+ * MULTI-TENANCY (P2): a Prisma company-filter fragment for attendance rows. Non-admin
+ * → their own company (client ?companyId ignored); ADMIN → unscoped, ?companyId narrows.
+ * AttendanceRecord has a DIRECT companyId column (backfilled from Worker.companyId), so
+ * the filter is a plain `{ companyId }`. ANDs with the foreman site scope.
+ */
+function attendanceCompanyWhere(
+  caller: AuthUser | undefined,
+  requestedCompanyId?: string,
+): { companyId?: string } {
+  if (!caller) return {};
+  return companyWhere(effectiveCompanyScope(caller, requestedCompanyId));
+}
+
 export class AttendanceService {
+  private companyScope(caller?: AuthUser): CompanyScope {
+    return caller ? resolveCompanyScope(caller) : { allCompanies: true };
+  }
+
   /**
    * List attendance. When `caller` is a FOREMAN the result is HARD-scoped to workers
    * on their site(s) via a `worker.assignments` filter — regardless of any client
@@ -98,6 +121,7 @@ export class AttendanceService {
   async list(query: ListQuery, caller?: AuthUser): Promise<Paginated<AttendanceRecord>> {
     const foremanScope = await foremanAttendanceScope(caller);
     const where = {
+      ...attendanceCompanyWhere(caller, query.companyId),
       ...foremanScope,
       ...(query.workerId ? { workerId: query.workerId } : {}),
       ...(query.siteId ? { siteId: query.siteId } : {}),
@@ -131,6 +155,17 @@ export class AttendanceService {
     // The record's siteId is then FORCED to the Foreman's own site (data-integrity
     // hardening, nexo-back Stage B): passing the workerId scope check must not let a
     // Foreman stamp the record with an ARBITRARY site.
+    // MULTI-TENANCY (P2): load the worker's company; a cross-company workerId → 404
+    // (no cross-tenant existence leak) BEFORE any site-scope or write. The new record's
+    // companyId is STAMPED from the worker (worker.companyId), never the client.
+    const worker = await prisma.worker.findUnique({
+      where: { id: input.workerId },
+      select: { companyId: true },
+    });
+    assertCompanyScopeMatch(this.companyScope(caller), worker?.companyId);
+    if (!worker) throw AppError.notFound('Worker not found');
+    const companyId = worker.companyId;
+
     let siteId = input.siteId ?? null;
     if (caller && isForeman(caller)) {
       await assertWorkerInScope(caller, input.workerId);
@@ -147,6 +182,7 @@ export class AttendanceService {
     const row = await prisma.attendanceRecord.create({
       data: {
         workerId: input.workerId,
+        companyId,
         siteId,
         date,
         type: input.type,
@@ -159,6 +195,8 @@ export class AttendanceService {
 
   async update(id: string, input: UpdateInput, caller?: AuthUser): Promise<AttendanceRecord> {
     const current = await prisma.attendanceRecord.findUnique({ where: { id } });
+    // P2: cross-company record → 404 (no existence leak) before any mutation.
+    assertCompanyScopeMatch(this.companyScope(caller), current?.companyId);
     if (!current) throw AppError.notFound('Attendance record not found');
     // SECURITY: a FOREMAN may only edit records for workers on their site(s), and
     // may only (re)stamp the record with THEIR OWN site — never an arbitrary one
@@ -188,8 +226,10 @@ export class AttendanceService {
   async remove(id: string, caller?: AuthUser): Promise<void> {
     const current = await prisma.attendanceRecord.findUnique({
       where: { id },
-      select: { id: true, workerId: true },
+      select: { id: true, workerId: true, companyId: true },
     });
+    // P2: cross-company record → 404 before any delete.
+    assertCompanyScopeMatch(this.companyScope(caller), current?.companyId);
     if (!current) throw AppError.notFound('Attendance record not found');
     // SECURITY: a FOREMAN may only delete records for workers on their site(s).
     if (caller && isForeman(caller)) {
@@ -213,6 +253,7 @@ export class AttendanceService {
     const foremanScope = await foremanAttendanceScope(caller);
     const rows = await prisma.attendanceRecord.findMany({
       where: {
+        ...attendanceCompanyWhere(caller, query.companyId),
         ...foremanScope,
         ...(selfWorkerId
           ? { workerId: selfWorkerId }

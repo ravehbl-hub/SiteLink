@@ -6,7 +6,9 @@
 import type {
   Billing,
   BillingStatus,
+  Company,
   CreateBillingInput,
+  CreateCompanyInput,
   CreateCustomerInput,
   CreateUsageInput,
   CreateUserInput,
@@ -15,6 +17,7 @@ import type {
   Paginated,
   ProfitLoss,
   Role,
+  UpdateCompanyInput,
   UpdateCustomerInput,
   UpdateUserInput,
   Usage,
@@ -119,6 +122,24 @@ export const customersApi = {
   archive: (id: string) => http.post<Customer>(`/backoffice/customers/${id}/archive`),
   unarchive: (id: string) =>
     http.post<Customer>(`/backoffice/customers/${id}/unarchive`),
+};
+
+/* ── Companies (multi-tenancy Phase 1, ADMIN-only) ────────────────────────
+ * The tenant boundary. List returns a Paginated<T> envelope — consume `.items`.
+ * A MANAGER is created INTO a company via POST /users with an ADMIN-supplied
+ * companyId (usersApi.create), NOT a companies sub-route. */
+export interface ListCompaniesParams {
+  includeArchived?: boolean;
+}
+export const companiesApi = {
+  list: (params?: ListCompaniesParams) =>
+    http.get<Paginated<Company>>('/companies', params as Query),
+  get: (id: string) => http.get<Company>(`/companies/${id}`),
+  create: (body: CreateCompanyInput) => http.post<Company>('/companies', body),
+  update: (id: string, body: UpdateCompanyInput) =>
+    http.patch<Company>(`/companies/${id}`, body),
+  archive: (id: string) => http.post<Company>(`/companies/${id}/archive`),
+  unarchive: (id: string) => http.post<Company>(`/companies/${id}/unarchive`),
 };
 
 /* ── Billing (FR-BO-2, ADMIN-only) ────────────────────────────────────── */

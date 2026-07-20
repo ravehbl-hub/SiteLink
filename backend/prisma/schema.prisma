@@ -188,6 +188,13 @@ model Site {
   isArchived Boolean    @default(false)
   archivedAt DateTime?
 
+  // ── Multi-tenancy (Phase 2) — DIRECT tenant scope. Sites are independently listed/
+  // filtered and anchor many derivations (assignments, attendance, wage rates, P&L).
+  // Backfilled to the Default Company (existing sites have no owner link today).
+  // NOT NULL final state; onDelete: Restrict.
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId String
+
   users            User[]                  @relation("UserPrimarySite")
   assignments      SiteAssignment[]
   foremanScope     ForemanSiteAssignment[] @relation("ForemanSiteScope")
@@ -200,6 +207,11 @@ model Site {
 
   @@index([status])
   @@index([isArchived])
+  // Multi-tenancy scope indexes: companyId hot filter + [companyId, status] /
+  // [companyId, isArchived] for the per-company active/archived site lists.
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([companyId, isArchived])
 }
 
 // Worker ⇄ Site many-to-many (FR-MGR-SITE-4)
@@ -285,6 +297,13 @@ model Worker {
   isArchived Boolean   @default(false) // move-to-archives (FR-MGR-EMP-5/6)
   archivedAt DateTime?
 
+  // ── Multi-tenancy (Phase 2) — DIRECT tenant scope. A login-less/demo worker has NO
+  // User, so company CANNOT derive from User — Worker needs its own column. Backfilled
+  // via User.companyId when userId is set, else COALESCE to the Default Company.
+  // NOT NULL final state; onDelete: Restrict (a Company with workers is never hard-deleted).
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId String
+
   // Optional, UNIQUE 1:1 link to the User login for this worker (Phase 05 self-scoping).
   // NULLABLE — existing workers have no login; linking is optional per the create flow.
   // Safe join key (never email). onDelete: SetNull — deleting the login unlinks, not deletes.
@@ -307,6 +326,12 @@ model Worker {
   @@index([level])
   @@index([isArchived])
   @@index([personnelCompanyId])
+  // Multi-tenancy scope indexes: companyId is the hot filter on worker lists; the
+  // composites serve the core Manager screens ([companyId, isArchived] active/archived
+  // lists; [companyId, profession] profession filters).
+  @@index([companyId])
+  @@index([companyId, isArchived])
+  @@index([companyId, profession])
 }
 
 model WorkerDoc {
@@ -356,18 +381,30 @@ model WorkerSalaryData {
 
 model PersonnelCompany {
   id          String  @id @default(cuid())
-  name        String  @unique
+  // Per-company unique (was global `name @unique`) — Company A's "Acme Staffing" is not
+  // Company B's. Uniqueness now scoped by @@unique([companyId, name]) below.
+  name        String
   contactName String?
   phone       String?
   email       String?
   isArchived  Boolean @default(false)
+
+  // ── Multi-tenancy (Phase 2) — DIRECT tenant scope. Staffing-firm directory is
+  // tenant-specific. Backfilled to the Default Company. NOT NULL final state;
+  // onDelete: Restrict.
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId String
 
   workers Worker[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Per-company name uniqueness (was `name @unique`, global).
+  @@unique([companyId, name])
   @@index([isArchived])
+  // Multi-tenancy: per-company staffing-firm list (active/archived).
+  @@index([companyId, isArchived])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -395,6 +432,12 @@ model AttendanceRecord {
   sourceRequest WorkerRequest? @relation("RequestEffect", fields: [requestId], references: [id], onDelete: SetNull)
   requestId     String?
 
+  // ── Multi-tenancy (Phase 2) — DIRECT tenant scope. Very high row count, queried by
+  // date range per company; siteId is nullable so company CANNOT derive via Site.
+  // Backfilled via Worker.companyId (workerId). NOT NULL final state; onDelete: Restrict.
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId String
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -402,6 +445,8 @@ model AttendanceRecord {
   @@index([siteId, date])
   @@index([date])
   @@index([requestId])
+  // Multi-tenancy: per-company date-range scans (reports) without a worker->company join.
+  @@index([companyId, date])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -420,11 +465,20 @@ model ProfessionWageRate {
   site       Site?          @relation(fields: [siteId], references: [id])
   siteId     String?
 
+  // ── Multi-tenancy (Phase 2) — DIRECT tenant scope. Wage rules are tenant policy;
+  // siteId is nullable (company-wide rate) so company CANNOT derive via Site.
+  // Backfilled to the Default Company. NOT NULL final state; onDelete: Restrict.
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId String
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([profession, siteId])
-  @@index([profession])
+  // Per-company uniqueness: Company A and B may each define the same (profession, siteId=null)
+  // company-wide slot without colliding (was @@unique([profession, siteId])).
+  @@unique([companyId, profession, siteId])
+  // Replaces @@index([profession]) — company is the leading scope filter.
+  @@index([companyId, profession])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -447,12 +501,20 @@ model Loan {
   sourceRequest WorkerRequest? @relation("RequestEffect", fields: [requestId], references: [id], onDelete: SetNull)
   requestId     String?
 
+  // ── Multi-tenancy (Phase 2) — DIRECT tenant scope. Financial ledger; per-company P&L
+  // and reports scan by date. Backfilled via Worker.companyId (workerId).
+  // NOT NULL final state; onDelete: Restrict.
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId String
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([workerId])
   @@index([date])
   @@index([requestId])
+  // Multi-tenancy: per-company ledger scans by date.
+  @@index([companyId, date])
 }
 
 model AdvancePayment {
@@ -471,12 +533,20 @@ model AdvancePayment {
   sourceRequest WorkerRequest? @relation("RequestEffect", fields: [requestId], references: [id], onDelete: SetNull)
   requestId     String?
 
+  // ── Multi-tenancy (Phase 2) — DIRECT tenant scope. Same as Loan: per-company financial
+  // ledger scanned by date. Backfilled via Worker.companyId (workerId).
+  // NOT NULL final state; onDelete: Restrict.
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId String
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([workerId])
   @@index([date])
   @@index([requestId])
+  // Multi-tenancy: per-company ledger scans by date.
+  @@index([companyId, date])
 }
 
 // Site-level P&L snapshot (FR-MGR-PNL). May be computed on-demand or persisted.
@@ -494,10 +564,19 @@ model ProfitLoss {
   otherCost    Decimal  @db.Decimal(14, 2) @default(0)
   netProfit    Decimal  @db.Decimal(14, 2) @default(0)
 
+  // ── Multi-tenancy (Phase 2) — DIRECT tenant scope. Site-level P&L; siteId is nullable
+  // (company-wide P&L rows) so company CANNOT derive via Site. Backfilled via Site.companyId
+  // (siteId) when set, else the Default Company. NOT NULL final state; onDelete: Restrict.
+  // NOTE: this is the SITE-level ProfitLoss, NOT BusinessProfitLoss (billing P&L, customerId).
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId String
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([siteId, periodStart, periodEnd])
+  // Multi-tenancy: per-company P&L period scans.
+  @@index([companyId, periodStart, periodEnd])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -531,12 +610,21 @@ model WorkerRequest {
   createdAdvances   AdvancePayment[]   @relation("RequestEffect")
   createdAttendance AttendanceRecord[] @relation("RequestEffect")
 
+  // ── Multi-tenancy (Phase 2) — DIRECT tenant scope. Request inbox is per-company;
+  // status/type filters are hot. Backfilled via Worker.companyId (workerId).
+  // NOT NULL final state; onDelete: Restrict.
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId String
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([workerId])
   @@index([status])
   @@index([type])
+  // Multi-tenancy: per-company request-inbox status/type filters.
+  @@index([companyId, status])
+  @@index([companyId, type])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -626,8 +714,19 @@ model Company {
   isArchived Boolean   @default(false)
   archivedAt DateTime?
 
-  // Back-relation: all users belonging to this tenant (User.companyId, onDelete: Restrict).
-  users User[]
+  // Back-relations: all tenant-owned rows belonging to this Company. Every FK is
+  // onDelete: Restrict — a Company with any of these can never be hard-deleted (tenants
+  // are retired via isArchived soft-archive). Phase 1 added `users`; Phase 2 adds the rest.
+  users               User[]
+  workers             Worker[]
+  sites               Site[]
+  attendanceRecords   AttendanceRecord[]
+  workerRequests      WorkerRequest[]
+  loans               Loan[]
+  advancePayments     AdvancePayment[]
+  professionWageRates ProfessionWageRate[]
+  personnelCompanies  PersonnelCompany[]
+  profitLoss          ProfitLoss[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -61,11 +61,24 @@ export class CompaniesService {
     if (input.customerId) {
       await this.assertCustomerLinkable(input.customerId);
     }
-    const row = await prisma.company.create({
-      data: {
-        name: input.name,
-        customerId: input.customerId ?? null,
-      },
+    // Inline-create the billing Customer + link it atomically (one System-Admin step).
+    // A freshly-created customer is always linkable, so no assertCustomerLinkable needed.
+    // customerId and newCustomer are mutually exclusive (enforced by the shared schema).
+    const row = await prisma.$transaction(async (tx) => {
+      let customerId = input.customerId ?? null;
+      if (input.newCustomer) {
+        const customer = await tx.customer.create({
+          data: {
+            name: input.newCustomer.name,
+            contactEmail: input.newCustomer.contactEmail ?? null,
+            contactPhone: input.newCustomer.contactPhone ?? null,
+          },
+        });
+        customerId = customer.id;
+      }
+      return tx.company.create({
+        data: { name: input.name, customerId },
+      });
     });
     return mapCompany(row);
   }

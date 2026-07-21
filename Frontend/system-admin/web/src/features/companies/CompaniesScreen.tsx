@@ -173,7 +173,16 @@ function CompanyForm({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [name, setName] = useState(company?.name ?? '');
+  // Customer link. The picker carries a sentinel `__new__` value that switches into
+  // inline-create mode (create flow only) — provisioning the tenant Company and its
+  // billing Customer in ONE step. Existing companies edit the link to an existing
+  // customer only (no inline create on edit).
+  const NEW_CUSTOMER = '__new__';
   const [customerId, setCustomerId] = useState(company?.customerId ?? '');
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerEmail, setNewCustomerEmail] = useState('');
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
+  const isNewCustomer = !company && customerId === NEW_CUSTOMER;
   const [error, setError] = useState<string | null>(null);
 
   // Picker options: only non-archived customers (a live billing link).
@@ -193,10 +202,19 @@ function CompanyForm({
         };
         return companiesApi.update(company.id, body);
       }
-      const body: CreateCompanyInput = {
-        name,
-        customerId: customerId || null,
-      };
+      const body: CreateCompanyInput = isNewCustomer
+        ? {
+            name,
+            newCustomer: {
+              name: newCustomerName,
+              contactEmail: newCustomerEmail || null,
+              contactPhone: newCustomerPhone || null,
+            },
+          }
+        : {
+            name,
+            customerId: customerId || null,
+          };
       return companiesApi.create(body);
     },
     onSuccess: () => {
@@ -217,7 +235,7 @@ function CompanyForm({
           </button>
           <button
             className="btn btn-primary"
-            disabled={!name || mut.isPending}
+            disabled={!name || (isNewCustomer && !newCustomerName) || mut.isPending}
             onClick={() => mut.mutate()}
           >
             {t('companies.save')}
@@ -240,6 +258,10 @@ function CompanyForm({
           onChange={(e) => setCustomerId(e.target.value)}
         >
           <option value="">{t('companies.noCustomer')}</option>
+          {/* Inline-create is a create-flow affordance only. */}
+          {!company ? (
+            <option value={NEW_CUSTOMER}>{t('companies.createNewCustomer')}</option>
+          ) : null}
           {options.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -248,6 +270,33 @@ function CompanyForm({
         </select>
         <span className="muted">{t('companies.linkHint')}</span>
       </Field>
+      {isNewCustomer ? (
+        <>
+          <Field label={t('companies.newCustomerName')}>
+            <input
+              className="input"
+              value={newCustomerName}
+              onChange={(e) => setNewCustomerName(e.target.value)}
+            />
+          </Field>
+          <Field label={`${t('companies.newCustomerEmail')} (${t('companies.optional')})`}>
+            <input
+              className="input"
+              type="email"
+              value={newCustomerEmail}
+              onChange={(e) => setNewCustomerEmail(e.target.value)}
+            />
+          </Field>
+          <Field label={`${t('companies.newCustomerPhone')} (${t('companies.optional')})`}>
+            <input
+              className="input"
+              value={newCustomerPhone}
+              onChange={(e) => setNewCustomerPhone(e.target.value)}
+            />
+          </Field>
+          <span className="muted">{t('companies.newCustomerHint')}</span>
+        </>
+      ) : null}
     </Modal>
   );
 }

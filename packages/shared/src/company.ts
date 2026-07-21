@@ -26,12 +26,33 @@ export interface Company extends Timestamped, Archivable {
 // Zod input contracts — validated at the route edge (ADMIN-only /companies).
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** POST /companies */
-export const createCompanySchema = z.object({
+/**
+ * Inline creation of a NEW billing Customer to link 1:1 with the company being
+ * created — so the System Admin can provision the tenant Company and its billing
+ * Customer in ONE step instead of maintaining two separate lists. Mutually exclusive
+ * with `customerId` (see the refine on createCompanySchema). Server creates the
+ * Customer and links it atomically.
+ */
+export const newCustomerSchema = z.object({
   name: z.string().min(1),
-  /** Optional 1:1 billing-customer link; @unique is enforced server-side. */
-  customerId: z.string().min(1).nullish(),
+  contactEmail: z.string().email().nullish(),
+  contactPhone: z.string().min(1).nullish(),
 });
+export type NewCustomerInput = z.infer<typeof newCustomerSchema>;
+
+/** POST /companies */
+export const createCompanySchema = z
+  .object({
+    name: z.string().min(1),
+    /** Optional 1:1 billing-customer link to an EXISTING customer; @unique server-side. */
+    customerId: z.string().min(1).nullish(),
+    /** Optional inline-create of a NEW billing customer to link (see newCustomerSchema). */
+    newCustomer: newCustomerSchema.nullish(),
+  })
+  .refine((v) => !(v.customerId && v.newCustomer), {
+    message: 'Provide either an existing customerId or a newCustomer, not both',
+    path: ['newCustomer'],
+  });
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
 
 /** PATCH /companies/:id */

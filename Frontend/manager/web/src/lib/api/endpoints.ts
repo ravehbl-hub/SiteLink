@@ -236,6 +236,12 @@ export const salaryApi = {
     siteId?: string;
     periodStart: string;
     periodEnd: string;
+    // HOURS-SPLIT (request-time only, never persisted). When splitEnabled the
+    // backend REQUIRES contractorRate (400 otherwise). Omit all three for the
+    // default flat/hourly calc.
+    splitEnabled?: boolean;
+    splitThreshold?: number;
+    contractorRate?: number;
   }) => http.post<SalaryResult>('/salary/calculate', body),
 };
 

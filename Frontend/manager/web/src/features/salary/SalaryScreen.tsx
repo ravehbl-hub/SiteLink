@@ -39,6 +39,16 @@ export function SalaryScreen() {
   // manager opts in. BOTH the PDF download AND the share (email/whatsapp) read
   // this single flag, so the choice is made once in the actions area.
   const [includePrices, setIncludePrices] = useState(false);
+  // HOURS-SPLIT payment controls (request-time only; default OFF → the calc is
+  // byte-for-byte the existing flat/hourly behaviour and no split params are
+  // sent). When ON, threshold (default 236) + a REQUIRED contractor rate reveal.
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitThreshold, setSplitThreshold] = useState('236');
+  const [contractorRate, setContractorRate] = useState('');
+  // Client-side guard mirrors the backend's 400: contractor rate is required
+  // once split is enabled. Surfaced as an inline hint under the input.
+  const contractorRateMissing =
+    splitEnabled && contractorRate.trim() === '';
 
   // Share flow: menu (channel picker) → confirm dialog → send.
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
@@ -129,7 +139,28 @@ export function SalaryScreen() {
   }
 
   const calc = useMutation({
-    mutationFn: () => salaryApi.calculate({ workerId, periodStart, periodEnd }),
+    mutationFn: () => {
+      // Only attach split params when ENABLED; otherwise send the plain body so
+      // the calc stays identical to the pre-split behaviour. threshold falls
+      // back to the backend default (236) if left blank.
+      const body: Parameters<typeof salaryApi.calculate>[0] = {
+        workerId,
+        periodStart,
+        periodEnd,
+      };
+      if (splitEnabled) {
+        body.splitEnabled = true;
+        const thr = Number(splitThreshold);
+        if (splitThreshold.trim() !== '' && Number.isFinite(thr)) {
+          body.splitThreshold = thr;
+        }
+        const rate = Number(contractorRate);
+        if (contractorRate.trim() !== '' && Number.isFinite(rate)) {
+          body.contractorRate = rate;
+        }
+      }
+      return salaryApi.calculate(body);
+    },
     onSuccess: (r) => {
       setResult(r);
       // Pin the details query to what we just computed.
@@ -276,7 +307,7 @@ export function SalaryScreen() {
           </div>
           <button
             className="btn btn-primary"
-            disabled={!workerId || calc.isPending}
+            disabled={!workerId || calc.isPending || contractorRateMissing}
             aria-busy={calc.isPending}
             onClick={() => calc.mutate()}
           >
@@ -293,6 +324,80 @@ export function SalaryScreen() {
               t('salary.calculate')
             )}
           </button>
+        </div>
+
+        {/* HOURS-SPLIT controls: a toggle (default OFF) that reveals a threshold
+            (default 236) + a REQUIRED contractor rate. RTL-safe logical props;
+            money/rate inputs align to the end. */}
+        <div
+          className="form-row"
+          style={{ alignItems: 'flex-end', marginBlockStart: 'var(--sl-space-2)' }}
+        >
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 'var(--sl-space-1)',
+              cursor: 'pointer',
+              userSelect: 'none',
+              color: 'var(--sl-color-text-muted)',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={splitEnabled}
+              onChange={(e) => setSplitEnabled(e.target.checked)}
+            />
+            {t('salary.splitToggle')}
+          </label>
+
+          {splitEnabled ? (
+            <>
+              <div className="field" style={{ maxWidth: 160 }}>
+                <label>{t('salary.splitThreshold')}</label>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  style={{ textAlign: 'end' }}
+                  value={splitThreshold}
+                  onChange={(e) => setSplitThreshold(e.target.value)}
+                />
+              </div>
+              <div className="field" style={{ maxWidth: 180 }}>
+                <label>{t('salary.splitContractorRate')}</label>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  aria-invalid={contractorRateMissing}
+                  aria-describedby={
+                    contractorRateMissing ? 'split-contractor-rate-hint' : undefined
+                  }
+                  style={{ textAlign: 'end' }}
+                  value={contractorRate}
+                  onChange={(e) => setContractorRate(e.target.value)}
+                />
+                {contractorRateMissing ? (
+                  <span
+                    id="split-contractor-rate-hint"
+                    className="muted"
+                    style={{
+                      color: 'var(--sl-color-danger)',
+                      fontSize: 'var(--sl-font-size-sm, 0.85em)',
+                      marginBlockStart: 'var(--sl-space-1)',
+                    }}
+                  >
+                    {t('salary.splitContractorRateRequired')}
+                  </span>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -379,6 +484,72 @@ export function SalaryScreen() {
               </tbody>
             </table>
           </div>
+
+          {/* HOURS-SPLIT breakdown: rendered only when the calc was run with
+              split enabled (result.split?.enabled). Shows the Personnel line
+              (hours × personnel rate) + the Contractor line (hours × contractor
+              rate) + the combined total — which equals result.gross. This shows
+              on-screen normally (the display-prices flag governs the PDF only).
+              hrs | rate | amount, money/rate aligned to the end for RTL. */}
+          {result.split?.enabled ? (
+            <>
+              <h4
+                className="subsection-title"
+                style={{ marginBlockStart: 'var(--sl-space-4)' }}
+              >
+                {t('salary.splitTitle')}
+              </h4>
+              <div className="table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>{t('salary.splitToggle')}</th>
+                      <th style={{ textAlign: 'end' }}>{t('salary.splitHours')}</th>
+                      <th style={{ textAlign: 'end' }}>{t('salary.splitRate')}</th>
+                      <th style={{ textAlign: 'end' }}>{t('salary.splitAmount')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>{t('salary.splitPersonnel')}</td>
+                      <td style={{ textAlign: 'end' }}>{result.split.personnelHours}</td>
+                      <td style={{ textAlign: 'end' }}>
+                        {formatCurrency(result.split.personnelRate, result.currency)}
+                      </td>
+                      <td style={{ textAlign: 'end' }}>
+                        {formatCurrency(result.split.personnelAmount, result.currency)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>{t('salary.splitContractor')}</td>
+                      <td style={{ textAlign: 'end' }}>{result.split.contractorHours}</td>
+                      <td style={{ textAlign: 'end' }}>
+                        {formatCurrency(result.split.contractorRate, result.currency)}
+                      </td>
+                      <td style={{ textAlign: 'end' }}>
+                        {formatCurrency(result.split.contractorAmount, result.currency)}
+                      </td>
+                    </tr>
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ fontWeight: 'var(--sl-font-weight-bold, 700)' }}>
+                      <td>{t('salary.splitTotal')}</td>
+                      <td style={{ textAlign: 'end' }}>
+                        {result.split.personnelHours + result.split.contractorHours}
+                      </td>
+                      <td />
+                      <td style={{ textAlign: 'end' }}>
+                        {formatCurrency(
+                          result.split.personnelAmount + result.split.contractorAmount,
+                          result.currency,
+                        )}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
+          ) : null}
 
           {/* NET WAGE (נטו): deductions + net. Server-computed on the
               single-calc path (result.net = gross − loans − advances). Display

@@ -19,9 +19,17 @@ import { mapAttendance } from '../../lib/mappers.js';
 import { assertCompanyScopeMatch, resolveCompanyScope, type CompanyScope } from '../../lib/scope.js';
 import { Role } from '@sitelink/shared';
 import type { AuthUser } from '../../plugins/types.js';
-import type { transferSchema } from './schemas.js';
+import type { removeFromSiteSchema, transferSchema } from './schemas.js';
 
 type TransferInput = z.infer<typeof transferSchema>;
+type RemoveInput = z.infer<typeof removeFromSiteSchema>;
+
+export interface RemoveResult {
+  workerId: string;
+  siteId: string;
+  /** true when an assignment was actually deleted; false if the worker wasn't on it. */
+  removed: boolean;
+}
 
 export interface TransferResult {
   workerId: string;
@@ -107,6 +115,34 @@ export class MobilityService {
       attendance: mapAttendance(record),
       presenceCreated: created,
     };
+  }
+
+  /**
+   * REMOVE a worker from a site — the inverse of the "add destination" transfer.
+   * Hard-deletes the SiteAssignment(worker, site) so it disappears from the worker's
+   * siteIds immediately (worker assignments are managed by delete, not soft-unassign —
+   * see WorkersService.setAssignments). ADMIN/MANAGER may leave a worker with ZERO sites
+   * (unlike a Foreman), so there is no "last site" guard here.
+   *
+   * Presence history is INTENTIONALLY untouched: past AttendanceRecords keep the site
+   * they were logged at (removing an assignment is not a reason to rewrite history).
+   * Idempotent: removing a site the worker isn't on is a no-op (removed: false).
+   */
+  async removeFromSite(input: RemoveInput, caller?: AuthUser): Promise<RemoveResult> {
+    const worker = await prisma.worker.findUnique({
+      where: { id: input.workerId },
+      select: { companyId: true },
+    });
+    assertCompanyScopeMatch(this.companyScope(caller), worker?.companyId);
+    if (!worker) throw AppError.notFound('Worker not found');
+
+    // The site must be in the worker's company (404 otherwise — no cross-tenant leak).
+    await this.assertSiteInCompany(input.siteId, worker.companyId);
+
+    const del = await prisma.siteAssignment.deleteMany({
+      where: { workerId: input.workerId, siteId: input.siteId },
+    });
+    return { workerId: input.workerId, siteId: input.siteId, removed: del.count > 0 };
   }
 }
 

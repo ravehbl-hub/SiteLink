@@ -21,3 +21,9 @@ export const transferSchema = z.object({
   fromSiteId: z.string().nullish(),
   notes: z.string().nullish(),
 });
+
+/** POST /mobility/unassign — remove a worker from a single site (hard unassign). */
+export const removeFromSiteSchema = z.object({
+  workerId: z.string().min(1),
+  siteId: z.string().min(1),
+});

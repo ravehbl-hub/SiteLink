@@ -9,7 +9,7 @@
 import type { FastifyInstance } from 'fastify';
 import { MANAGER_ROLES } from '../../plugins/auth.js';
 import { MobilityService } from './service.js';
-import { transferSchema } from './schemas.js';
+import { removeFromSiteSchema, transferSchema } from './schemas.js';
 
 export async function mobilityRoutes(app: FastifyInstance): Promise<void> {
   const service = new MobilityService();
@@ -19,5 +19,11 @@ export async function mobilityRoutes(app: FastifyInstance): Promise<void> {
     const body = transferSchema.parse(req.body);
     const result = await service.transfer(body, req.appUser!);
     return reply.status(201).send(result);
+  });
+
+  // Remove a worker from a site (inverse of transfer's add). Idempotent.
+  app.post('/mobility/unassign', guard, async (req) => {
+    const body = removeFromSiteSchema.parse(req.body);
+    return service.removeFromSite(body, req.appUser!);
   });
 }

@@ -24,6 +24,7 @@ export function MobilityScreen() {
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ created: boolean } | null>(null);
+  const [removedSite, setRemovedSite] = useState<string | null>(null);
 
   // The picked worker's current sites (source context) — shown as chips so the manager
   // sees where the employee is before choosing a destination. Only when a worker is set.
@@ -39,7 +40,26 @@ export function MobilityScreen() {
   const resetResult = () => {
     setError(null);
     setDone(null);
+    setRemovedSite(null);
   };
+
+  // Remove the worker from one of their current sites (inverse of the move/add).
+  const removeMut = useMutation({
+    mutationFn: (siteId: string) => mobilityApi.unassign({ workerId, siteId }),
+    onSuccess: (res) => {
+      // Assignment changed → refresh the worker (chips), the roster and dashboard.
+      qc.invalidateQueries({ queryKey: qk.worker(workerId) });
+      qc.invalidateQueries({ queryKey: ['workers'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      setError(null);
+      setDone(null);
+      setRemovedSite(res.removed ? siteName(res.siteId) : null);
+    },
+    onError: (e) => {
+      setRemovedSite(null);
+      setError(e instanceof Error ? e.message : String(e));
+    },
+  });
 
   const mut = useMutation({
     mutationFn: () =>
@@ -114,14 +134,37 @@ export function MobilityScreen() {
             ) : currentSiteIds.length ? (
               <div className="row-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
                 {currentSiteIds.map((id) => (
-                  <Chip key={id} tone="neutral">
-                    {siteName(id)}
-                  </Chip>
+                  <span
+                    key={id}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <Chip tone="neutral">{siteName(id)}</Chip>
+                    {/* Remove the worker from this site (inverse of the move/add). */}
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-danger"
+                      aria-label={t('mobility.removeFromSite', { site: siteName(id) })}
+                      title={t('mobility.removeFromSite', { site: siteName(id) })}
+                      disabled={removeMut.isPending}
+                      onClick={() => {
+                        if (window.confirm(t('mobility.removeConfirm', { site: siteName(id) }))) {
+                          removeMut.mutate(id);
+                        }
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
                 ))}
               </div>
             ) : (
               <span className="muted">{t('mobility.noCurrentSites')}</span>
             )}
+            {removedSite ? (
+              <div className="banner banner-info" style={{ marginBlockStart: 8 }}>
+                {t('mobility.removed', { site: removedSite })}
+              </div>
+            ) : null}
           </Field>
         ) : null}
 

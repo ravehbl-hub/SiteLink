@@ -245,16 +245,20 @@ export function SalaryScreen() {
   }
 
   const calc = useMutation({
-    mutationFn: () => {
+    // `overrideWorkerId` is set when DRILLING DOWN from the batch table into a single
+    // worker: it targets that worker instead of the (ALL_WORKERS) selector value and
+    // forces a PLAIN calc (no split) so the detail matches the flat batch row.
+    mutationFn: (overrideWorkerId?: string) => {
+      const wid = overrideWorkerId ?? workerId;
       // Only attach split params when ENABLED; otherwise send the plain body so
       // the calc stays identical to the pre-split behaviour. threshold falls
       // back to the backend default (236) if left blank.
       const body: Parameters<typeof salaryApi.calculate>[0] = {
-        workerId,
+        workerId: wid,
         periodStart,
         periodEnd,
       };
-      if (splitEnabled) {
+      if (splitEnabled && !overrideWorkerId) {
         body.splitEnabled = true;
         const thr = Number(splitThreshold);
         if (splitThreshold.trim() !== '' && Number.isFinite(thr)) {
@@ -267,10 +271,10 @@ export function SalaryScreen() {
       }
       return salaryApi.calculate(body);
     },
-    onSuccess: (r) => {
+    onSuccess: (r, overrideWorkerId) => {
       setResult(r);
       // Pin the details query to what we just computed.
-      setResultWorkerId(workerId);
+      setResultWorkerId(overrideWorkerId ?? workerId);
       setResultPeriod({ from: periodStart, to: periodEnd });
       setError(null);
       setSuccess(null);
@@ -314,8 +318,19 @@ export function SalaryScreen() {
     } else {
       // Leaving the batch view: a single-worker calc supersedes any prior table.
       setBatchResult(null);
-      calc.mutate();
+      calc.mutate(undefined);
     }
+  }
+
+  // DRILL DOWN from a batch row into that worker: point the selector at them, leave
+  // the batch view, and run a plain single-worker calc for the SAME period — so the
+  // full single-worker detail (breakdown, working-hours, deductions, payslip/share)
+  // opens. Split stays off (the batch is flat), matching the row it launched from.
+  function drillDown(wid: string) {
+    setWorkerId(wid);
+    setBatchResult(null);
+    setSplitEnabled(false);
+    calc.mutate(wid);
   }
 
   // Per-day working-hours breakdown behind the salary total. Reuses the EXISTING
@@ -841,6 +856,7 @@ export function SalaryScreen() {
                   <th style={{ textAlign: 'end' }}>{t('salary.batchGross')}</th>
                   <th style={{ textAlign: 'end' }}>{t('salary.batchDeductions')}</th>
                   <th style={{ textAlign: 'end' }}>{t('salary.batchNet')}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -885,6 +901,15 @@ export function SalaryScreen() {
                         }}
                       >
                         {formatCurrency(row.net, row.currency)}
+                      </td>
+                      <td style={{ textAlign: 'end' }}>
+                        <button
+                          className="btn btn-sm"
+                          disabled={calc.isPending}
+                          onClick={() => drillDown(row.workerId)}
+                        >
+                          {t('salary.batchDetails')}
+                        </button>
                       </td>
                     </tr>
                   );

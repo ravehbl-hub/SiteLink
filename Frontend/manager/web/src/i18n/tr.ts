@@ -321,6 +321,7 @@ export const tr: Resources = {
     batchHourPrice: 'Saat ücreti',
     batchGross: 'Brüt',
     batchNet: 'Net',
+    batchDetails: 'Ayrıntılar',
     batchDeductions: 'Kesintiler',
     batchHours: 'Çalışma saatleri',
     batchMonthlyMarker: 'aylık',

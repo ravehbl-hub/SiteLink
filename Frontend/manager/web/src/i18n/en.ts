@@ -319,6 +319,7 @@ export const en = {
     batchHourPrice: 'Hour price',
     batchGross: 'Gross',
     batchNet: 'Net',
+    batchDetails: 'Details',
     batchDeductions: 'Deductions',
     batchHours: 'Work hours',
     batchMonthlyMarker: 'monthly',

@@ -321,6 +321,7 @@ export const he: Resources = {
     batchHourPrice: 'מחיר לשעה',
     batchGross: 'ברוטו',
     batchNet: 'נטו',
+    batchDetails: 'פירוט',
     batchDeductions: 'ניכויים',
     batchHours: 'שעות עבודה',
     batchMonthlyMarker: 'חודשי',

@@ -424,6 +424,14 @@ model AttendanceRecord {
   hours    Decimal?       @db.Decimal(6, 2) // hours when type = ATTENDANCE
   notes    String?
 
+  // ── Clock IN/OUT (attendance/presence feature) — additive, nullable. Full
+  // DateTime timestamps: FE sends a time on the record's `date`; storing the full
+  // timestamp lets the app combine date+time and edit either side. NULLABLE — existing
+  // rows and manual `hours`-only records have no in/out. Coexists with `hours` (kept).
+  // Not indexed: display/edit fields, not queried or filtered. (Servio wires service.)
+  checkIn  DateTime? // clock-in time (the moment worker arrived at site)
+  checkOut DateTime? // clock-out time
+
   // Back-link to the WorkerRequest whose APPROVAL created this record (VACATION effect).
   // NULLABLE — manually-created attendance has no source request; only approval-created
   // rows are tagged. onDelete: SetNull keeps financial/attendance history if the request

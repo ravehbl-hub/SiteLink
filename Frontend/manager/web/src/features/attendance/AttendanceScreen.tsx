@@ -159,8 +159,8 @@ export function AttendanceScreen() {
                     <th>{t('attendance.type')}</th>
                     <th style={{ textAlign: 'start' }}>{t('attendance.checkIn')}</th>
                     <th style={{ textAlign: 'start' }}>{t('attendance.checkOut')}</th>
-                    <th>{t('attendance.site')}</th>
                     <th>{t('attendance.hours')}</th>
+                    <th>{t('attendance.site')}</th>
                     <th>{t('common.notes')}</th>
                     <th />
                   </tr>
@@ -174,8 +174,8 @@ export function AttendanceScreen() {
                       </td>
                       <td style={{ textAlign: 'start' }}>{formatTime(r.checkIn)}</td>
                       <td style={{ textAlign: 'start' }}>{formatTime(r.checkOut)}</td>
-                      <td>{siteName(r.siteId)}</td>
                       <td>{r.hours ?? '—'}</td>
+                      <td>{siteName(r.siteId)}</td>
                       <td>{r.notes ?? '—'}</td>
                       <td>
                         <div className="row-actions">
@@ -236,6 +236,13 @@ function AttendanceForm({
   const [checkOut, setCheckOut] = useState(isoToTimeInput(record?.checkOut));
   const [notes, setNotes] = useState(record?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
+
+  // The site the worker actually REGISTERED at (the record's original site) — shown
+  // read-only for reference while editing, above the editable site picker below.
+  const registeredSiteName =
+    isEdit && record?.siteId
+      ? sites.data?.items.find((s) => s.id === record.siteId)?.name ?? record.siteId
+      : null;
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -329,6 +336,13 @@ function AttendanceForm({
             value={hours}
             onChange={(e) => setHours(Number(e.target.value) || 0)}
           />
+        </Field>
+      ) : null}
+      {registeredSiteName ? (
+        <Field label={t('attendance.registeredAt')}>
+          <div className="input" style={{ display: 'flex', alignItems: 'center', opacity: 0.8 }}>
+            {registeredSiteName}
+          </div>
         </Field>
       ) : null}
       <Field label={t('attendance.site')}>

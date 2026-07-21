@@ -154,6 +154,48 @@ export interface SalaryResult {
   };
 }
 
+/* ────────────────────────────────────────────────────────────────────────
+ * BATCH salary run (POST /salary/calculate-all) — manager table rows.
+ *
+ * A display-only per-worker roll-up for ALL active workers in the caller's
+ * company. Uses the DEFAULT flat/hourly + fixed calc (NO hours-split — the batch
+ * path never sets `split`). One row per active worker that HAS a configured wage;
+ * workers with no wage are omitted and counted in `skippedCount`.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/** One worker's line in a batch salary run. */
+export interface SalaryBatchRow {
+  workerId: string;
+  /**
+   * Resolved rate the calc used. INFORMATIONAL for a fixed-MONTHLY row — there
+   * `gross` is the fixed amount, NOT `hourlyWage × totalHours` (see `mode`).
+   */
+  hourlyWage: number;
+  gross: number;
+  currency: string;
+  /** Resolved calc mode — lets the FE flag fixed-monthly rows (gross ≠ rate×hours). */
+  mode: SalaryMode;
+  /** Σ ATTENDANCE hours in the period (vacation/disease excluded). */
+  totalHours: number;
+  /** Σ approved LOAN amounts, period + company scoped (≥ 0). */
+  loansTotal: number;
+  /** Σ approved ADVANCE amounts, period + company scoped (≥ 0). */
+  advancesTotal: number;
+  /** = loansTotal + advancesTotal. */
+  deductionsTotal: number;
+  /** gross − deductionsTotal. NOT floored — CAN be negative (worker owes). */
+  net: number;
+}
+
+/** Result of a batch salary run over one period. */
+export interface SalaryBatchResult {
+  periodStart: ISODate;
+  periodEnd: ISODate;
+  rows: SalaryBatchRow[];
+  /** Active workers omitted because they have no configured wage. */
+  skippedCount: number;
+}
+
 /**
  * The engine interface (FR-MGR-SRE-1). Callers depend only on this.
  * Concrete strategies (fixed / israeli-labor-law) implement it server-side and

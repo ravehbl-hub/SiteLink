@@ -32,3 +32,16 @@ export const calculateSalarySchema = z
     message: 'contractorRate is required when splitEnabled is true',
     path: ['contractorRate'],
   });
+
+/**
+ * BATCH salary run body (POST /salary/calculate-all). Period only; the calc mode +
+ * rate are resolved server-side per worker (no split — the batch path never sets it).
+ * `companyId` is honoured ONLY for an ADMIN (narrows to one tenant); a non-admin's
+ * companyId is ignored server-side and can never widen their company.
+ */
+export const calculateAllSalarySchema = z.object({
+  periodStart: z.string().datetime(),
+  periodEnd: z.string().datetime(),
+  siteId: z.string().optional(),
+  companyId: z.string().optional(),
+});

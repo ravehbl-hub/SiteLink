@@ -10,6 +10,8 @@
 import type { z } from 'zod';
 import {
   toSalaryMode,
+  type SalaryBatchResult,
+  type SalaryBatchRow,
   type SalaryHoursByDay,
   type SalaryInput,
   type SalaryResult,
@@ -26,6 +28,8 @@ import { toDateOnly } from '../../lib/dates.js';
 import { toNumber, round2 } from '../../lib/money.js';
 import {
   assertCompanyScopeMatch,
+  companyWhere,
+  effectiveCompanyScope,
   resolveCompanyScope,
   type CompanyScope,
 } from '../../lib/scope.js';
@@ -42,6 +46,16 @@ type CalcInput = z.input<typeof calculateSalarySchema>;
 /** SalaryResult plus any engine warnings surfaced by the service. */
 export interface SalaryCalculation extends SalaryResult {
   warnings: string[];
+  /**
+   * BATCH-ONLY: total ATTENDANCE hours the calc saw for this worker.
+   *
+   * calculateMany() builds `hoursByDay` per worker and otherwise DISCARDS it; the
+   * batch caller (calculateAll → SalaryBatchRow.totalHours) needs that sum. We
+   * surface it as an OPTIONAL field set ONLY by calculateMany, so the single
+   * calculate() path (the /salary/calculate wire shape) is UNCHANGED — the field
+   * is simply absent there. Minimal, additive, no shape change on the single wire.
+   */
+  attendanceTotalHours?: number;
 }
 
 export class SalaryService {
@@ -365,9 +379,148 @@ export class SalaryService {
       const result = engine.compute(salaryInput);
       const warnings: string[] = [];
       if (mode === 'israeli-labor-law') warnings.push(SALARY_WARNINGS.ISRAELI_STUB);
-      out.set(worker.id, { ...result, warnings });
+      // BATCH-ONLY extra: expose the ATTENDANCE-hours total (vacation/disease
+      // excluded) the batch caller needs; the single calculate() path never sets it.
+      out.set(worker.id, {
+        ...result,
+        warnings,
+        attendanceTotalHours: attendanceHours(salaryInput),
+      });
     }
 
     return out;
+  }
+
+  /**
+   * BULK NET-WAGE deductions for MANY workers over one period (the batch analogue of
+   * computeDeductions). ONE findMany over WorkerRequest for the whole worker set,
+   * grouped per worker → Map<workerId, { loansTotal, advancesTotal }>.
+   *
+   * Same predicate as the single computeDeductions (defense-in-depth):
+   *   - status === APPROVED, type ∈ { LOAN, ADVANCE },
+   *   - each request is matched to its worker's OWN company (P2 — never crosses
+   *     tenants; the (workerId, companyId) pairs come from the tenant-correct worker
+   *     load, so an ADMIN all-companies run stays correct AND belt-and-suspenders),
+   *   - startDate within periodStart..periodEnd (period-scoped, matches single path).
+   * Workers with no matching requests are simply ABSENT from the map (caller defaults
+   * them to 0). Net is NOT computed here — the caller subtracts from gross.
+   */
+  private async computeDeductionsMany(args: {
+    workers: { workerId: string; companyId: string }[];
+    periodStart: string;
+    periodEnd: string;
+  }): Promise<Map<string, { loansTotal: number; advancesTotal: number }>> {
+    const out = new Map<string, { loansTotal: number; advancesTotal: number }>();
+    // De-dupe on the (workerId, companyId) pair.
+    const seen = new Set<string>();
+    const pairs: { workerId: string; companyId: string }[] = [];
+    for (const w of args.workers) {
+      const key = `${w.workerId} ${w.companyId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push({ workerId: w.workerId, companyId: w.companyId });
+    }
+    if (pairs.length === 0) return out;
+
+    const requests = await prisma.workerRequest.findMany({
+      where: {
+        // P2: each request is pinned to its worker's OWN company — a deduction never
+        // crosses tenants (defense-in-depth), and stays correct across all companies.
+        OR: pairs.map((p) => ({ workerId: p.workerId, companyId: p.companyId })),
+        status: RequestStatus.APPROVED,
+        type: { in: [RequestType.LOAN, RequestType.ADVANCE] },
+        // PERIOD-SCOPED (default), identical to computeDeductions.
+        startDate: {
+          gte: new Date(args.periodStart),
+          lte: new Date(args.periodEnd),
+        },
+      },
+      select: { workerId: true, type: true, amount: true },
+    });
+
+    for (const r of requests) {
+      const amount = r.amount ? toNumber(r.amount) : 0;
+      const acc = out.get(r.workerId) ?? { loansTotal: 0, advancesTotal: 0 };
+      if (r.type === RequestType.LOAN) acc.loansTotal += amount;
+      else if (r.type === RequestType.ADVANCE) acc.advancesTotal += amount;
+      out.set(r.workerId, acc);
+    }
+
+    return out;
+  }
+
+  /**
+   * BATCH salary RUN for ALL active workers in the caller's company (display-only —
+   * powers the manager salary table). POST /salary/calculate-all.
+   *
+   * Reuses the existing batch machinery end to end:
+   *   1. resolve the caller's company scope (ADMIN may narrow to one company via
+   *      `companyId`; a non-admin's companyId is IGNORED — never widens their tenant),
+   *   2. load ACTIVE (isArchived:false) workers in scope,
+   *   3. calculateMany(ids, period, scope) — DEFAULT flat/hourly + fixed calc, NO
+   *      hours-split (calculateMany never sets `split`); no-wage workers are absent,
+   *   4. computeDeductionsMany over the same set (period + company scoped),
+   *   5. one SalaryBatchRow per worker PRESENT in the calc map. `skippedCount` =
+   *      (active workers loaded) − (rows produced) = the no-wage workers omitted.
+   */
+  async calculateAll(
+    period: { periodStart: string; periodEnd: string; siteId?: string; companyId?: string },
+    caller: AuthUser,
+  ): Promise<SalaryBatchResult> {
+    // ADMIN may narrow to one company via body companyId; a non-admin is pinned to
+    // their own company and the requested companyId is deliberately ignored.
+    const scope = effectiveCompanyScope(caller, period.companyId);
+
+    // ACTIVE workers in scope. ADMIN with no companyId → all companies (no filter).
+    const workers = await prisma.worker.findMany({
+      where: { isArchived: false, ...companyWhere(scope) },
+      // companyId per worker so deductions can be scoped to each worker's OWN company
+      // (correct on the ADMIN all-companies run; keeps the P2 tenant belt intact).
+      select: { id: true, companyId: true },
+    });
+    const workerIds = workers.map((w) => w.id);
+
+    const calc = await this.calculateMany(
+      workerIds,
+      { periodStart: period.periodStart, periodEnd: period.periodEnd, siteId: period.siteId },
+      scope,
+    );
+    const deductions = await this.computeDeductionsMany({
+      // Pass each worker's OWN (workerId, companyId) pair. Deductions stay P2
+      // company-scoped per worker, so an ADMIN all-companies run counts every
+      // company's LOAN/ADVANCE rows correctly (no under-count) while never crossing
+      // tenants. A scoped run's pairs all carry the one scoped companyId — same result.
+      workers: workers.map((w) => ({ workerId: w.id, companyId: w.companyId })),
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+    });
+
+    const rows: SalaryBatchRow[] = [];
+    for (const workerId of workerIds) {
+      const c = calc.get(workerId);
+      if (!c) continue; // no configured wage → skipped (counted below).
+      const d = deductions.get(workerId) ?? { loansTotal: 0, advancesTotal: 0 };
+      const deductionsTotal = d.loansTotal + d.advancesTotal;
+      rows.push({
+        workerId,
+        hourlyWage: c.hourlyWage,
+        gross: c.gross,
+        currency: c.currency,
+        mode: c.mode,
+        totalHours: c.attendanceTotalHours ?? 0,
+        loansTotal: d.loansTotal,
+        advancesTotal: d.advancesTotal,
+        deductionsTotal,
+        // NET is NOT floored — can be negative when loans/advances exceed gross.
+        net: c.gross - deductionsTotal,
+      });
+    }
+
+    return {
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      rows,
+      skippedCount: workerIds.length - rows.length,
+    };
   }
 }

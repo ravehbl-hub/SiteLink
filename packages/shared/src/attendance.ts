@@ -17,6 +17,12 @@ export interface AttendanceRecord extends Timestamped {
   /** The day this record applies to. */
   date: ISODate;
   type: AttendanceType;
+  /**
+   * Clock-in / clock-out timestamps (ISO). The FE combines the record's date with the
+   * entered time. Presence/display only — manual `hours` remains the source of truth for pay.
+   */
+  checkIn?: ISODate | null;
+  checkOut?: ISODate | null;
   /** Hours worked on this date when type === ATTENDANCE (feeds salary + rollups). */
   hours?: number | null;
   notes?: string | null;
@@ -54,6 +60,8 @@ export interface CreateAttendanceInput {
   siteId?: ID | null;
   date: ISODate;
   type: AttendanceType;
+  checkIn?: ISODate | null;
+  checkOut?: ISODate | null;
   hours?: number | null;
   notes?: string | null;
 }

@@ -171,6 +171,13 @@ export class AttendanceService {
       await assertWorkerInScope(caller, input.workerId);
       siteId = await forceForemanSite(caller, input.siteId);
     }
+    // Clock IN/OUT (optional, nullable). Presence/display only — manual `hours` stays the
+    // source of truth for pay. Light guard: if BOTH provided, checkOut must be after checkIn.
+    const checkIn = input.checkIn != null ? new Date(input.checkIn) : null;
+    const checkOut = input.checkOut != null ? new Date(input.checkOut) : null;
+    if (checkIn && checkOut && checkOut.getTime() < checkIn.getTime()) {
+      throw AppError.validation('checkOut must be after checkIn');
+    }
     // Enforce exclusivity: reject a second record for the same worker/day.
     const date = new Date(input.date);
     const existing = await prisma.attendanceRecord.findUnique({
@@ -186,6 +193,8 @@ export class AttendanceService {
         siteId,
         date,
         type: input.type,
+        checkIn,
+        checkOut,
         hours: input.hours ?? null,
         notes: input.notes ?? null,
       },
@@ -210,10 +219,37 @@ export class AttendanceService {
         siteIdPatch = { siteId: await forceForemanSite(caller, input.siteId) };
       }
     }
+    // Clock IN/OUT patch (partial, nullable). Light guard: reject when the EFFECTIVE
+    // (post-patch) pair has checkOut before checkIn. `undefined` = leave as-is.
+    const checkInPatch =
+      input.checkIn !== undefined
+        ? { checkIn: input.checkIn != null ? new Date(input.checkIn) : null }
+        : {};
+    const checkOutPatch =
+      input.checkOut !== undefined
+        ? { checkOut: input.checkOut != null ? new Date(input.checkOut) : null }
+        : {};
+    const effIn =
+      input.checkIn !== undefined
+        ? input.checkIn != null
+          ? new Date(input.checkIn)
+          : null
+        : current.checkIn;
+    const effOut =
+      input.checkOut !== undefined
+        ? input.checkOut != null
+          ? new Date(input.checkOut)
+          : null
+        : current.checkOut;
+    if (effIn && effOut && effOut.getTime() < effIn.getTime()) {
+      throw AppError.validation('checkOut must be after checkIn');
+    }
     const row = await prisma.attendanceRecord.update({
       where: { id },
       data: {
         ...siteIdPatch,
+        ...checkInPatch,
+        ...checkOutPatch,
         ...(input.date !== undefined ? { date: new Date(input.date) } : {}),
         ...(input.type !== undefined ? { type: input.type } : {}),
         ...(input.hours !== undefined ? { hours: input.hours } : {}),

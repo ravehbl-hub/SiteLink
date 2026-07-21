@@ -179,6 +179,8 @@ export function mapAttendance(a: PAttendance): AttendanceRecord {
     siteId: a.siteId ?? null,
     date: toISORequired(a.date),
     type: a.type as AttendanceType,
+    checkIn: toISO(a.checkIn),
+    checkOut: toISO(a.checkOut),
     hours: toNumberOrNull(a.hours),
     notes: a.notes ?? null,
     createdAt: toISORequired(a.createdAt),

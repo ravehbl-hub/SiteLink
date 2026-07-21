@@ -9,6 +9,9 @@ export const createAttendanceSchema = z.object({
   siteId: z.string().nullish(),
   date: z.string().datetime(),
   type: z.nativeEnum(AttendanceType),
+  // Clock IN/OUT — optional nullable ISO datetime (FE combines record date + entered time).
+  checkIn: z.string().datetime().nullish(),
+  checkOut: z.string().datetime().nullish(),
   hours: z.number().nonnegative().nullish(),
   notes: z.string().nullish(),
 });
@@ -17,6 +20,8 @@ export const updateAttendanceSchema = z.object({
   siteId: z.string().nullish(),
   date: z.string().datetime().optional(),
   type: z.nativeEnum(AttendanceType).optional(),
+  checkIn: z.string().datetime().nullish(),
+  checkOut: z.string().datetime().nullish(),
   hours: z.number().nonnegative().nullish(),
   notes: z.string().nullish(),
 });

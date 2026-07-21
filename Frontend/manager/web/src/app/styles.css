@@ -889,3 +889,79 @@ table.data td.num {
 [data-theme='neumorphic-dark'] .deck .bar-fill {
   box-shadow: none;
 }
+
+/* ── Calculating state (Salary) ───────────────────────────────────────────
+   Neumorphic spinner + result overlay used while the salary calc mutation is
+   pending. On-brand cream/teal; motion is disabled under reduced-motion. */
+.sl-spinner {
+  display: inline-block;
+  inline-size: 1.15em;
+  block-size: 1.15em;
+  border-radius: 50%;
+  border: 2px solid var(--sl-color-border, rgba(0, 0, 0, 0.12));
+  border-block-start-color: var(--sl-color-primary, #0f8b8d);
+  animation: sl-spin 0.7s linear infinite;
+  vertical-align: -0.15em;
+}
+
+.sl-spinner-lg {
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border-width: 3px;
+}
+
+@keyframes sl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Calculating overlay: covers the result card body with a soft neumorphic
+   scrim + centred spinner + label. */
+.sl-calc-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sl-space-2);
+  background: color-mix(in srgb, var(--sl-color-surface) 78%, transparent);
+  backdrop-filter: blur(2px);
+  border-radius: var(--sl-radius-neu-card, var(--sl-radius-lg));
+  color: var(--sl-color-text-muted);
+}
+
+.sl-calc-label {
+  font-weight: var(--sl-font-weight-medium, 500);
+  letter-spacing: var(--sl-tracking-label, normal);
+}
+
+/* Fade-in for the freshly-computed result. */
+.sl-fade-in {
+  animation: sl-fade-in 0.32s ease-out both;
+}
+
+@keyframes sl-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sl-spinner {
+    animation: none;
+  }
+  .sl-calc-overlay {
+    backdrop-filter: none;
+  }
+  .sl-fade-in {
+    animation: none;
+  }
+}

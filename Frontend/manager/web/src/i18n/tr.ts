@@ -242,6 +242,8 @@ export const tr: Resources = {
   salary: {
     title: 'Maaş',
     calculate: 'Hesapla',
+    calculating: 'Hesaplanıyor…',
+    displayPrices: 'Fiyatlar gösterilsin mi?',
     worker: 'Çalışan',
     period: 'Dönem',
     gross: 'Brüt',

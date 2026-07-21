@@ -251,6 +251,9 @@ export interface PayslipShareBody {
   to: string;
   siteId?: string;
   lang?: 'he' | 'en' | 'tr';
+  /** Include money columns in the rendered payslip PDF. Default false =
+   *  hours-only (no prices). Matches the back-end `includePrices` param. */
+  includePrices?: boolean;
 }
 export interface PayslipEmailResult {
   sent: boolean;

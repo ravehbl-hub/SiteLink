@@ -240,6 +240,8 @@ export const en = {
   salary: {
     title: 'Salary',
     calculate: 'Calculate',
+    calculating: 'Calculating…',
+    displayPrices: 'Display prices?',
     worker: 'Employee',
     period: 'Period',
     gross: 'Gross',

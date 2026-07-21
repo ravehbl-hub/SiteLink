@@ -35,6 +35,10 @@ export function SalaryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  // Prices toggle (#4): default NO — the payslip renders hours-only unless the
+  // manager opts in. BOTH the PDF download AND the share (email/whatsapp) read
+  // this single flag, so the choice is made once in the actions area.
+  const [includePrices, setIncludePrices] = useState(false);
 
   // Share flow: menu (channel picker) → confirm dialog → send.
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
@@ -68,7 +72,7 @@ export function SalaryScreen() {
 
   const share = useMutation({
     mutationFn: async (channel: 'email' | 'whatsapp') => {
-      const body = { workerId, from: periodStart, to: periodEnd, lang };
+      const body = { workerId, from: periodStart, to: periodEnd, lang, includePrices };
       if (channel === 'email') {
         await payslipApi.email(body);
         return { channel } as const;
@@ -212,6 +216,8 @@ export function SalaryScreen() {
         from: periodStart,
         to: periodEnd,
         lang: i18n.language,
+        // #4: hours-only by default; only render money when opted in.
+        includePrices,
       });
       const token = await bearerToken();
       const res = await fetch(url, {
@@ -271,9 +277,21 @@ export function SalaryScreen() {
           <button
             className="btn btn-primary"
             disabled={!workerId || calc.isPending}
+            aria-busy={calc.isPending}
             onClick={() => calc.mutate()}
           >
-            {t('salary.calculate')}
+            {calc.isPending ? (
+              <>
+                <span
+                  className="sl-spinner"
+                  aria-hidden
+                  style={{ marginInlineEnd: 'var(--sl-space-1)' }}
+                />
+                {t('salary.calculating')}
+              </>
+            ) : (
+              t('salary.calculate')
+            )}
           </button>
         </div>
       </div>
@@ -292,18 +310,33 @@ export function SalaryScreen() {
       ) : null}
 
       {result ? (
-        <div className="card">
+        <div className="card sl-fade-in" style={{ position: 'relative' }}>
+          {/* #7: calculating overlay while a recompute is in flight over the
+              currently-displayed result. Motion is disabled under reduced-motion
+              (see .sl-calc-overlay / .sl-spinner in styles.css). */}
+          {calc.isPending ? (
+            <div className="sl-calc-overlay" role="status" aria-live="polite">
+              <span className="sl-spinner sl-spinner-lg" aria-hidden />
+              <span className="sl-calc-label">{t('salary.calculating')}</span>
+            </div>
+          ) : null}
           <div className="page-header" style={{ marginBlockEnd: 'var(--sl-space-3)' }}>
             <h3 className="subsection-title" style={{ margin: 0 }}>
               {t('salary.result')}
             </h3>
             <div className="header-spacer" />
           </div>
-          <div className="grid grid-kpi" style={{ marginBlockEnd: 'var(--sl-space-4)' }}>
-            <div className="kpi">
-              <div className="kpi-label">{t('salary.gross')}</div>
-              <div className="kpi-value">{formatCurrency(result.gross, result.currency)}</div>
-            </div>
+          {/* #5: the three key figures — Hourly rate | Gross | Net — on ONE
+              horizontal row. `grid-kpi` auto-fits: 3-up on desktop, stacks on
+              narrow screens. Logical order 1→2→3 mirrors under RTL. Net keeps
+              its negative-danger treatment. */}
+          <div
+            className="grid grid-kpi"
+            style={{
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
+              marginBlockEnd: 'var(--sl-space-4)',
+            }}
+          >
             <div className="kpi">
               <div className="kpi-label">{t('salary.hourlyRate')}</div>
               <div className="kpi-value">
@@ -311,11 +344,22 @@ export function SalaryScreen() {
               </div>
             </div>
             <div className="kpi">
-              <div className="kpi-label">{t('payment.calcMode')}</div>
-              <div className="kpi-value" style={{ fontSize: 'var(--sl-font-size-lg)' }}>
-                {result.mode === 'israeli-labor-law'
-                  ? t('payment.israeliLaborLaw')
-                  : t('payment.fixed')}
+              <div className="kpi-label">{t('salary.gross')}</div>
+              <div className="kpi-value">{formatCurrency(result.gross, result.currency)}</div>
+            </div>
+            <div className="kpi">
+              <div className="kpi-label">{t('salary.net')}</div>
+              <div
+                className="kpi-value"
+                style={
+                  result.net !== undefined && result.net < 0
+                    ? { color: 'var(--sl-color-danger)' }
+                    : undefined
+                }
+              >
+                {result.net !== undefined
+                  ? formatCurrency(result.net, result.currency)
+                  : '—'}
               </div>
             </div>
           </div>
@@ -363,20 +407,6 @@ export function SalaryScreen() {
                   </tbody>
                 </table>
               </div>
-
-              {/* NET — prominent KPI. Negative net (worker owes) rendered in a
-                  danger treatment so it is unmistakable. */}
-              <div className="grid grid-kpi" style={{ marginBlockStart: 'var(--sl-space-4)' }}>
-                <div className="kpi">
-                  <div className="kpi-label">{t('salary.net')}</div>
-                  <div
-                    className="kpi-value"
-                    style={result.net < 0 ? { color: 'var(--sl-color-danger)' } : undefined}
-                  >
-                    {formatCurrency(result.net, result.currency)}
-                  </div>
-                </div>
-              </div>
             </>
           ) : null}
 
@@ -393,6 +423,28 @@ export function SalaryScreen() {
               marginBlockStart: 'var(--sl-space-3)',
             }}
           >
+            {/* #4: Display-prices choice — a single checkbox (default OFF =
+                hours-only) that BOTH the Download and the Share actions read.
+                Placed FIRST in the actions row so the choice precedes the
+                buttons; logical props keep it RTL-safe. */}
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 'var(--sl-space-1)',
+                cursor: 'pointer',
+                userSelect: 'none',
+                color: 'var(--sl-color-text-muted)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={includePrices}
+                onChange={(e) => setIncludePrices(e.target.checked)}
+              />
+              {t('salary.displayPrices')}
+            </label>
+
             <button
               className="btn"
               disabled={downloading}
@@ -549,6 +601,25 @@ export function SalaryScreen() {
                 ? t('salary.confirmShareEmail', { name: workerName })
                 : t('salary.confirmShareWhatsapp', { name: workerName })}
             </p>
+            {/* #4: prices choice mirrored in the share confirm — default OFF.
+                Reads/writes the same flag the share POST body sends. */}
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 'var(--sl-space-1)',
+                cursor: 'pointer',
+                userSelect: 'none',
+                marginBlockEnd: 'var(--sl-space-2)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={includePrices}
+                onChange={(e) => setIncludePrices(e.target.checked)}
+              />
+              {t('salary.displayPrices')}
+            </label>
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setConfirmChannel(null)}>
                 {t('common.cancel')}

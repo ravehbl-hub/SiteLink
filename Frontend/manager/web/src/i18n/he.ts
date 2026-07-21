@@ -242,6 +242,8 @@ export const he: Resources = {
   salary: {
     title: 'שכר',
     calculate: 'חשב',
+    calculating: 'מחשב…',
+    displayPrices: 'הצג מחירים?',
     worker: 'עובד',
     period: 'תקופה',
     gross: 'ברוטו',

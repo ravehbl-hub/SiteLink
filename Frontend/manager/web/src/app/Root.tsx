@@ -7,6 +7,7 @@ import { LoginScreen } from './LoginScreen';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { WorkersRoutes } from '../features/workers/WorkersRoutes';
 import { AttendanceScreen } from '../features/attendance/AttendanceScreen';
+import { MobilityScreen } from '../features/mobility/MobilityScreen';
 import { RequestsScreen } from '../features/requests/RequestsScreen';
 import { FinanceScreen } from '../features/finance/FinanceScreen';
 import { PnlScreen } from '../features/pnl/PnlScreen';
@@ -47,6 +48,7 @@ export function Root() {
           <Route index element={<DashboardScreen />} />
           <Route path="workers/*" element={<WorkersRoutes />} />
           <Route path="attendance" element={<AttendanceScreen />} />
+          <Route path="mobility" element={<MobilityScreen />} />
           <Route path="requests" element={<RequestsScreen />} />
           <Route path="finance" element={<FinanceScreen />} />
           <Route path="pnl" element={<PnlScreen />} />

@@ -177,6 +177,30 @@ export const attendanceApi = {
   }) => http.get<WorkingHours[]>('/working-hours', params as Query),
 };
 
+/* ── Employee mobility (site transfer) ────────────────────────────────────
+ * Move a worker to another site: ADDS the destination assignment (existing sites
+ * kept) and re-points the effective-day presence (attendance) record to it, creating
+ * an ATTENDANCE record on that day if the worker has none. ADMIN/MANAGER-gated,
+ * company-scoped server-side. Local types (no shared-package bump needed). */
+export interface MobilityTransferBody {
+  workerId: string;
+  toSiteId: string;
+  /** Effective date (ISO). The presence record for this worker/day is re-pointed. */
+  date: string;
+  fromSiteId?: string | null;
+  notes?: string | null;
+}
+export interface MobilityTransferResult {
+  workerId: string;
+  toSiteId: string;
+  attendance: AttendanceRecord;
+  presenceCreated: boolean;
+}
+export const mobilityApi = {
+  transfer: (body: MobilityTransferBody) =>
+    http.post<MobilityTransferResult>('/mobility/transfer', body),
+};
+
 /* ── Finance: loans, advances, P&L ────────────────────────────────────── */
 export const financeApi = {
   listLoans: (params?: { workerId?: string; page?: number; pageSize?: number }) =>

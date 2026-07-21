@@ -9,6 +9,7 @@ const TABS: { to: string; key: string }[] = [
   { to: '/', key: 'nav.dashboard' },
   { to: '/workers', key: 'nav.workers' },
   { to: '/attendance', key: 'nav.attendance' },
+  { to: '/mobility', key: 'nav.mobility' },
   { to: '/requests', key: 'nav.requests' },
   { to: '/finance', key: 'nav.finance' },
   { to: '/pnl', key: 'nav.pnl' },

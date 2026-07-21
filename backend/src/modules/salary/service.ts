@@ -14,7 +14,12 @@ import {
   type SalaryInput,
   type SalaryResult,
 } from '@sitelink/shared';
-import { AttendanceType, SalaryCalcMode } from '@sitelink/shared';
+import {
+  AttendanceType,
+  RequestStatus,
+  RequestType,
+  SalaryCalcMode,
+} from '@sitelink/shared';
 import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { toDateOnly } from '../../lib/dates.js';
@@ -119,10 +124,78 @@ export class SalaryService {
     const engine = this.factory.resolve(mode);
     const result = engine.compute(salaryInput);
 
+    // NET WAGE (נטו): reconcile GROSS against the worker's OWN-company APPROVED
+    // loan/advance requests that fall within THIS period. See computeDeductions.
+    const { loansTotal, advancesTotal, net } = await this.computeDeductions({
+      workerId: input.workerId,
+      companyId: worker.companyId,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+      gross: result.gross,
+    });
+
     const warnings: string[] = [];
     if (mode === 'israeli-labor-law') warnings.push(SALARY_WARNINGS.ISRAELI_STUB);
 
-    return { ...result, warnings };
+    return { ...result, loansTotal, advancesTotal, net, warnings };
+  }
+
+  /**
+   * NET WAGE (נטו) deductions for ONE worker over ONE period.
+   *
+   * NET = gross − Σ(approved LOAN) − Σ(approved ADVANCE), where the summed requests
+   * are, ALL of the following (defense-in-depth):
+   *   - status === APPROVED     (never PENDING / REJECTED),
+   *   - type   === LOAN | ADVANCE,
+   *   - companyId === the WORKER's own company (P2 — a deduction must NEVER pull
+   *     another tenant's request even for the same workerId; belt-and-suspenders
+   *     alongside the workerId key),
+   *   - PERIOD-SCOPED (DEFAULT, IMPLEMENTED HERE): the request's `startDate`
+   *     (the semantic money date — the same field the approval copies onto the
+   *     Loan/AdvancePayment ledger row) falls within periodStart..periodEnd, so the
+   *     deductions reconcile with the shown period.
+   *
+   *     FLAG (period-based vs all-outstanding): to instead deduct ALL outstanding
+   *     approved loans/advances regardless of period, DROP the `startDate: {…}`
+   *     line from the `where` below (one-line change).
+   *
+   * NET IS NOT FLOORED — it is returned as the REAL number and CAN be negative when
+   * approved loans/advances exceed gross.
+   */
+  private async computeDeductions(args: {
+    workerId: string;
+    companyId: string;
+    periodStart: string;
+    periodEnd: string;
+    gross: number;
+  }): Promise<{ loansTotal: number; advancesTotal: number; net: number }> {
+    const requests = await prisma.workerRequest.findMany({
+      where: {
+        workerId: args.workerId,
+        // P2: OWN-company only — a deduction never crosses tenants (defense-in-depth).
+        companyId: args.companyId,
+        status: RequestStatus.APPROVED,
+        type: { in: [RequestType.LOAN, RequestType.ADVANCE] },
+        // PERIOD-SCOPED (default). Remove this one line for ALL-outstanding semantics.
+        startDate: {
+          gte: new Date(args.periodStart),
+          lte: new Date(args.periodEnd),
+        },
+      },
+      select: { type: true, amount: true },
+    });
+
+    let loansTotal = 0;
+    let advancesTotal = 0;
+    for (const r of requests) {
+      const amount = r.amount ? toNumber(r.amount) : 0;
+      if (r.type === RequestType.LOAN) loansTotal += amount;
+      else if (r.type === RequestType.ADVANCE) advancesTotal += amount;
+    }
+
+    // REAL net — NOT floored at 0 (can be negative on purpose).
+    const net = args.gross - loansTotal - advancesTotal;
+    return { loansTotal, advancesTotal, net };
   }
 
   /**

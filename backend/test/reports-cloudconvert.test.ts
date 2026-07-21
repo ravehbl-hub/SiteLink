@@ -160,6 +160,78 @@ describe('reports HTML templates (CloudConvert path, key-independent)', () => {
     expect(html).toContain('8000.00 ILS'); // Gross stays authoritative
   });
 
+  it('payslip HTML renders DEDUCTIONS + NET that reconciles (net == gross − loans − advances)', () => {
+    // gross 5400, loans 500, advances 300 → net 4600 (he/RTL — the quality bar).
+    const html = payslipHtml({
+      meta: rtlMeta,
+      workerName: 'Dimitar',
+      result: {
+        gross: 5400,
+        currency: 'ILS',
+        mode: 'israeli-labor-law',
+        engineVersion: 'v1',
+        breakdown: [{ label: 'Base', amount: 5400 }],
+        hourlyWage: 50,
+        loansTotal: 500,
+        advancesTotal: 300,
+        net: 4600,
+        warnings: [],
+      } as never,
+      warnings: [],
+    });
+    // Deductions heading (Hebrew) + loans/advances shown as negatives.
+    expect(html).toContain('ניכויים'); // Deductions
+    expect(html).toContain('הלוואות'); // Loans
+    expect(html).toContain('מקדמות'); // Advances
+    expect(html).toContain('-500.00 ILS'); // loans deducted
+    expect(html).toContain('-300.00 ILS'); // advances deducted
+    // Prominent NET line (Hebrew נטו) — the reconciled real number.
+    expect(html).toContain('נטו');
+    expect(html).toContain('4600.00 ILS');
+    // Reconciliation: net == gross − loans − advances.
+    expect(4600).toBe(5400 - 500 - 300);
+    // Not flagged negative for a positive net.
+    expect(html).not.toContain('net negative');
+  });
+
+  it('payslip HTML shows a NEGATIVE net (not floored) when deductions exceed gross', () => {
+    const html = payslipHtml({
+      meta: ltrMeta,
+      workerName: 'Owes',
+      result: {
+        gross: 100,
+        currency: 'ILS',
+        mode: 'fixed',
+        engineVersion: 'v1',
+        breakdown: [{ label: 'Fixed', amount: 100 }],
+        hourlyWage: 0,
+        loansTotal: 500,
+        advancesTotal: 0,
+        net: -400,
+        warnings: [],
+      } as never,
+      warnings: [],
+    });
+    expect(html).toContain('Deductions');
+    expect(html).toContain('-500.00 ILS'); // loans
+    expect(html).toContain('-400.00 ILS'); // NET is the REAL negative number
+    expect(html).toContain('net negative'); // negative-net highlight class
+  });
+
+  it('payslip HTML omits the deductions section when net is absent (batch path)', () => {
+    const html = payslipHtml({
+      meta: ltrMeta,
+      workerName: 'NoNet',
+      result: {
+        gross: 800, currency: 'ILS', mode: 'fixed', engineVersion: 'v1',
+        breakdown: [{ label: 'Base', amount: 800 }], hourlyWage: 50, warnings: [],
+      } as never,
+      warnings: [],
+    });
+    expect(html).not.toContain('Deductions');
+    expect(html).toContain('800.00 ILS'); // gross still authoritative
+  });
+
   it('profit-loss + working-hours producers render their totals', () => {
     const pl = profitLossHtml({
       meta: { ...ltrMeta, title: 'Profit & Loss' },

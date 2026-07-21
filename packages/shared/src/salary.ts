@@ -106,6 +106,26 @@ export interface SalaryResult {
   /** Includes a 'stub' marker in v1 (FR-MGR-SRE-4). */
   engineVersion: string;
   computedAt: ISODate;
+  /**
+   * NET WAGE (נטו) deductions + net — populated by the salary SERVICE (not the pure
+   * engine), which reconciles GROSS against the worker's OWN-company APPROVED
+   * loan/advance requests within the calc PERIOD (FR-MGR-PAY, defense-in-depth P2).
+   *
+   * Optional on the wire because the pure `SalaryRuleEngine.compute()` returns only
+   * gross/breakdown; the service layer (SalaryService.calculate) adds these. Clients
+   * that read them should treat absence as "not yet computed" (single-calc path only).
+   *
+   * - loansTotal    : Σ approved LOAN amounts, period + company scoped (≥ 0).
+   * - advancesTotal : Σ approved ADVANCE amounts, period + company scoped (≥ 0).
+   * - net           : gross − loansTotal − advancesTotal.
+   *
+   * NET CAN BE NEGATIVE. It is the REAL net and is NOT floored at 0 — if approved
+   * loans/advances exceed gross the worker owes the company, and the number goes
+   * below zero on purpose. FE/PDF display it as-is (flagging when negative).
+   */
+  loansTotal?: number;
+  advancesTotal?: number;
+  net?: number;
 }
 
 /**

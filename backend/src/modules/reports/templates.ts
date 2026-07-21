@@ -33,6 +33,16 @@ const styles = StyleSheet.create({
   total: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
   bold: { fontWeight: 'bold' },
   warn: { marginTop: 12, fontSize: 9, color: '#a00' },
+  sectionTitle: { fontSize: 13, fontWeight: 'bold', marginTop: 16, marginBottom: 6 },
+  deduction: { color: '#a00' },
+  net: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    borderTop: 1,
+    paddingTop: 6,
+    fontSize: 14,
+  },
 });
 
 export interface ReportHeaderMeta {
@@ -94,6 +104,7 @@ export function PayslipDocument(props: {
         e(Text, { key: 'gl', style: styles.bold }, 'Gross'),
         e(Text, { key: 'gv', style: styles.bold }, `${result.gross.toFixed(2)} ${result.currency}`),
       ]),
+      ...deductionsBlock(result),
       ...warnings.map((w, i) => e(Text, { key: `warn${i}`, style: styles.warn }, `⚠ ${w}`)),
     ]),
   );
@@ -141,6 +152,34 @@ function hoursBreakdown(
       e(Text, { key: 'v', style: styles.bold }, money(totalMoney)),
     ]),
   ]);
+}
+
+/**
+ * NET WAGE (נטו) deductions + net block for the react-pdf payslip (parity with the
+ * HTML/CloudConvert template). Only renders when the service supplied net data
+ * (result.net !== undefined). NET === gross − loans − advances and is the REAL
+ * number (may be negative — English labels here; the RTL/Hebrew path is HTML).
+ */
+function deductionsBlock(result: SalaryResult): React.ReactElement[] {
+  if (result.net === undefined) return [];
+  const loans = result.loansTotal ?? 0;
+  const advances = result.advancesTotal ?? 0;
+  const cur = result.currency;
+  return [
+    e(Text, { key: 'dtitle', style: styles.sectionTitle }, 'Deductions'),
+    e(View, { key: 'dloans', style: styles.row }, [
+      e(Text, { key: 'l' }, 'Loans'),
+      e(Text, { key: 'v', style: styles.deduction }, `-${loans.toFixed(2)} ${cur}`),
+    ]),
+    e(View, { key: 'dadv', style: styles.row }, [
+      e(Text, { key: 'l' }, 'Advances'),
+      e(Text, { key: 'v', style: styles.deduction }, `-${advances.toFixed(2)} ${cur}`),
+    ]),
+    e(View, { key: 'dnet', style: styles.net }, [
+      e(Text, { key: 'l', style: styles.bold }, 'Net'),
+      e(Text, { key: 'v', style: styles.bold }, `${result.net.toFixed(2)} ${cur}`),
+    ]),
+  ];
 }
 
 /** Profit & Loss PDF from a computed ProfitLoss (FR-MGR-PNL / SM-6). */

@@ -35,6 +35,12 @@ interface HoursLabels {
   vacation: string;
   disease: string;
   reconcileNote: string;
+  /** NET WAGE (נטו) deductions section labels. */
+  gross: string;
+  deductions: string;
+  loans: string;
+  advances: string;
+  net: string;
 }
 
 const HOURS_LABELS: Record<HoursLang, HoursLabels> = {
@@ -50,6 +56,11 @@ const HOURS_LABELS: Record<HoursLang, HoursLabels> = {
     vacation: 'חופשה',
     disease: 'מחלה',
     reconcileNote: 'סכום השורות תואם לשכר ברוטו',
+    gross: 'ברוטו',
+    deductions: 'ניכויים',
+    loans: 'הלוואות',
+    advances: 'מקדמות',
+    net: 'נטו',
   },
   en: {
     section: 'Working hours details',
@@ -63,6 +74,11 @@ const HOURS_LABELS: Record<HoursLang, HoursLabels> = {
     vacation: 'Vacation',
     disease: 'Disease',
     reconcileNote: 'Line totals reconcile with gross',
+    gross: 'Gross',
+    deductions: 'Deductions',
+    loans: 'Loans',
+    advances: 'Advances',
+    net: 'Net',
   },
   tr: {
     section: 'Çalışma saatleri ayrıntıları',
@@ -76,6 +92,11 @@ const HOURS_LABELS: Record<HoursLang, HoursLabels> = {
     vacation: 'İzin',
     disease: 'Hastalık',
     reconcileNote: 'Satır toplamları brüt ile uyumlu',
+    gross: 'Brüt',
+    deductions: 'Kesintiler',
+    loans: 'Krediler',
+    advances: 'Avanslar',
+    net: 'Net',
   },
 };
 
@@ -118,6 +139,11 @@ const STYLES = `
   [dir="rtl"] table.hours th, [dir="rtl"] table.hours td { text-align: right; }
   [dir="rtl"] table.hours td.num, [dir="rtl"] table.hours th.num { text-align: left; }
   .reconcile { margin-top: 6px; font-size: 9px; color: #060; }
+  .deduction { color: #a00; }
+  .net { display: flex; flex-direction: row; justify-content: space-between;
+         margin-top: 10px; border-top: 1px solid #000; padding-top: 6px; font-size: 14px; }
+  .net.negative span { color: #a00; }
+  [dir="rtl"] .net { flex-direction: row-reverse; }
 `;
 
 /**
@@ -242,6 +268,32 @@ ${bodyRows}
 ${note}`;
 }
 
+/**
+ * NET WAGE (נטו) deductions + net section for the payslip. Renders under the Gross
+ * line: a DEDUCTIONS heading, a Loans (−loansTotal) row, an Advances (−advancesTotal)
+ * row, and a prominent NET line. RECONCILES: net === gross − loans − advances.
+ *
+ * The section only renders when the service provided net data (result.net !== undefined
+ * — the single-calc path always does; the batch/dashboard path does not). NET is shown
+ * as the REAL number and CAN be negative — a negative net gets a highlight class.
+ */
+function deductionsSectionHtml(meta: ReportHeaderMeta, result: SalaryResult): string {
+  if (result.net === undefined) return '';
+  const L = HOURS_LABELS[hoursLangFor(meta)];
+  const loans = result.loansTotal ?? 0;
+  const advances = result.advancesTotal ?? 0;
+  const cur = esc(result.currency);
+  const money = (v: number): string => `${esc(v.toFixed(2))} ${cur}`;
+  // Deductions shown as negatives (money reduced).
+  const neg = (v: number): string => `-${esc(v.toFixed(2))} ${cur}`;
+  const negative = result.net < 0;
+  return `
+<h2 class="section-title">${esc(L.deductions)}</h2>
+<div class="row"><span>${esc(L.loans)}</span><span class="deduction">${neg(loans)}</span></div>
+<div class="row"><span>${esc(L.advances)}</span><span class="deduction">${neg(advances)}</span></div>
+<div class="net${negative ? ' negative' : ''}"><span class="bold">${esc(L.net)}</span><span class="bold">${money(result.net)}</span></div>`;
+}
+
 /** Payslip HTML (mirror of PayslipDocument). */
 export function payslipHtml(props: {
   meta: ReportHeaderMeta;
@@ -267,12 +319,15 @@ export function payslipHtml(props: {
     result.currency,
     result.gross,
   );
+  const deductionsSection = deductionsSectionHtml(meta, result);
+  const L = HOURS_LABELS[hoursLangFor(meta)];
   const body = `
 <p class="bold">Worker: ${esc(workerName)}</p>
 <p class="meta">Mode: ${esc(result.mode)}  ·  Engine: ${esc(result.engineVersion)}</p>
 <div>${lines}</div>
 ${hoursSection}
-<div class="total"><span class="bold">Gross</span><span class="bold">${esc(result.gross.toFixed(2))} ${esc(result.currency)}</span></div>
+<div class="total"><span class="bold">${esc(L.gross)}</span><span class="bold">${esc(result.gross.toFixed(2))} ${esc(result.currency)}</span></div>
+${deductionsSection}
 ${warns}`;
   return documentShell(meta, body);
 }

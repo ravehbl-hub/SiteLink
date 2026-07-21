@@ -1,13 +1,15 @@
-/** Attendance / Vacation / Disease + Working Hours (FR-MGR-ATT).
- *  Record entries per worker, edit/remove, and view derived working-hours by
- *  day/week/month. */
+/** Attendance / Vacation / Disease (FR-MGR-ATT).
+ *  Record entries per worker with clock-in/out + site + manual hours, then
+ *  edit/remove them. The derived working-hours rollup lives elsewhere (salary/PDF);
+ *  this screen only manages the raw records. */
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   AttendanceType,
+  type AttendanceRecord,
   type CreateAttendanceInput,
-  type WorkingHoursGrain,
+  type UpdateAttendanceInput,
 } from '@sitelink/shared';
 import { attendanceApi } from '../../lib/api/endpoints';
 import { qk } from '../../lib/api/queryKeys';
@@ -21,16 +23,44 @@ function attendanceTone(type: AttendanceType): 'success' | 'info' | 'warning' {
   return 'warning';
 }
 
+/** ISO datetime → "HH:MM" (local) for <input type="time">. Empty when absent. */
+function isoToTimeInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+/** Combine a YYYY-MM-DD date-input value + "HH:MM" time into an ISO datetime.
+ *  Returns null when no time is entered (clock field left blank). */
+function combineDateTimeToISO(dateInput: string, timeInput: string): string | null {
+  if (!dateInput || !timeInput) return null;
+  const d = new Date(`${dateInput}T${timeInput}`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+/** Locale time (HH:MM) for list display; em-dash when absent. */
+function formatTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(d);
+}
+
 export function AttendanceScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const workers = useWorkersList();
+  const sites = useSitesList();
   const [workerId, setWorkerId] = useState('');
   const range = useMemo(currentMonthRange, []);
   const [from, setFrom] = useState(range.from);
   const [to, setTo] = useState(range.to);
-  const [grain, setGrain] = useState<WorkingHoursGrain>('DAY');
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<AttendanceRecord | null>(null);
 
   const listParams = { workerId: workerId || undefined, from, to, pageSize: 200 };
   // Live attendance: entries can land while the manager watches, so poll every 20s
@@ -47,16 +77,10 @@ export function AttendanceScreen() {
     staleTime: 5_000,
   });
 
-  // Working-hours is a DERIVED rollup of the same records — it refreshes on focus
-  // and is invalidated whenever attendance mutates, so it doesn't need its own
-  // background poll (avoids doubling the request rate on this screen).
-  const whParams = { workerId: workerId || undefined, from, to, grain };
-  const workingHours = useQuery({
-    queryKey: qk.workingHours(whParams),
-    queryFn: () => attendanceApi.workingHours(whParams),
-    enabled: Boolean(workerId),
-    staleTime: 5_000,
-  });
+  const siteName = (siteId: string | null | undefined): string => {
+    if (!siteId) return '—';
+    return sites.data?.items.find((s) => s.id === siteId)?.name ?? '—';
+  };
 
   const removeMut = useMutation({
     mutationFn: (id: string) => attendanceApi.remove(id),
@@ -120,139 +144,128 @@ export function AttendanceScreen() {
       {!workerId ? (
         <div className="empty-state">{t('attendance.selectWorker')}</div>
       ) : (
-        <>
-          <div className="card">
-            <h3 className="subsection-title">{t('attendance.title')}</h3>
-            <DataState
-              isLoading={list.isLoading}
-              error={list.error}
-              isEmpty={list.data?.items.length === 0}
-            >
-              <div className="table-wrap">
-                <table className="data">
-                  <thead>
-                    <tr>
-                      <th>{t('common.date')}</th>
-                      <th>{t('attendance.type')}</th>
-                      <th>{t('attendance.hours')}</th>
-                      <th>{t('common.notes')}</th>
-                      <th />
+        <div className="card">
+          <h3 className="subsection-title">{t('attendance.title')}</h3>
+          <DataState
+            isLoading={list.isLoading}
+            error={list.error}
+            isEmpty={list.data?.items.length === 0}
+          >
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>{t('common.date')}</th>
+                    <th>{t('attendance.type')}</th>
+                    <th style={{ textAlign: 'start' }}>{t('attendance.checkIn')}</th>
+                    <th style={{ textAlign: 'start' }}>{t('attendance.checkOut')}</th>
+                    <th>{t('attendance.site')}</th>
+                    <th>{t('attendance.hours')}</th>
+                    <th>{t('common.notes')}</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.data?.items.map((r) => (
+                    <tr key={r.id}>
+                      <td>{formatDate(r.date)}</td>
+                      <td>
+                        <Chip tone={attendanceTone(r.type)}>{t(`attendanceType.${r.type}`)}</Chip>
+                      </td>
+                      <td style={{ textAlign: 'start' }}>{formatTime(r.checkIn)}</td>
+                      <td style={{ textAlign: 'start' }}>{formatTime(r.checkOut)}</td>
+                      <td>{siteName(r.siteId)}</td>
+                      <td>{r.hours ?? '—'}</td>
+                      <td>{r.notes ?? '—'}</td>
+                      <td>
+                        <div className="row-actions">
+                          <button className="btn btn-sm" onClick={() => setEditing(r)}>
+                            {t('common.edit')}
+                          </button>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => removeMut.mutate(r.id)}
+                          >
+                            {t('common.remove')}
+                          </button>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {list.data?.items.map((r) => (
-                      <tr key={r.id}>
-                        <td>{formatDate(r.date)}</td>
-                        <td>
-                          <Chip tone={attendanceTone(r.type)}>{t(`attendanceType.${r.type}`)}</Chip>
-                        </td>
-                        <td>{r.hours ?? '—'}</td>
-                        <td>{r.notes ?? '—'}</td>
-                        <td>
-                          <div className="row-actions">
-                            <button
-                              className="btn btn-sm btn-danger"
-                              onClick={() => removeMut.mutate(r.id)}
-                            >
-                              {t('common.remove')}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </DataState>
-          </div>
-
-          <div className="card">
-            <div className="page-header" style={{ marginBlockEnd: 'var(--sl-space-3)' }}>
-              <h3 className="subsection-title" style={{ margin: 0 }}>
-                {t('attendance.workingHours')}
-              </h3>
-              <div className="header-spacer" />
-              <select
-                className="select"
-                style={{ width: 'auto' }}
-                value={grain}
-                onChange={(e) => setGrain(e.target.value as WorkingHoursGrain)}
-              >
-                <option value="DAY">{t('attendance.day')}</option>
-                <option value="WEEK">{t('attendance.week')}</option>
-                <option value="MONTH">{t('attendance.month')}</option>
-              </select>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <DataState
-              isLoading={workingHours.isLoading}
-              error={workingHours.error}
-              isEmpty={workingHours.data?.length === 0}
-            >
-              <div className="table-wrap">
-                <table className="data">
-                  <thead>
-                    <tr>
-                      <th>{t('attendance.period')}</th>
-                      <th>{t('attendance.totalHours')}</th>
-                      <th>{t('dashboard.attendanceDays')}</th>
-                      <th>{t('dashboard.vacationDays')}</th>
-                      <th>{t('dashboard.diseaseDays')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {workingHours.data?.map((wh, i) => (
-                      <tr key={`${wh.periodStart}-${i}`}>
-                        <td>
-                          {formatDate(wh.periodStart)} – {formatDate(wh.periodEnd)}
-                        </td>
-                        <td>{wh.totalHours}</td>
-                        <td>{wh.attendanceDays}</td>
-                        <td>{wh.vacationDays}</td>
-                        <td>{wh.diseaseDays}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </DataState>
-          </div>
-        </>
+          </DataState>
+        </div>
       )}
 
       {creating && workerId ? (
         <AttendanceForm workerId={workerId} onClose={() => setCreating(false)} />
       ) : null}
+      {editing ? (
+        <AttendanceForm
+          workerId={editing.workerId}
+          record={editing}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
     </div>
   );
 }
 
-function AttendanceForm({ workerId, onClose }: { workerId: string; onClose: () => void }) {
+function AttendanceForm({
+  workerId,
+  record,
+  onClose,
+}: {
+  workerId: string;
+  record?: AttendanceRecord;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const sites = useSitesList();
-  const [date, setDate] = useState(toDateInput(new Date().toISOString()));
-  const [type, setType] = useState<AttendanceType>(AttendanceType.ATTENDANCE);
-  const [hours, setHours] = useState(8);
-  const [siteId, setSiteId] = useState('');
-  const [notes, setNotes] = useState('');
+  const isEdit = Boolean(record);
+  const [date, setDate] = useState(
+    toDateInput(record?.date ?? new Date().toISOString()),
+  );
+  const [type, setType] = useState<AttendanceType>(record?.type ?? AttendanceType.ATTENDANCE);
+  const [hours, setHours] = useState(record?.hours ?? 8);
+  const [siteId, setSiteId] = useState(record?.siteId ?? '');
+  const [checkIn, setCheckIn] = useState(isoToTimeInput(record?.checkIn));
+  const [checkOut, setCheckOut] = useState(isoToTimeInput(record?.checkOut));
+  const [notes, setNotes] = useState(record?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
 
   const mut = useMutation({
     mutationFn: async () => {
+      const checkInISO = combineDateTimeToISO(date, checkIn);
+      const checkOutISO = combineDateTimeToISO(date, checkOut);
+      // Mirror the backend 400: check-out must be after check-in when both set.
+      if (checkInISO && checkOutISO && new Date(checkOutISO) <= new Date(checkInISO)) {
+        throw new Error(t('attendance.checkOutBeforeIn'));
+      }
       const body: CreateAttendanceInput = {
         workerId,
         siteId: siteId || null,
         date: dateInputToISO(date),
         type,
+        checkIn: checkInISO,
+        checkOut: checkOutISO,
         hours: type === AttendanceType.ATTENDANCE ? hours : null,
         notes: notes || null,
       };
+      if (record) {
+        const patch: UpdateAttendanceInput = { ...body };
+        delete (patch as { workerId?: string }).workerId;
+        return attendanceApi.update(record.id, patch);
+      }
       return attendanceApi.create(body);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['attendance'] });
       qc.invalidateQueries({ queryKey: ['working-hours'] });
-      // A new attendance/vacation/disease entry also moves the dashboard rollup.
+      // A new/edited attendance/vacation/disease entry also moves the dashboard rollup.
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       onClose();
     },
@@ -261,7 +274,7 @@ function AttendanceForm({ workerId, onClose }: { workerId: string; onClose: () =
 
   return (
     <Modal
-      title={t('attendance.record')}
+      title={isEdit ? t('common.edit') : t('attendance.record')}
       onClose={onClose}
       footer={
         <>
@@ -287,6 +300,26 @@ function AttendanceForm({ workerId, onClose }: { workerId: string; onClose: () =
           ))}
         </select>
       </Field>
+      <div className="form-row">
+        <Field label={t('attendance.checkIn')}>
+          <input
+            className="input"
+            type="time"
+            style={{ textAlign: 'start' }}
+            value={checkIn}
+            onChange={(e) => setCheckIn(e.target.value)}
+          />
+        </Field>
+        <Field label={t('attendance.checkOut')}>
+          <input
+            className="input"
+            type="time"
+            style={{ textAlign: 'start' }}
+            value={checkOut}
+            onChange={(e) => setCheckOut(e.target.value)}
+          />
+        </Field>
+      </div>
       {type === AttendanceType.ATTENDANCE ? (
         <Field label={t('attendance.hours')}>
           <input
@@ -298,7 +331,7 @@ function AttendanceForm({ workerId, onClose }: { workerId: string; onClose: () =
           />
         </Field>
       ) : null}
-      <Field label={t('nav.sites')}>
+      <Field label={t('attendance.site')}>
         <select className="select" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
           <option value="">{t('common.none')}</option>
           {sites.data?.items.map((s) => (

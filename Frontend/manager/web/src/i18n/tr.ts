@@ -307,6 +307,8 @@ export const tr: Resources = {
     splitRate: 'Ücret',
     splitAmount: 'Tutar',
     splitTotal: 'Toplam',
+    splitAutoOpened:
+      'Bu işçi dönem için 236 saati aşıyor — saat bölme ödemesi açıldı. Yeniden hesaplamak için bir taşeron ücreti girin.',
   },
   sites: {
     title: 'Şantiyeler',

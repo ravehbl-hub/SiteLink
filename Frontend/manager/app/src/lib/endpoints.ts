@@ -73,6 +73,12 @@ export interface SalaryCalcParams {
   siteId?: string;
   periodStart: string;
   periodEnd: string;
+  // HOURS-SPLIT (request-time only, never persisted). When splitEnabled the
+  // backend REQUIRES contractorRate (400 otherwise). Omit all three for the
+  // plain calc so it stays byte-for-byte identical to the pre-split behaviour.
+  splitEnabled?: boolean;
+  splitThreshold?: number;
+  contractorRate?: number;
 }
 
 export interface DocUploadRequest {

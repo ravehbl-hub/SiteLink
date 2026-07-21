@@ -3,8 +3,8 @@
  * period; the mode/rate are resolved server-side (never sent by the client). Renders
  * gross + itemized breakdown from SalaryResult.
  */
-import React, { useState } from 'react';
-import { Alert, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Switch, View } from 'react-native';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { SalaryResult, Worker, WorkingHours } from '@sitelink/shared';
@@ -17,6 +17,7 @@ import {
   Button,
   Card,
   EmptyState,
+  Field,
   Loading,
   Row,
   Screen,
@@ -25,6 +26,7 @@ import {
   StatusPill,
   Title,
 } from '../../components/ui';
+import { useTheme } from '../../theme/ThemeProvider';
 
 /** Semantic tone + i18n label per derived day type (reuses attendance semantics). */
 type DayType = 'ATTENDANCE' | 'VACATION' | 'DISEASE';
@@ -50,22 +52,52 @@ function dayType(wh: WorkingHours): DayType {
 
 export function SalaryScreen() {
   const { t } = useTranslation();
+  const { theme } = useTheme();
   const [workerId, setWorkerId] = useState<string | null>(null);
   const [result, setResult] = useState<SalaryResult | null>(null);
   /** Worker the current `result` was computed for — pins the working-hours query. */
   const [resultWorkerId, setResultWorkerId] = useState<string | null>(null);
   const range = React.useMemo(currentMonthRange, []);
 
+  // HOURS-SPLIT payment (default OFF → the calc/screen stay byte-for-byte the
+  // pre-split behaviour, no split params sent). When ON, threshold (default 236)
+  // + a REQUIRED contractor rate reveal. Strings so the fields can be blank.
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitThreshold, setSplitThreshold] = useState('236');
+  const [contractorRate, setContractorRate] = useState('');
+  // Guard: split ON but no contractor rate → backend would 400. Disable Calculate.
+  const contractorRateMissing = splitEnabled && contractorRate.trim() === '';
+  // Whether the split was just auto-opened (≥236 attendance) — shows a one-off hint.
+  const [autoOpened, setAutoOpened] = useState(false);
+  // Last worker+period the auto-open fired for, so it triggers once per crossing
+  // and never re-enables after the manager manually turns split back off.
+  const autoOpenedForRef = useRef<string | null>(null);
+
   const workersQ = useQuery({ queryKey: qk.workers(), queryFn: () => endpoints.listWorkers() });
 
   const calcMut = useMutation({
     mutationFn: () => {
       if (!workerId) throw new ApiError(0, 'NO_WORKER', 'Select a worker');
-      return endpoints.calculateSalary({
+      // Only attach split params when ENABLED; otherwise send the plain body so
+      // the calc stays identical to the pre-split behaviour. threshold falls back
+      // to the backend default (236) if left blank.
+      const body: Parameters<typeof endpoints.calculateSalary>[0] = {
         workerId,
         periodStart: range.from,
         periodEnd: range.to,
-      });
+      };
+      if (splitEnabled) {
+        body.splitEnabled = true;
+        const thr = Number(splitThreshold);
+        if (splitThreshold.trim() !== '' && Number.isFinite(thr)) {
+          body.splitThreshold = thr;
+        }
+        const cr = Number(contractorRate);
+        if (contractorRate.trim() !== '' && Number.isFinite(cr)) {
+          body.contractorRate = cr;
+        }
+      }
+      return endpoints.calculateSalary(body);
     },
     onSuccess: (r) => {
       setResult(r);
@@ -97,6 +129,45 @@ export function SalaryScreen() {
     () => whDays.reduce((sum, d) => sum + (d.totalHours ?? 0), 0),
     [whDays],
   );
+  // ATTENDANCE-only hours (vacation/disease excluded) — the figure the split
+  // threshold is measured against. Drives the ≥236 auto-open below.
+  const attendanceHours = React.useMemo(
+    () =>
+      whDays.reduce(
+        (sum, d) => sum + (dayType(d) === 'ATTENDANCE' ? d.totalHours ?? 0 : 0),
+        0,
+      ),
+    [whDays],
+  );
+
+  // AUTO-OPEN (Option A): once the working-hours have loaded for the freshly
+  // computed worker+period, if ATTENDANCE hours strictly exceed 236 and split
+  // is not already on, auto-enable it and pre-fill the threshold to 236 (the
+  // contractor rate stays blank — the manager types it; the disabled-Calculate
+  // guard keeps it honest). Fires ONCE per worker+period crossing (tracked in a
+  // ref) so it never re-enables after the manager manually turns split back off.
+  useEffect(() => {
+    if (!result || !resultWorkerId || whQ.isLoading || whDays.length === 0) return;
+    const crossingKey = `${resultWorkerId}:${range.from}:${range.to}`;
+    if (autoOpenedForRef.current === crossingKey) return;
+    if (attendanceHours > 236) {
+      autoOpenedForRef.current = crossingKey;
+      if (!splitEnabled) {
+        setSplitEnabled(true);
+        setSplitThreshold('236');
+        setAutoOpened(true);
+      }
+    }
+  }, [
+    result,
+    resultWorkerId,
+    whQ.isLoading,
+    whDays.length,
+    attendanceHours,
+    splitEnabled,
+    range.from,
+    range.to,
+  ]);
 
   /** Per-day line total = hours × hourlyWage for ATTENDANCE only (vacation/disease → 0). */
   const rate = result?.hourlyWage ?? 0;
@@ -130,11 +201,61 @@ export function SalaryScreen() {
       <Card>
         <SectionHeading>{t('salary.selectWorker')}</SectionHeading>
         <Segmented options={workerOptions} value={workerId} onChange={(v) => setWorkerId(v)} />
+
+        {/* HOURS-SPLIT controls: a toggle (default OFF) that reveals a threshold
+            (default 236) + a REQUIRED contractor rate, side-by-side on one row.
+            RTL-safe: logical layout + textAlign:'auto' inherited from Field. */}
+        <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
+          <Body muted>{t('salary.splitToggle')}</Body>
+          <Switch
+            value={splitEnabled}
+            onValueChange={(v) => {
+              setSplitEnabled(v);
+              // Manual toggle clears the auto-open hint; turning it off here also
+              // stops the effect re-enabling it (crossingKey already recorded).
+              if (!v) setAutoOpened(false);
+            }}
+            trackColor={{ true: theme.colors.accent, false: theme.colors.border }}
+            thumbColor={theme.colors.surface}
+          />
+        </Row>
+
+        {splitEnabled ? (
+          <>
+            {autoOpened ? (
+              <Body muted>{t('salary.splitAutoOpened')}</Body>
+            ) : null}
+            <Row style={{ alignItems: 'flex-start' }}>
+              <View style={{ flex: 1, marginEnd: 8 }}>
+                <Field
+                  label={t('salary.splitThreshold')}
+                  value={splitThreshold}
+                  onChangeText={setSplitThreshold}
+                  keyboardType="numeric"
+                  inputMode="numeric"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Field
+                  label={t('salary.splitContractorRate')}
+                  value={contractorRate}
+                  onChangeText={setContractorRate}
+                  keyboardType="decimal-pad"
+                  inputMode="decimal"
+                />
+                {contractorRateMissing ? (
+                  <Body muted>{t('salary.splitContractorRateRequired')}</Body>
+                ) : null}
+              </View>
+            </Row>
+          </>
+        ) : null}
+
         <Button
           title={t('salary.calculate')}
           onPress={() => calcMut.mutate()}
           loading={calcMut.isPending}
-          disabled={!workerId}
+          disabled={!workerId || contractorRateMissing}
         />
       </Card>
 
@@ -151,6 +272,83 @@ export function SalaryScreen() {
               <Body tabular>{money(line.amount, result.currency)}</Body>
             </Row>
           ))}
+
+          {/* HOURS-SPLIT breakdown: rendered only when the calc ran with split
+              enabled (result.split?.enabled). Personnel line (hours × personnel
+              rate) + Contractor line + the combined total, which equals gross.
+              Columns: label | hours | rate | amount, figures aligned to the end. */}
+          {result.split?.enabled ? (
+            <View style={{ marginTop: 8 }}>
+              <SectionHeading>{t('salary.splitTitle')}</SectionHeading>
+
+              {/* Column header: label | HOURS | RATE | AMOUNT */}
+              <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
+                <View style={{ flex: 1 }} />
+                <View style={{ width: 48, alignItems: 'flex-end' }}>
+                  <Body muted tabular>{t('salary.splitHours')}</Body>
+                </View>
+                <View style={{ width: 72, alignItems: 'flex-end' }}>
+                  <Body muted tabular>{t('salary.splitRate')}</Body>
+                </View>
+                <View style={{ width: 84, alignItems: 'flex-end' }}>
+                  <Body muted tabular>{t('salary.splitAmount')}</Body>
+                </View>
+              </Row>
+
+              {/* Personnel portion — min(hours, threshold) × personnel rate. */}
+              <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
+                <View style={{ flex: 1 }}>
+                  <Body>{t('salary.splitPersonnel')}</Body>
+                </View>
+                <View style={{ width: 48, alignItems: 'flex-end' }}>
+                  <Body tabular>{result.split.personnelHours}</Body>
+                </View>
+                <View style={{ width: 72, alignItems: 'flex-end' }}>
+                  <Body tabular>{money(result.split.personnelRate, result.currency)}</Body>
+                </View>
+                <View style={{ width: 84, alignItems: 'flex-end' }}>
+                  <Body tabular>{money(result.split.personnelAmount, result.currency)}</Body>
+                </View>
+              </Row>
+
+              {/* Contractor portion — max(0, hours − threshold) × contractor rate. */}
+              <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
+                <View style={{ flex: 1 }}>
+                  <Body>{t('salary.splitContractor')}</Body>
+                </View>
+                <View style={{ width: 48, alignItems: 'flex-end' }}>
+                  <Body tabular>{result.split.contractorHours}</Body>
+                </View>
+                <View style={{ width: 72, alignItems: 'flex-end' }}>
+                  <Body tabular>{money(result.split.contractorRate, result.currency)}</Body>
+                </View>
+                <View style={{ width: 84, alignItems: 'flex-end' }}>
+                  <Body tabular>{money(result.split.contractorAmount, result.currency)}</Body>
+                </View>
+              </Row>
+
+              {/* Total — combined hours + amount; amount equals result.gross. */}
+              <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
+                <View style={{ flex: 1 }}>
+                  <SectionHeading>{t('salary.splitTotal')}</SectionHeading>
+                </View>
+                <View style={{ width: 48, alignItems: 'flex-end' }}>
+                  <Body tabular>
+                    {result.split.personnelHours + result.split.contractorHours}
+                  </Body>
+                </View>
+                <View style={{ width: 72 }} />
+                <View style={{ width: 84, alignItems: 'flex-end' }}>
+                  <Body tabular>
+                    {money(
+                      result.split.personnelAmount + result.split.contractorAmount,
+                      result.currency,
+                    )}
+                  </Body>
+                </View>
+              </Row>
+            </View>
+          ) : null}
         </Card>
       ) : (
         <EmptyState label={t('salary.noResult')} />

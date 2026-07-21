@@ -307,6 +307,8 @@ export const he: Resources = {
     splitRate: 'תעריף',
     splitAmount: 'סכום',
     splitTotal: 'סה"כ',
+    splitAutoOpened:
+      'עובד זה חורג מ-236 שעות לתקופה — תשלום פיצול שעות נפתח. הזן תעריף קבלן כדי לחשב מחדש.',
   },
   sites: {
     title: 'אתרים',

@@ -19,6 +19,34 @@ function whType(wh: WorkingHours): 'ATTENDANCE' | 'VACATION' | 'DISEASE' {
   return 'ATTENDANCE';
 }
 
+/** The split threshold (in hours) the backend applies to ATTENDANCE hours.
+ *  Kept as a module constant so the auto-open comparison is a fixed 236 even if
+ *  the manager later edits the (informational) threshold input. */
+export const SPLIT_THRESHOLD_DEFAULT = 236;
+
+/** PURE — sum of ATTENDANCE-only hours for a period. Mirrors the
+ *  `whType(wh) === 'ATTENDANCE'` filter used by `whTotals.money`, since that is
+ *  exactly the bucket the backend splits at 236 (vacation/disease excluded).
+ *  Exported for unit tests. */
+export function attendanceHours(rows: WorkingHours[]): number {
+  return rows.reduce(
+    (sum, row) => sum + (whType(row) === 'ATTENDANCE' ? row.totalHours : 0),
+    0,
+  );
+}
+
+/** PURE — should the split controls auto-open? True only when the worker's
+ *  ATTENDANCE hours STRICTLY exceed the threshold AND split is not already on
+ *  (so we never fight a manager who has it on/off deliberately). Exported for
+ *  unit tests. */
+export function shouldAutoOpenSplit(
+  attendanceHoursTotal: number,
+  threshold: number,
+  splitAlreadyEnabled: boolean,
+): boolean {
+  return attendanceHoursTotal > threshold && !splitAlreadyEnabled;
+}
+
 export function SalaryScreen() {
   const { t } = useTranslation();
   const workers = useWorkersList();
@@ -49,6 +77,13 @@ export function SalaryScreen() {
   // once split is enabled. Surfaced as an inline hint under the input.
   const contractorRateMissing =
     splitEnabled && contractorRate.trim() === '';
+  // AUTO-OPEN (Option A): when a just-computed worker/period exceeds 236 ATTENDANCE
+  // hours we auto-enable the split controls once and show a one-time hint. The ref
+  // records the last worker+period the auto-open fired for, so it fires ONCE per
+  // crossing and never re-enables split on the same loaded data if the manager
+  // manually turns it back OFF.
+  const [splitAutoOpened, setSplitAutoOpened] = useState(false);
+  const autoOpenedForRef = useRef<string | null>(null);
 
   // Share flow: menu (channel picker) → confirm dialog → send.
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
@@ -225,6 +260,35 @@ export function SalaryScreen() {
     [whRows, hourlyWage],
   );
 
+  // AUTO-OPEN split when the computed worker/period exceeds 236 ATTENDANCE hours.
+  // Runs only AFTER the working-hours data has LOADED for the pinned result — the
+  // hours total is unavailable pre-calc, and gating on load keeps the under-236
+  // flat path byte-for-byte identical (no state churn there). The ref keys the
+  // firing to the exact worker+period so it fires once per crossing and does not
+  // re-enable if the manager toggles split back OFF on the same data.
+  useEffect(() => {
+    // Need a pinned result whose working-hours have finished loading.
+    if (!result || !resultWorkerId || !resultPeriod) return;
+    if (workingHours.isLoading || !workingHours.data) return;
+    const identity = `${resultWorkerId}|${resultPeriod.from}|${resultPeriod.to}`;
+    if (autoOpenedForRef.current === identity) return; // already handled this crossing
+    if (!shouldAutoOpenSplit(attendanceHours(whRows), SPLIT_THRESHOLD_DEFAULT, splitEnabled)) {
+      return;
+    }
+    autoOpenedForRef.current = identity;
+    setSplitEnabled(true);
+    setSplitThreshold(String(SPLIT_THRESHOLD_DEFAULT)); // pre-fill (contractor rate NOT filled)
+    setSplitAutoOpened(true);
+  }, [
+    result,
+    resultWorkerId,
+    resultPeriod,
+    workingHours.isLoading,
+    workingHours.data,
+    whRows,
+    splitEnabled,
+  ]);
+
   // Reconciliation: for a flat hourly calc sum(line totals) === gross; for a
   // fixed monthly salary the rate is informational and won't sum to gross.
   // Detect purely by the AMOUNT MATCH — NOT result.mode: FlatSalaryStrategy stamps
@@ -366,7 +430,10 @@ export function SalaryScreen() {
                   onChange={(e) => setSplitThreshold(e.target.value)}
                 />
               </div>
-              <div className="field" style={{ maxWidth: 180 }}>
+              {/* position:relative + an absolutely-positioned hint so the
+                  validation copy never grows the field and wraps the row.
+                  Logical props keep it RTL-safe (insetInlineStart/End: 0). */}
+              <div className="field" style={{ maxWidth: 180, position: 'relative' }}>
                 <label>{t('salary.splitContractorRate')}</label>
                 <input
                   className="input"
@@ -387,6 +454,10 @@ export function SalaryScreen() {
                     id="split-contractor-rate-hint"
                     className="muted"
                     style={{
+                      position: 'absolute',
+                      insetBlockStart: '100%',
+                      insetInlineStart: 0,
+                      insetInlineEnd: 0,
                       color: 'var(--sl-color-danger)',
                       fontSize: 'var(--sl-font-size-sm, 0.85em)',
                       marginBlockStart: 'var(--sl-space-1)',
@@ -399,6 +470,22 @@ export function SalaryScreen() {
             </>
           ) : null}
         </div>
+
+        {/* Auto-open hint (Option A): shown once when split was auto-enabled
+            because the worker exceeded 236 ATTENDANCE hours. Muted-hint idiom,
+            RTL-safe logical spacing. */}
+        {splitEnabled && splitAutoOpened ? (
+          <p
+            className="muted"
+            style={{
+              fontSize: 'var(--sl-font-size-sm, 0.85em)',
+              marginBlockStart: 'var(--sl-space-2)',
+              marginBlockEnd: 0,
+            }}
+          >
+            {t('salary.splitAutoOpened')}
+          </p>
+        ) : null}
       </div>
 
       {error ? <div className="banner banner-danger">{error}</div> : null}

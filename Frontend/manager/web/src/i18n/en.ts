@@ -305,6 +305,8 @@ export const en = {
     splitRate: 'Rate',
     splitAmount: 'Amount',
     splitTotal: 'Total',
+    splitAutoOpened:
+      'This worker exceeds 236h for the period — hours-split payment opened. Enter a contractor rate to recalculate.',
   },
   sites: {
     title: 'Sites',

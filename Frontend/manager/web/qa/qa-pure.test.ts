@@ -67,3 +67,56 @@ describe('date helpers', () => {
     expect(next.getUTCDate()).toBe(1);
   });
 });
+
+/* ── Salary hours-split auto-open (features/salary/SalaryScreen.tsx) ───────────
+ * Replicated here (not imported) because SalaryScreen.tsx pulls react / i18next /
+ * react-query at module scope. These MUST stay in lockstep with the real exported
+ * helpers `attendanceHours` and `shouldAutoOpenSplit` (and `SPLIT_THRESHOLD_DEFAULT`).
+ * whType mirrors the exclusive DAY-bucket classification in the screen. */
+const SPLIT_THRESHOLD_DEFAULT = 236;
+interface WHRow { totalHours: number; vacationDays: number; diseaseDays: number }
+function whType(wh: WHRow): 'ATTENDANCE' | 'VACATION' | 'DISEASE' {
+  if (wh.vacationDays >= 1) return 'VACATION';
+  if (wh.diseaseDays >= 1) return 'DISEASE';
+  return 'ATTENDANCE';
+}
+function attendanceHours(rows: WHRow[]): number {
+  return rows.reduce(
+    (sum, row) => sum + (whType(row) === 'ATTENDANCE' ? row.totalHours : 0),
+    0,
+  );
+}
+function shouldAutoOpenSplit(
+  attendanceHoursTotal: number,
+  threshold: number,
+  splitAlreadyEnabled: boolean,
+): boolean {
+  return attendanceHoursTotal > threshold && !splitAlreadyEnabled;
+}
+const att = (h: number): WHRow => ({ totalHours: h, vacationDays: 0, diseaseDays: 0 });
+const vac = (h: number): WHRow => ({ totalHours: h, vacationDays: 1, diseaseDays: 0 });
+const sick = (h: number): WHRow => ({ totalHours: h, vacationDays: 0, diseaseDays: 1 });
+
+describe('salary split auto-open logic', () => {
+  it('250h ATTENDANCE > 236 with split off → auto-opens', () => {
+    const hrs = attendanceHours([att(250)]);
+    expect(hrs).toBe(250);
+    expect(shouldAutoOpenSplit(hrs, SPLIT_THRESHOLD_DEFAULT, false)).toBe(true);
+  });
+  it('exactly 236h → does NOT auto-open (strictly greater)', () => {
+    expect(shouldAutoOpenSplit(236, SPLIT_THRESHOLD_DEFAULT, false)).toBe(false);
+  });
+  it('236h + already-enabled → does NOT auto-open', () => {
+    expect(shouldAutoOpenSplit(236, SPLIT_THRESHOLD_DEFAULT, true)).toBe(false);
+    // even 250 with split already on stays false (never fights the manager)
+    expect(shouldAutoOpenSplit(250, SPLIT_THRESHOLD_DEFAULT, true)).toBe(false);
+  });
+  it('excludes vacation/disease from the attendance sum', () => {
+    // 200 attendance + 100 vacation → 200 (not 300) → no auto-open
+    const hrs = attendanceHours([att(200), vac(100)]);
+    expect(hrs).toBe(200);
+    expect(shouldAutoOpenSplit(hrs, SPLIT_THRESHOLD_DEFAULT, false)).toBe(false);
+    // disease also excluded
+    expect(attendanceHours([att(100), sick(150)])).toBe(100);
+  });
+});

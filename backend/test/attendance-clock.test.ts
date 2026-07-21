@@ -16,11 +16,17 @@ const findUnique = vi.fn();
 const create = vi.fn();
 const update = vi.fn();
 const workerFindUnique = vi.fn(async () => ({ companyId: 'companyA' }));
+// Site company for the tenancy guard on a supplied siteId (assertSiteInCompany).
+// Default: the site is in companyA (same as the record) → passes.
+const siteFindUnique = vi.fn(async () => ({ companyId: 'companyA' }));
 
 vi.mock('../src/db/client.js', () => ({
   prisma: {
     worker: {
       findUnique: (...a: unknown[]) => workerFindUnique(...a),
+    },
+    site: {
+      findUnique: (...a: unknown[]) => siteFindUnique(...a),
     },
     attendanceRecord: {
       findUnique: (...a: unknown[]) => findUnique(...a),
@@ -67,6 +73,8 @@ beforeEach(() => {
   create.mockReset();
   update.mockReset();
   workerFindUnique.mockClear();
+  siteFindUnique.mockClear();
+  siteFindUnique.mockResolvedValue({ companyId: 'companyA' });
 });
 
 describe('AttendanceService.create — clock IN/OUT + site', () => {
@@ -143,6 +151,24 @@ describe('AttendanceService.create — clock IN/OUT + site', () => {
         managerA,
       ),
     ).rejects.toMatchObject({ statusCode: 400 });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('TENANCY: a MANAGER supplying a CROSS-COMPANY siteId → 404, no create', async () => {
+    findUnique.mockResolvedValueOnce(null); // no existing record
+    siteFindUnique.mockResolvedValueOnce({ companyId: 'companyB' }); // site in ANOTHER company
+    await expect(
+      service.create(
+        {
+          workerId: 'w1', // worker is companyA
+          siteId: 's-companyB', // crafted cross-tenant site
+          date: '2026-07-12T00:00:00.000Z',
+          type: AttendanceType.ATTENDANCE,
+          hours: 8,
+        } as never,
+        managerA,
+      ),
+    ).rejects.toMatchObject({ statusCode: 404 });
     expect(create).not.toHaveBeenCalled();
   });
 });

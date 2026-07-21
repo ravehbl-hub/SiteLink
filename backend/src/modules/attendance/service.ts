@@ -113,6 +113,22 @@ export class AttendanceService {
   }
 
   /**
+   * TENANCY guard: a supplied `siteId` on an attendance write must belong to the SAME
+   * company as the record (the worker's company). Prevents a manager crafting a
+   * cross-tenant site FK in the request body. Cross-company or nonexistent site → 404
+   * (never confirm another tenant's site existence).
+   */
+  private async assertSiteInCompany(siteId: string, companyId: string): Promise<void> {
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: { companyId: true },
+    });
+    if (!site || site.companyId !== companyId) {
+      throw AppError.notFound('Site not found');
+    }
+  }
+
+  /**
    * List attendance. When `caller` is a FOREMAN the result is HARD-scoped to workers
    * on their site(s) via a `worker.assignments` filter — regardless of any client
    * ?workerId / ?siteId, which cannot widen the scope (a cross-site workerId simply
@@ -170,6 +186,11 @@ export class AttendanceService {
     if (caller && isForeman(caller)) {
       await assertWorkerInScope(caller, input.workerId);
       siteId = await forceForemanSite(caller, input.siteId);
+    } else if (siteId != null) {
+      // TENANCY: a non-foreman (MANAGER) may only attach a site in the SAME company as
+      // the record — never a cross-tenant site FK. Assert the supplied site's company
+      // matches the record's (worker's) company; cross-company siteId → 404.
+      await this.assertSiteInCompany(siteId, companyId);
     }
     // Clock IN/OUT (optional, nullable). Presence/display only — manual `hours` stays the
     // source of truth for pay. Light guard: if BOTH provided, checkOut must be after checkIn.
@@ -218,6 +239,10 @@ export class AttendanceService {
       if (input.siteId !== undefined) {
         siteIdPatch = { siteId: await forceForemanSite(caller, input.siteId) };
       }
+    } else if (input.siteId != null) {
+      // TENANCY: a non-foreman (MANAGER) may only re-point the record to a site in the
+      // SAME company as the record — never a cross-tenant site FK. 404 on mismatch.
+      await this.assertSiteInCompany(input.siteId, current.companyId);
     }
     // Clock IN/OUT patch (partial, nullable). Light guard: reject when the EFFECTIVE
     // (post-patch) pair has checkOut before checkIn. `undefined` = leave as-is.

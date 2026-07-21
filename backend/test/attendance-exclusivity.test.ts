@@ -16,10 +16,18 @@ const create = vi.fn();
 // 404 a cross-company worker). With no caller (as here) the company scope is unscoped,
 // so the worker only needs to resolve with a companyId for the stamp.
 const workerFindUnique = vi.fn(async () => ({ companyId: 'cl000000000000000000default' }));
+// Site company for the tenancy guard on a supplied siteId (assertSiteInCompany) — the
+// site resolves in the same default company so any siteId in these tests passes. (Also
+// keeps this file's prisma mock consistent with attendance-clock's when they share the
+// hoisted mock of ../src/db/client.js in one vitest worker.)
+const siteFindUnique = vi.fn(async () => ({ companyId: 'cl000000000000000000default' }));
 vi.mock('../src/db/client.js', () => ({
   prisma: {
     worker: {
       findUnique: (...a: unknown[]) => workerFindUnique(...a),
+    },
+    site: {
+      findUnique: (...a: unknown[]) => siteFindUnique(...a),
     },
     attendanceRecord: {
       findUnique: (...a: unknown[]) => findUnique(...a),

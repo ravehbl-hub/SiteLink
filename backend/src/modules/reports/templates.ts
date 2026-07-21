@@ -81,16 +81,24 @@ export function PayslipDocument(props: {
   hours?: WorkingHours[];
   /** Resolved hourly rate (result.hourlyWage). */
   hourlyWage?: number;
+  /**
+   * HOURS-ONLY toggle (default false). false → OMIT all money (breakdown lines,
+   * hours-table price/line-total columns, Gross, Deductions, Net). true → full.
+   */
+  includePrices?: boolean;
 }): React.ReactElement<DocumentProps> {
   const { meta, workerName, result, warnings, hours, hourlyWage } = props;
+  const includePrices = props.includePrices ?? false;
   const rate = hourlyWage ?? result.hourlyWage;
-  const lines = result.breakdown.map((l, i) =>
-    e(View, { key: `l${i}`, style: styles.row }, [
-      e(Text, { key: 'lbl' }, l.label),
-      e(Text, { key: 'amt' }, `${l.amount.toFixed(2)} ${result.currency}`),
-    ]),
-  );
-  const hoursSection = hoursBreakdown(hours ?? [], rate, result.currency);
+  const lines = includePrices
+    ? result.breakdown.map((l, i) =>
+        e(View, { key: `l${i}`, style: styles.row }, [
+          e(Text, { key: 'lbl' }, l.label),
+          e(Text, { key: 'amt' }, `${l.amount.toFixed(2)} ${result.currency}`),
+        ]),
+      )
+    : [];
+  const hoursSection = hoursBreakdown(hours ?? [], rate, result.currency, includePrices);
   return e(
     Document,
     {},
@@ -98,13 +106,18 @@ export function PayslipDocument(props: {
       header(meta),
       e(Text, { key: 'w', style: styles.bold }, `Worker: ${workerName}`),
       e(Text, { key: 'mode', style: styles.meta }, `Mode: ${result.mode}  ·  Engine: ${result.engineVersion}`),
-      e(View, { key: 'lines' }, lines),
+      ...(includePrices ? [e(View, { key: 'lines' }, lines)] : []),
       ...(hoursSection ? [hoursSection] : []),
-      e(View, { key: 'g', style: styles.total }, [
-        e(Text, { key: 'gl', style: styles.bold }, 'Gross'),
-        e(Text, { key: 'gv', style: styles.bold }, `${result.gross.toFixed(2)} ${result.currency}`),
-      ]),
-      ...deductionsBlock(result),
+      // Gross / Deductions / Net only when prices are included (HOURS-ONLY = none).
+      ...(includePrices
+        ? [
+            e(View, { key: 'g', style: styles.total }, [
+              e(Text, { key: 'gl', style: styles.bold }, 'Gross'),
+              e(Text, { key: 'gv', style: styles.bold }, `${result.gross.toFixed(2)} ${result.currency}`),
+            ]),
+            ...deductionsBlock(result),
+          ]
+        : []),
       ...warnings.map((w, i) => e(Text, { key: `warn${i}`, style: styles.warn }, `⚠ ${w}`)),
     ]),
   );
@@ -112,15 +125,17 @@ export function PayslipDocument(props: {
 
 /**
  * Working-hours breakdown block for the react-pdf payslip fallback (parity with
- * the HTML/CloudConvert template). Per-DAY rows DATE | HOURS | TYPE | HOURLY
- * PRICE | LINE TOTAL + a TOTAL row; LINE TOTAL = totalHours × rate for
- * ATTENDANCE, '—' otherwise. Kept minimal (English labels; the RTL-critical
- * Hebrew rendering path is CloudConvert/HTML, which is active).
+ * the HTML/CloudConvert template). When `includePrices` is true: per-DAY rows
+ * DATE | HOURS | TYPE | HOURLY PRICE | LINE TOTAL + a money TOTAL row (LINE TOTAL
+ * = totalHours × rate for ATTENDANCE, '—' otherwise). When false (DEFAULT,
+ * HOURS-ONLY): rows DATE | HOURS | TYPE and a total-hours-only row — no money.
+ * Kept minimal (English labels; the RTL-critical Hebrew path is CloudConvert/HTML).
  */
 function hoursBreakdown(
   hours: WorkingHours[],
   rate: number,
   currency: string,
+  includePrices: boolean,
 ): React.ReactElement | null {
   if (!hours.length) return null;
   const sorted = [...hours].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
@@ -140,8 +155,12 @@ function hoursBreakdown(
       e(Text, { key: 'd' }, r.periodStart),
       e(Text, { key: 'h' }, isAttendance ? rowHours.toFixed(1) : '—'),
       e(Text, { key: 't' }, type),
-      e(Text, { key: 'p' }, isAttendance ? money(rate) : '—'),
-      e(Text, { key: 'lt' }, isAttendance ? money(lineTotal) : '—'),
+      ...(includePrices
+        ? [
+            e(Text, { key: 'p' }, isAttendance ? money(rate) : '—'),
+            e(Text, { key: 'lt' }, isAttendance ? money(lineTotal) : '—'),
+          ]
+        : []),
     ]);
   });
   return e(View, { key: 'hoursSection' }, [
@@ -149,7 +168,7 @@ function hoursBreakdown(
     ...rows,
     e(View, { key: 'htot', style: styles.total }, [
       e(Text, { key: 'l', style: styles.bold }, `Total  ${totalHours.toFixed(1)}h`),
-      e(Text, { key: 'v', style: styles.bold }, money(totalMoney)),
+      ...(includePrices ? [e(Text, { key: 'v', style: styles.bold }, money(totalMoney))] : []),
     ]),
   ]);
 }

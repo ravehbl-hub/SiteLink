@@ -15,6 +15,7 @@
  *     run with the prescribed `node --import tsx --env-file=.env vitest run`.
  */
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { loadConfig } from '../src/config.js';
 import { CloudConvertService } from '../src/lib/cloudconvert.js';
 import {
@@ -50,6 +51,7 @@ describe('reports HTML templates (CloudConvert path, key-independent)', () => {
         warnings: ['rounded'],
       } as never,
       warnings: ['rounded'],
+      includePrices: true,
     });
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('Payslip'); // title (FR-X-PDF-3)
@@ -117,6 +119,7 @@ describe('reports HTML templates (CloudConvert path, key-independent)', () => {
       warnings: [],
       hours: hours as never,
       hourlyWage: 50,
+      includePrices: true,
     });
 
     // RTL shell wraps the whole thing (Hebrew).
@@ -152,6 +155,7 @@ describe('reports HTML templates (CloudConvert path, key-independent)', () => {
       warnings: [],
       hours: hours as never,
       hourlyWage: 50,
+      includePrices: true,
     });
     expect(html).toContain('Working hours details');
     expect(html).toContain('Vacation'); // vacation TYPE label
@@ -178,6 +182,7 @@ describe('reports HTML templates (CloudConvert path, key-independent)', () => {
         warnings: [],
       } as never,
       warnings: [],
+      includePrices: true,
     });
     // Deductions heading (Hebrew) + loans/advances shown as negatives.
     expect(html).toContain('ניכויים'); // Deductions
@@ -211,6 +216,7 @@ describe('reports HTML templates (CloudConvert path, key-independent)', () => {
         warnings: [],
       } as never,
       warnings: [],
+      includePrices: true,
     });
     expect(html).toContain('Deductions');
     expect(html).toContain('-500.00 ILS'); // loans
@@ -227,9 +233,108 @@ describe('reports HTML templates (CloudConvert path, key-independent)', () => {
         breakdown: [{ label: 'Base', amount: 800 }], hourlyWage: 50, warnings: [],
       } as never,
       warnings: [],
+      includePrices: true,
     });
     expect(html).not.toContain('Deductions');
     expect(html).toContain('800.00 ILS'); // gross still authoritative
+  });
+
+  // ── includePrices toggle ───────────────────────────────────────────────────
+  // Shared fixture: 12 attendance days × 9h = 108h at rate 50 → gross 5400.
+  const priceHours = Array.from({ length: 12 }, (_, i) => ({
+    workerId: 'w1',
+    grain: 'DAY' as const,
+    periodStart: `2026-05-${String(i + 1).padStart(2, '0')}`,
+    periodEnd: `2026-05-${String(i + 1).padStart(2, '0')}`,
+    totalHours: 9,
+    attendanceDays: 1,
+    vacationDays: 0,
+    diseaseDays: 0,
+  }));
+  const priceResult = {
+    gross: 5400,
+    currency: 'ILS',
+    mode: 'israeli-labor-law',
+    engineVersion: 'v1',
+    breakdown: [{ label: 'Base', amount: 5400 }],
+    hourlyWage: 50,
+    loansTotal: 500,
+    advancesTotal: 300,
+    net: 4600,
+    warnings: [],
+  } as never;
+
+  it('includePrices=false (DEFAULT) → HOURS-ONLY: date/hours/type + total hours, NO money anywhere (he/RTL)', () => {
+    const html = payslipHtml({
+      meta: rtlMeta, // he / RTL — the quality bar
+      workerName: 'Dimitar',
+      result: priceResult,
+      warnings: [],
+      hours: priceHours as never,
+      hourlyWage: 50,
+      // includePrices omitted → default false (hours-only)
+    });
+    // RTL shell + hours section present.
+    expect(html).toContain('lang="he" dir="rtl"');
+    expect(html).toContain('פירוט שעות עבודה'); // Working hours details (he)
+    // 3-col HOURS-ONLY: date | hours | type + total HOURS row.
+    expect(html).toContain('2026-05-01');
+    expect(html).toContain('2026-05-12');
+    expect(html).toContain('נוכחות'); // Attendance TYPE label
+    expect(html).toContain('108.0'); // total hours row
+    // NO money: hourly price header, line total header, gross, deductions, net.
+    expect(html).not.toContain('מחיר לשעה'); // Hourly price header
+    expect(html).not.toContain('סה&quot;כ שורה'); // Line total header (HTML-escaped quote)
+    expect(html).not.toContain('50.00 ILS'); // hourly price value
+    expect(html).not.toContain('450.00 ILS'); // per-line total value
+    expect(html).not.toContain('5400.00 ILS'); // gross / money total value
+    expect(html).not.toContain('ברוטו'); // Gross label
+    expect(html).not.toContain('ניכויים'); // Deductions
+    expect(html).not.toContain('הלוואות'); // Loans
+    expect(html).not.toContain('מקדמות'); // Advances
+    expect(html).not.toContain('נטו'); // Net
+    expect(html).not.toContain('4600.00 ILS'); // net value
+    // No reconcile note either (no money claim in hours-only).
+    expect(html).not.toContain('סכום השורות תואם לשכר ברוטו');
+  });
+
+  it('includePrices=true → FULL payslip: hourly price, line totals, gross, deductions, net (he/RTL)', () => {
+    const html = payslipHtml({
+      meta: rtlMeta,
+      workerName: 'Dimitar',
+      result: priceResult,
+      warnings: [],
+      hours: priceHours as never,
+      hourlyWage: 50,
+      includePrices: true,
+    });
+    expect(html).toContain('מחיר לשעה'); // Hourly price header present
+    expect(html).toContain('סה&quot;כ שורה'); // Line total header present (HTML-escaped quote)
+    expect(html).toContain('50.00 ILS'); // hourly price
+    expect(html).toContain('450.00 ILS'); // per-line total (9×50)
+    expect(html).toContain('5400.00 ILS'); // gross / money total
+    expect(html).toContain('ברוטו'); // Gross label
+    expect(html).toContain('ניכויים'); // Deductions
+    expect(html).toContain('-500.00 ILS'); // loans
+    expect(html).toContain('-300.00 ILS'); // advances
+    expect(html).toContain('נטו'); // Net
+    expect(html).toContain('4600.00 ILS'); // net
+    expect(html).toContain('סכום השורות תואם לשכר ברוטו'); // reconcile note
+  });
+
+  it('includePrices boolean coercion: ?includePrices=false → false (hours-only); =true → full', () => {
+    // Mirrors the route schema's robust boolean preprocess (GET query strings).
+    const flag = z
+      .preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean())
+      .default(false);
+    // Absent → default false.
+    expect(flag.parse(undefined)).toBe(false);
+    // The bug-class this guards: the STRING 'false' must NOT be truthy.
+    expect(flag.parse('false')).toBe(false);
+    expect(flag.parse('true')).toBe(true);
+    // Real booleans pass through (JSON body).
+    expect(flag.parse(false)).toBe(false);
+    expect(flag.parse(true)).toBe(true);
   });
 
   it('profit-loss + working-hours producers render their totals', () => {
@@ -267,6 +372,28 @@ describe.skipIf(!HAS_KEY)('CloudConvert live HTML→PDF (requires CLOUDCONVERT_A
       warnings: [],
     });
     const pdf = await svc.htmlToPdf(html, { filename: 'payslip' });
+    expect(Buffer.isBuffer(pdf)).toBe(true);
+    expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(pdf.length).toBeGreaterThan(500);
+  }, 90_000);
+
+  it('converts the HOURS-ONLY (includePrices=false) payslip variant to real %PDF- bytes', async () => {
+    const svc = new CloudConvertService(loadConfig().CLOUDCONVERT_API_KEY!);
+    const hours = Array.from({ length: 5 }, (_, i) => ({
+      workerId: 'w1', grain: 'DAY' as const,
+      periodStart: `2026-05-0${i + 1}`, periodEnd: `2026-05-0${i + 1}`,
+      totalHours: 8, attendanceDays: 1, vacationDays: 0, diseaseDays: 0,
+    }));
+    const html = payslipHtml({
+      meta: rtlMeta, // he/RTL hours-only — the RTL 3-col layout
+      workerName: 'Dimitar',
+      result: { gross: 2000, currency: 'ILS', mode: 'fixed', engineVersion: 'v1', breakdown: [{ label: 'Base', amount: 2000 }], hourlyWage: 50, warnings: [] } as never,
+      warnings: [],
+      hours: hours as never,
+      hourlyWage: 50,
+      // includePrices omitted → hours-only
+    });
+    const pdf = await svc.htmlToPdf(html, { filename: 'payslip-hours-only' });
     expect(Buffer.isBuffer(pdf)).toBe(true);
     expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(pdf.length).toBeGreaterThan(500);

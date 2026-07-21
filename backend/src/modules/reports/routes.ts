@@ -34,6 +34,13 @@ const payslipQuery = z.object({
   to: z.string().datetime(),
   // Hebrew renders RTL; en/tr LTR (FR-X-PDF-2).
   lang: z.enum(['he', 'en', 'tr']).default('en'),
+  // HOURS-ONLY toggle: default false → a money-free slip (per-day date|hours|type
+  // + total hours only). true → the full payslip (prices/gross/deductions/net).
+  // GET query values arrive as strings, so mirror the codebase's robust boolean
+  // preprocess (?includePrices=false must parse to false, not a truthy string).
+  includePrices: z
+    .preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean())
+    .default(false),
 });
 
 // Payslip SHARE (email / whatsapp-link). MANAGER-only: a manager shares a
@@ -46,6 +53,11 @@ const payslipShareBody = z.object({
   from: z.string().datetime(),
   to: z.string().datetime(),
   lang: z.enum(['he', 'en', 'tr']).default('en'),
+  // HOURS-ONLY toggle (default false). Same robust boolean preprocess as the GET
+  // query so a JSON body sending `"false"` (string) also parses correctly.
+  includePrices: z
+    .preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean())
+    .default(false),
 });
 
 /** Compact YYYYMMDD period tag for the attachment filename. */
@@ -134,6 +146,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
         to: q.to,
         direction: dirFor(q.lang),
         lang: q.lang,
+        includePrices: q.includePrices,
       },
       companyScope,
     );
@@ -179,6 +192,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
         to: body.to,
         direction: dirFor(body.lang),
         lang: body.lang,
+        includePrices: body.includePrices,
       },
       companyScope,
     );
@@ -240,6 +254,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
         to: body.to,
         direction: dirFor(body.lang),
         lang: body.lang,
+        includePrices: body.includePrices,
       },
       companyScope,
     );

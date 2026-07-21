@@ -186,12 +186,21 @@ function rowHtml(left: string, right: string): string {
 
 /**
  * Working-hours breakdown table (per-DAY) for the payslip. Mirrors the on-screen
- * "Working hours details" section. Columns: DATE | HOURS | TYPE | HOURLY PRICE |
- * LINE TOTAL. TYPE is derived from the day flags (vacation/disease/attendance).
- * LINE TOTAL = totalHours × hourlyWage for ATTENDANCE rows; '—' for non-work.
- * A TOTAL row sums hours + money. Reconciliation: for a flat-hourly calc the sum
- * of line totals equals `result.gross` (same rate & data the calc used); for a
- * fixed-monthly calc it may not, so the reconcile note only shows when they match.
+ * "Working hours details" section. TYPE is derived from the day flags
+ * (vacation/disease/attendance).
+ *
+ * TWO layouts driven by `includePrices`:
+ *   - includePrices=false (DEFAULT, HOURS-ONLY): 3 columns DATE | HOURS | TYPE
+ *     and a TOTAL row with total hours only. NO hourly price, NO line total, NO
+ *     money total, NO reconcile note — a clean money-free document.
+ *   - includePrices=true (FULL): 5 columns DATE | HOURS | TYPE | HOURLY PRICE |
+ *     LINE TOTAL. LINE TOTAL = totalHours × hourlyWage for ATTENDANCE rows; '—'
+ *     for non-work. A TOTAL row sums hours + money. Reconciliation: for a
+ *     flat-hourly calc the sum of line totals equals `result.gross`; for
+ *     fixed-monthly it may not, so the reconcile note only shows when they match.
+ *
+ * The [dir=rtl] table CSS rules apply per-cell (text-align on th/td) so both the
+ * 3-col and 5-col layouts render correctly RTL for Hebrew.
  */
 function workingHoursSectionHtml(
   meta: ReportHeaderMeta,
@@ -199,6 +208,7 @@ function workingHoursSectionHtml(
   hourlyWage: number,
   currency: string,
   gross: number,
+  includePrices: boolean,
 ): string {
   if (!hours.length) return '';
   const L = HOURS_LABELS[hoursLangFor(meta)];
@@ -221,23 +231,37 @@ function workingHoursSectionHtml(
       totalMoney += lineTotal;
 
       const hoursCell = isAttendance ? esc(rowHours.toFixed(1)) : '—';
-      const priceCell = isAttendance ? money(hourlyWage) : '—';
-      const lineCell = isAttendance ? money(lineTotal) : '—';
+
+      // Money columns only exist in the FULL layout.
+      const priceLineCells = includePrices
+        ? `
+  <td class="num">${isAttendance ? money(hourlyWage) : '—'}</td>
+  <td class="num">${isAttendance ? money(lineTotal) : '—'}</td>`
+        : '';
 
       return `<tr>
   <td>${esc(r.periodStart)}</td>
   <td class="num">${hoursCell}</td>
-  <td>${esc(typeLabel)}</td>
-  <td class="num">${priceCell}</td>
-  <td class="num">${lineCell}</td>
+  <td>${esc(typeLabel)}</td>${priceLineCells}
 </tr>`;
     })
     .join('\n');
 
-  // Reconcile note only when the summed line totals match gross (flat-hourly
-  // case). For fixed-monthly the Gross line stays authoritative and no claim of
-  // equality is made — mirrors the on-screen behaviour.
-  const reconciles = Math.abs(totalMoney - gross) < 0.005;
+  // FULL layout: price + line-total header cells and a money TOTAL cell.
+  const priceLineHeaders = includePrices
+    ? `
+      <th class="num">${esc(L.hourlyPrice)}</th>
+      <th class="num">${esc(L.lineTotal)}</th>`
+    : '';
+  const footMoneyCells = includePrices
+    ? `
+      <td></td>
+      <td class="num">${money(totalMoney)}</td>`
+    : '';
+
+  // Reconcile note only when prices are shown AND the summed line totals match
+  // gross (flat-hourly case). HOURS-ONLY makes no money claim at all.
+  const reconciles = includePrices && Math.abs(totalMoney - gross) < 0.005;
   const note = reconciles ? `<p class="reconcile">${esc(L.reconcileNote)}</p>` : '';
 
   return `
@@ -247,9 +271,7 @@ function workingHoursSectionHtml(
     <tr>
       <th>${esc(L.date)}</th>
       <th class="num">${esc(L.hours)}</th>
-      <th>${esc(L.type)}</th>
-      <th class="num">${esc(L.hourlyPrice)}</th>
-      <th class="num">${esc(L.lineTotal)}</th>
+      <th>${esc(L.type)}</th>${priceLineHeaders}
     </tr>
   </thead>
   <tbody>
@@ -259,9 +281,7 @@ ${bodyRows}
     <tr>
       <td>${esc(L.total)}</td>
       <td class="num">${esc(totalHours.toFixed(1))}</td>
-      <td></td>
-      <td></td>
-      <td class="num">${money(totalMoney)}</td>
+      <td></td>${footMoneyCells}
     </tr>
   </tfoot>
 </table>
@@ -304,11 +324,16 @@ export function payslipHtml(props: {
   hours?: WorkingHours[];
   /** Resolved hourly rate the calc used (result.hourlyWage). */
   hourlyWage?: number;
+  /**
+   * HOURS-ONLY toggle (default false). false → OMIT all monetary content (the
+   * breakdown money lines, the hours-table price/line-total columns, the Gross
+   * line, the Deductions section and the Net line) → a clean money-free slip.
+   * true → the full payslip as before.
+   */
+  includePrices?: boolean;
 }): string {
   const { meta, workerName, result, warnings, hours, hourlyWage } = props;
-  const lines = result.breakdown
-    .map((l) => rowHtml(esc(l.label), `${esc(l.amount.toFixed(2))} ${esc(result.currency)}`))
-    .join('\n');
+  const includePrices = props.includePrices ?? false;
   const warns = warnings
     .map((w) => `<p class="warn">⚠ ${esc(w)}</p>`)
     .join('\n');
@@ -318,16 +343,33 @@ export function payslipHtml(props: {
     hourlyWage ?? result.hourlyWage,
     result.currency,
     result.gross,
+    includePrices,
   );
-  const deductionsSection = deductionsSectionHtml(meta, result);
   const L = HOURS_LABELS[hoursLangFor(meta)];
-  const body = `
-<p class="bold">Worker: ${esc(workerName)}</p>
-<p class="meta">Mode: ${esc(result.mode)}  ·  Engine: ${esc(result.engineVersion)}</p>
+
+  // MONEY blocks (breakdown salary lines, Gross line, Deductions/Net section)
+  // are rendered ONLY when prices are included. HOURS-ONLY = no money anywhere.
+  let moneyBlocks = '';
+  if (includePrices) {
+    const lines = result.breakdown
+      .map((l) => rowHtml(esc(l.label), `${esc(l.amount.toFixed(2))} ${esc(result.currency)}`))
+      .join('\n');
+    const deductionsSection = deductionsSectionHtml(meta, result);
+    moneyBlocks = `
 <div>${lines}</div>
 ${hoursSection}
 <div class="total"><span class="bold">${esc(L.gross)}</span><span class="bold">${esc(result.gross.toFixed(2))} ${esc(result.currency)}</span></div>
-${deductionsSection}
+${deductionsSection}`;
+  } else {
+    // Hours-only: just the (3-column) working-hours table, no salary lines.
+    moneyBlocks = `
+${hoursSection}`;
+  }
+
+  const body = `
+<p class="bold">Worker: ${esc(workerName)}</p>
+<p class="meta">Mode: ${esc(result.mode)}  ·  Engine: ${esc(result.engineVersion)}</p>
+${moneyBlocks}
 ${warns}`;
   return documentShell(meta, body);
 }

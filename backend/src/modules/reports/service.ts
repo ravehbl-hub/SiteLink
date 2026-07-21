@@ -103,6 +103,12 @@ export class ReportsService {
       to: string;
       direction: 'ltr' | 'rtl';
       lang?: 'he' | 'en' | 'tr';
+      /**
+       * HOURS-ONLY toggle. Default false → render a money-free slip (per-day
+       * date|hours|type + total hours only; no hourly price / line totals /
+       * gross / deductions / net). true → the full payslip.
+       */
+      includePrices?: boolean;
     },
     companyScope?: CompanyScope,
   ): Promise<Buffer> {
@@ -147,6 +153,8 @@ export class ReportsService {
       warnings: result.warnings,
       hours,
       hourlyWage: result.hourlyWage,
+      // Default false → HOURS-ONLY (no money anywhere).
+      includePrices: params.includePrices ?? false,
     };
     return this.renderPdf(
       () => payslipHtml(data),

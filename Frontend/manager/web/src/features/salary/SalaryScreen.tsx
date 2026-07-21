@@ -336,6 +336,50 @@ export function SalaryScreen() {
             </table>
           </div>
 
+          {/* NET WAGE (נטו): deductions + net. Server-computed on the
+              single-calc path (result.net = gross − loans − advances). Display
+              AS-IS — no client recompute — so it reconciles with the payslip
+              PDF. Optional: only render when the backend populated net. */}
+          {result.net !== undefined ? (
+            <>
+              <h4 className="subsection-title" style={{ marginBlockStart: 'var(--sl-space-4)' }}>
+                {t('salary.deductions')}
+              </h4>
+              <div className="table-wrap">
+                <table className="data">
+                  <tbody>
+                    <tr>
+                      <td>{t('salary.loans')}</td>
+                      <td style={{ textAlign: 'end', color: 'var(--sl-color-danger)' }}>
+                        −{formatCurrency(result.loansTotal ?? 0, result.currency)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>{t('salary.advances')}</td>
+                      <td style={{ textAlign: 'end', color: 'var(--sl-color-danger)' }}>
+                        −{formatCurrency(result.advancesTotal ?? 0, result.currency)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* NET — prominent KPI. Negative net (worker owes) rendered in a
+                  danger treatment so it is unmistakable. */}
+              <div className="grid grid-kpi" style={{ marginBlockStart: 'var(--sl-space-4)' }}>
+                <div className="kpi">
+                  <div className="kpi-label">{t('salary.net')}</div>
+                  <div
+                    className="kpi-value"
+                    style={result.net < 0 ? { color: 'var(--sl-color-danger)' } : undefined}
+                  >
+                    {formatCurrency(result.net, result.currency)}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : null}
+
           <p className="muted" style={{ marginBlockStart: 'var(--sl-space-3)' }}>
             {t('dashboard.computedAt')}: {formatDate(result.computedAt)}
           </p>

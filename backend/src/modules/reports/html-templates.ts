@@ -434,6 +434,166 @@ ${warns}`;
   return documentShell(meta, body);
 }
 
+/**
+ * PAYROLL BATCH ("All workers") HTML — the print equivalent of the manager salary
+ * batch table. Columns in the SAME order the on-screen table shows them:
+ *   Worker · Period · Work hours · Hour price · Gross · Deductions · Net
+ * A fixed-MONTHLY row's hour price carries a '*' marker (gross ≠ rate × hours) with
+ * a legend below; a negative net is flagged in the danger colour. Money cells are
+ * formatted "<amount> <currency>". RTL-aware via the shared documentShell + the
+ * per-cell [dir=rtl] table rules already defined in STYLES.
+ *
+ * Localized via the existing HOURS_LABELS catalog (he/en/tr) — the same source the
+ * payslip uses — plus a few batch-only labels resolved here.
+ */
+export interface PayrollBatchRowView {
+  workerName: string;
+  totalHours: number;
+  hourlyWage: number;
+  gross: number;
+  deductionsTotal: number;
+  net: number;
+  currency: string;
+  /** 'fixed' → mark the hour price as informational (gross ≠ rate × hours). */
+  isMonthly: boolean;
+}
+
+interface PayrollBatchLabels {
+  worker: string;
+  period: string;
+  hours: string;
+  hourPrice: string;
+  gross: string;
+  deductions: string;
+  net: string;
+  total: string;
+  monthlyLegend: string;
+  empty: string;
+}
+
+const PAYROLL_BATCH_LABELS: Record<HoursLang, PayrollBatchLabels> = {
+  he: {
+    worker: 'עובד',
+    period: 'תקופה',
+    hours: 'שעות עבודה',
+    hourPrice: 'מחיר לשעה',
+    gross: 'ברוטו',
+    deductions: 'ניכויים',
+    net: 'נטו',
+    total: 'סה"כ',
+    monthlyLegend: '* המחיר הוא אינפורמטיבי לעובדים בשכר חודשי',
+    empty: 'אין נתוני שכר לתקופה זו',
+  },
+  en: {
+    worker: 'Worker',
+    period: 'Period',
+    hours: 'Work hours',
+    hourPrice: 'Hour price',
+    gross: 'Gross',
+    deductions: 'Deductions',
+    net: 'Net',
+    total: 'Total',
+    monthlyLegend: '* rate is informational for monthly-salary workers',
+    empty: 'No salary data for this period',
+  },
+  tr: {
+    worker: 'Çalışan',
+    period: 'Dönem',
+    hours: 'Çalışma saatleri',
+    hourPrice: 'Saat ücreti',
+    gross: 'Brüt',
+    deductions: 'Kesintiler',
+    net: 'Net',
+    total: 'Toplam',
+    monthlyLegend: '* ücret, aylık maaşlı çalışanlar için bilgilendirme amaçlıdır',
+    empty: 'Bu dönem için maaş verisi yok',
+  },
+};
+
+export function payrollBatchHtml(props: {
+  meta: ReportHeaderMeta;
+  rows: PayrollBatchRowView[];
+}): string {
+  const { meta, rows } = props;
+  const L = PAYROLL_BATCH_LABELS[hoursLangFor(meta)];
+  const period = `${esc(meta.from)} → ${esc(meta.to)}`;
+  const money = (v: number, cur: string): string => `${esc(v.toFixed(2))} ${esc(cur)}`;
+
+  if (!rows.length) {
+    return documentShell(meta, `<p class="muted">${esc(L.empty)}</p>`);
+  }
+
+  const anyMonthly = rows.some((r) => r.isMonthly);
+
+  // Column totals (money summed per its own currency would be ambiguous across
+  // mixed currencies, so only hours + a same-currency money total are footed when
+  // every row shares one currency — matches the table's single-company reality).
+  const currencies = new Set(rows.map((r) => r.currency));
+  const singleCurrency = currencies.size === 1 ? [...currencies][0] : null;
+  let totHours = 0;
+  let totGross = 0;
+  let totDed = 0;
+  let totNet = 0;
+
+  const body = rows
+    .map((r) => {
+      totHours += r.totalHours;
+      totGross += r.gross;
+      totDed += r.deductionsTotal;
+      totNet += r.net;
+      const marker = r.isMonthly ? '<sup>*</sup>' : '';
+      const netCls = r.net < 0 ? ' class="deduction"' : '';
+      return `<tr>
+  <td>${esc(r.workerName)}</td>
+  <td>${period}</td>
+  <td class="num">${esc(r.totalHours)}</td>
+  <td class="num">${money(r.hourlyWage, r.currency)}${marker}</td>
+  <td class="num">${money(r.gross, r.currency)}</td>
+  <td class="num">${money(r.deductionsTotal, r.currency)}</td>
+  <td class="num"${netCls}>${money(r.net, r.currency)}</td>
+</tr>`;
+    })
+    .join('\n');
+
+  const foot = singleCurrency
+    ? `<tfoot>
+    <tr>
+      <td>${esc(L.total)}</td>
+      <td></td>
+      <td class="num">${esc(totHours)}</td>
+      <td></td>
+      <td class="num">${money(totGross, singleCurrency)}</td>
+      <td class="num">${money(totDed, singleCurrency)}</td>
+      <td class="num">${money(totNet, singleCurrency)}</td>
+    </tr>
+  </tfoot>`
+    : '';
+
+  const legend = anyMonthly ? `<p class="meta">${esc(L.monthlyLegend)}</p>` : '';
+
+  const table = `
+<table class="hours">
+  <thead>
+    <tr>
+      <th>${esc(L.worker)}</th>
+      <th>${esc(L.period)}</th>
+      <th class="num">${esc(L.hours)}</th>
+      <th class="num">${esc(L.hourPrice)}</th>
+      <th class="num">${esc(L.gross)}</th>
+      <th class="num">${esc(L.deductions)}</th>
+      <th class="num">${esc(L.net)}</th>
+    </tr>
+  </thead>
+  <tbody>
+${body}
+  </tbody>
+  ${foot}
+</table>
+${legend}`;
+
+  return documentShell(meta, table);
+}
+
 /** Profit & Loss HTML (mirror of ProfitLossDocument). */
 export function profitLossHtml(props: { meta: ReportHeaderMeta; pnl: ProfitLoss }): string {
   const { meta, pnl } = props;

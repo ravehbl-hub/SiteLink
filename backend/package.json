@@ -32,6 +32,7 @@
     "@sitelink/shared": "workspace:*",
     "@supabase/supabase-js": "^2.47.10",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "fastify": "^5.1.0",
     "fastify-plugin": "^5.0.1",
     "jose": "^5.9.6",

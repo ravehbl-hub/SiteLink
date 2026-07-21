@@ -306,6 +306,59 @@ export function WorkingHoursDocument(props: {
   );
 }
 
+/**
+ * One worker's line in the payroll batch ("All workers") report — the same fields
+ * the manager salary table renders, with the worker name joined in by the service.
+ */
+export interface PayrollBatchRowView {
+  workerName: string;
+  totalHours: number;
+  hourlyWage: number;
+  gross: number;
+  deductionsTotal: number;
+  net: number;
+  currency: string;
+  /** 'fixed' calc → the hour price is informational (gross ≠ rate × hours). */
+  isMonthly: boolean;
+}
+
+/**
+ * PAYROLL BATCH PDF (react-pdf fallback; the RTL/Hebrew-critical path is the HTML/
+ * CloudConvert `payrollBatchHtml`). English labels here — kept minimal, parity with
+ * the columns the on-screen table shows: Worker · Hours · Hour price · Gross ·
+ * Deductions · Net. A fixed-monthly row's price carries a '*' marker.
+ */
+export function PayrollBatchDocument(props: {
+  meta: ReportHeaderMeta;
+  rows: PayrollBatchRowView[];
+}): React.ReactElement<DocumentProps> {
+  const { meta, rows } = props;
+  const money = (v: number, cur: string): string => `${v.toFixed(2)} ${cur}`;
+  const body = rows.map((r, i) =>
+    e(View, { key: `r${i}`, style: styles.row }, [
+      e(Text, { key: 'n' }, r.workerName),
+      e(
+        Text,
+        { key: 'v' },
+        `${r.totalHours}h  ·  ${money(r.hourlyWage, r.currency)}${r.isMonthly ? '*' : ''}  ·  ${money(r.gross, r.currency)}  ·  -${money(r.deductionsTotal, r.currency)}  ·  ${money(r.net, r.currency)}`,
+      ),
+    ]),
+  );
+  const anyMonthly = rows.some((r) => r.isMonthly);
+  return e(
+    Document,
+    {},
+    e(Page, { size: 'A4', style: styles.page }, [
+      header(meta),
+      e(Text, { key: 'hdr', style: styles.meta }, 'Worker · Hours · Hour price · Gross · Deductions · Net'),
+      e(View, { key: 'body' }, body),
+      ...(anyMonthly
+        ? [e(Text, { key: 'legend', style: styles.meta }, '* rate is informational for monthly-salary workers')]
+        : []),
+    ]),
+  );
+}
+
 export interface AttendanceSummaryRow {
   workerName: string;
   attendanceDays: number;

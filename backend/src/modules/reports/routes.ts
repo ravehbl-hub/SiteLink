@@ -114,6 +114,43 @@ function dirFor(lang: 'he' | 'en' | 'tr'): 'ltr' | 'rtl' {
   return lang === 'he' ? 'rtl' : 'ltr';
 }
 
+// ── PAYROLL BATCH ("All workers") export + share ─────────────────────────────
+// GET query for the batch PDF/xlsx: period + lang (+ ADMIN-only ?companyId, ignored
+// for a non-admin). NO worker/site — the batch is EVERY active worker in the caller's
+// OWN company (scope resolved server-side from the caller by SalaryService.calculateAll).
+const payrollBatchQuery = z.object({
+  from: z.string().datetime(),
+  to: z.string().datetime(),
+  lang: z.enum(['he', 'en', 'tr']).default('en'),
+  companyId: z.string().optional(),
+});
+
+// EMAIL share body: the recipient `email` is a manager-TYPED, well-formed address
+// (validated by zod .email()) — INTENTIONALLY arbitrary (differs from the single
+// payslip, which forces the worker's own address). Company scope is still derived
+// from the caller: a manager can send their OWN company's payroll summary anywhere.
+const payrollBatchEmailBody = z.object({
+  from: z.string().datetime(),
+  to: z.string().datetime(),
+  email: z.string().email(),
+  lang: z.enum(['he', 'en', 'tr']).default('en'),
+  companyId: z.string().optional(),
+});
+
+// WHATSAPP share body: `phone` is a manager-TYPED number (normalized server-side).
+const payrollBatchWhatsappBody = z.object({
+  from: z.string().datetime(),
+  to: z.string().datetime(),
+  phone: z.string().min(1),
+  lang: z.enum(['he', 'en', 'tr']).default('en'),
+  companyId: z.string().optional(),
+});
+
+/** Payroll-batch attachment filename, e.g. payroll-20260601-20260630.pdf */
+function payrollFilename(from: string, to: string, ext: 'pdf' | 'xlsx'): string {
+  return `payroll-${periodTag(from, to)}.${ext}`;
+}
+
 export async function reportRoutes(app: FastifyInstance): Promise<void> {
   const service = new ReportsService();
   const guard = { preHandler: [app.authenticate, app.requireRole(...MANAGER_ROLES)] };
@@ -351,5 +388,116 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', 'attachment; filename="profit-loss.pdf"')
       .send(pdf);
+  });
+
+  // ── PAYROLL BATCH: PDF (MANAGER_ROLES) ─────────────────────────────────────
+  // The whole "All workers" salary table as a PDF. EVERY worker's gross/net/
+  // deductions → highest-sensitivity payroll data: MANAGER_ROLES-gated (guard) and
+  // company-scoped server-side (the caller is passed straight to calculateAll, which
+  // derives the scope from them — a manager only ever renders their OWN company).
+  app.get('/reports/payroll-batch.pdf', guard, async (req, reply) => {
+    const q = payrollBatchQuery.parse(req.query);
+    const pdf = await service.payrollBatchPdf(
+      { from: q.from, to: q.to, direction: dirFor(q.lang), lang: q.lang, companyId: q.companyId },
+      req.appUser!,
+    );
+    return reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', `attachment; filename="${payrollFilename(q.from, q.to, 'pdf')}"`)
+      .send(pdf);
+  });
+
+  // ── PAYROLL BATCH: Excel (.xlsx) (MANAGER_ROLES) ───────────────────────────
+  app.get('/reports/payroll-batch.xlsx', guard, async (req, reply) => {
+    const q = payrollBatchQuery.parse(req.query);
+    const xlsx = await service.payrollBatchXlsx(
+      { from: q.from, to: q.to, lang: q.lang, companyId: q.companyId },
+      req.appUser!,
+    );
+    return reply
+      .header(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      )
+      .header('Content-Disposition', `attachment; filename="${payrollFilename(q.from, q.to, 'xlsx')}"`)
+      .send(xlsx);
+  });
+
+  // ── PAYROLL BATCH SHARE: EMAIL (MANAGER_ROLES) ─────────────────────────────
+  // Emails the batch PDF to a MANAGER-TYPED, well-formed address (validated by the
+  // schema). Company scope is still caller-derived — a manager can send THEIR OWN
+  // company's payroll summary to any address (intended). SMTP off → 503 (KEY-GATED),
+  // checked BEFORE the (expensive) PDF render, exactly like the payslip email.
+  app.post('/reports/payroll-batch/email', guard, async (req, reply) => {
+    const body = payrollBatchEmailBody.parse(req.body);
+
+    if (!emailService.isConfigured()) {
+      return reply
+        .status(503)
+        .send({ error: { code: 'INTERNAL', message: 'Email sending is not configured', requestId: req.id } });
+    }
+
+    const pdf = await service.payrollBatchPdf(
+      { from: body.from, to: body.to, direction: dirFor(body.lang), lang: body.lang, companyId: body.companyId },
+      req.appUser!,
+    );
+
+    const filename = payrollFilename(body.from, body.to, 'pdf');
+    try {
+      await emailService.sendWithAttachment({
+        to: body.email,
+        subject: 'Payroll summary',
+        text: 'Please find the payroll summary attached.',
+        attachment: { filename, content: pdf, contentType: 'application/pdf' },
+      });
+    } catch (err) {
+      if (err instanceof EmailNotConfiguredError) {
+        return reply
+          .status(503)
+          .send({ error: { code: 'INTERNAL', message: err.message, requestId: req.id } });
+      }
+      throw err;
+    }
+
+    return reply.send({ sent: true, to: body.email });
+  });
+
+  // ── PAYROLL BATCH SHARE: WhatsApp LINK (MANAGER_ROLES) ─────────────────────
+  // Uploads the batch PDF to private Storage, mints a SHORT-LIVED signed READ URL,
+  // and returns it + the normalized (manager-TYPED) phone. The signed link is minted
+  // only AFTER calculateAll has enforced the caller's company scope, so no cross-tenant
+  // data can be behind the URL. The FE builds wa.me/<phone>?text=<localized msg + url>.
+  //   invalid phone → 400
+  app.post('/reports/payroll-batch/whatsapp-link', guard, async (req, reply) => {
+    const body = payrollBatchWhatsappBody.parse(req.body);
+
+    const phone = normalizePhoneForWhatsApp(body.phone);
+    if (!phone) throw AppError.validation('Phone number is not valid');
+
+    // Company scope enforced INSIDE payrollBatchPdf (→ calculateAll) BEFORE we upload
+    // or sign anything, so the signed URL never exposes another tenant's payroll.
+    const pdf = await service.payrollBatchPdf(
+      { from: body.from, to: body.to, direction: dirFor(body.lang), lang: body.lang, companyId: body.companyId },
+      req.appUser!,
+    );
+
+    const storageKey = `payroll-batch/${randomUUID()}.pdf`;
+    await app.supabase.uploadObject({
+      kind: 'doc',
+      storageKey,
+      content: pdf,
+      contentType: 'application/pdf',
+    });
+    const signed = await app.supabase.createSignedRead({
+      kind: 'doc',
+      storageKey,
+      expiresInSeconds: SHARE_URL_TTL_SECONDS,
+    });
+
+    return reply.send({
+      phone,
+      url: signed.url,
+      expiresInSeconds: signed.expiresInSeconds,
+    });
   });
 }

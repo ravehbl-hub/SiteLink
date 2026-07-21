@@ -120,3 +120,71 @@ describe('salary split auto-open logic', () => {
     expect(attendanceHours([att(100), sick(150)])).toBe(100);
   });
 });
+
+/* ── Batch salary row math (features/salary/SalaryScreen.tsx batchRowNet) ──────
+ * Replicated here (not imported) for the same module-scope reasons as above.
+ * MUST stay in lockstep with the exported `batchRowNet` helper AND the backend
+ * SalaryBatchRow contract: deductionsTotal = loansTotal + advancesTotal, and
+ * net = gross − deductionsTotal (NOT floored — can go negative). */
+function batchRowNet(
+  gross: number,
+  loansTotal: number,
+  advancesTotal: number,
+): { deductionsTotal: number; net: number } {
+  const deductionsTotal = loansTotal + advancesTotal;
+  return { deductionsTotal, net: gross - deductionsTotal };
+}
+// PURE — sum the batch rows' totalHours (mirrors the table's per-row Work hours).
+function batchHoursTotal(rows: { totalHours: number }[]): number {
+  return rows.reduce((sum, r) => sum + r.totalHours, 0);
+}
+
+describe('batch salary row math', () => {
+  it('deductionsTotal = loans + advances; net = gross − deductions', () => {
+    const { deductionsTotal, net } = batchRowNet(5000, 800, 200);
+    expect(deductionsTotal).toBe(1000);
+    expect(net).toBe(4000);
+  });
+  it('flags a NEGATIVE net when loans+advances exceed gross', () => {
+    // gross 1000, loans 800, advances 400 → deductions 1200, net −200
+    const { deductionsTotal, net } = batchRowNet(1000, 800, 400);
+    expect(deductionsTotal).toBe(1200);
+    expect(net).toBe(-200);
+    expect(net < 0).toBe(true); // FE renders this row's net in the danger color
+  });
+  it('zero deductions leaves net === gross', () => {
+    const { deductionsTotal, net } = batchRowNet(3200, 0, 0);
+    expect(deductionsTotal).toBe(0);
+    expect(net).toBe(3200);
+  });
+  it('sums per-row work hours across the batch', () => {
+    expect(batchHoursTotal([{ totalHours: 160 }, { totalHours: 236 }, { totalHours: 0 }])).toBe(396);
+  });
+});
+
+/* ── Payroll batch export filename (SalaryScreen.payrollExportFilename) ──────
+ * Mirrors the backend attachment name `payroll-<YYYYMMDD>-<YYYYMMDD>.<ext>`
+ * (reports/routes.ts periodTag). from/to are ISO datetimes; the tag is the date
+ * part with dashes stripped. Kept in lockstep with the source builder. */
+function payrollExportFilename(from: string, to: string, ext: 'pdf' | 'xlsx'): string {
+  const tag = (s: string): string => s.slice(0, 10).replace(/-/g, '');
+  return `payroll-${tag(from)}-${tag(to)}.${ext}`;
+}
+
+describe('payroll batch export filename', () => {
+  it('builds a compact YYYYMMDD-YYYYMMDD name for the PDF', () => {
+    expect(
+      payrollExportFilename('2026-06-01T00:00:00.000Z', '2026-06-30T23:59:59.000Z', 'pdf'),
+    ).toBe('payroll-20260601-20260630.pdf');
+  });
+  it('uses the .xlsx extension for the Excel export', () => {
+    expect(
+      payrollExportFilename('2026-06-01T00:00:00.000Z', '2026-06-30T23:59:59.000Z', 'xlsx'),
+    ).toBe('payroll-20260601-20260630.xlsx');
+  });
+  it('tolerates a bare date (no time component)', () => {
+    expect(payrollExportFilename('2026-01-05', '2026-01-31', 'pdf')).toBe(
+      'payroll-20260105-20260131.pdf',
+    );
+  });
+});

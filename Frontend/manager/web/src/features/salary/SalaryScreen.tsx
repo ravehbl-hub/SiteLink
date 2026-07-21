@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { SalaryResult, WorkingHours } from '@sitelink/shared';
-import { salaryApi, payslipApi, attendanceApi } from '../../lib/api/endpoints';
+import type { SalaryResult, SalaryBatchResult, WorkingHours } from '@sitelink/shared';
+import { salaryApi, payslipApi, payrollApi, attendanceApi } from '../../lib/api/endpoints';
 import { qk } from '../../lib/api/queryKeys';
 import { apiUrl, bearerToken, ApiError } from '../../lib/api/client';
 import { useWorkersList } from '../../lib/api/hooks';
+import { useAuth } from '../../app/AuthProvider';
 import { currentMonthRange, formatCurrency, formatDate, toDateInput, dateInputToISO } from '../../lib/format';
 import i18n from '../../i18n';
 
@@ -23,6 +24,25 @@ function whType(wh: WorkingHours): 'ATTENDANCE' | 'VACATION' | 'DISEASE' {
  *  Kept as a module constant so the auto-open comparison is a fixed 236 even if
  *  the manager later edits the (informational) threshold input. */
 export const SPLIT_THRESHOLD_DEFAULT = 236;
+
+/** Sentinel worker-id for the "All workers" batch run. A reserved value that can
+ *  never collide with a real worker id, so `workerId === ALL_WORKERS` cleanly
+ *  distinguishes the batch path from the single-worker path throughout. */
+export const ALL_WORKERS = '__all__';
+
+/** PURE — a batch row's deductions + net, mirroring the backend's
+ *  `deductionsTotal = loansTotal + advancesTotal` and `net = gross − deductionsTotal`
+ *  (net is NOT floored — it can go negative when loans/advances exceed gross).
+ *  Exported for unit tests; the FE displays the server's values but this documents
+ *  the exact relationship the table renders. */
+export function batchRowNet(
+  gross: number,
+  loansTotal: number,
+  advancesTotal: number,
+): { deductionsTotal: number; net: number } {
+  const deductionsTotal = loansTotal + advancesTotal;
+  return { deductionsTotal, net: gross - deductionsTotal };
+}
 
 /** PURE — sum of ATTENDANCE-only hours for a period. Mirrors the
  *  `whType(wh) === 'ATTENDANCE'` filter used by `whTotals.money`, since that is
@@ -47,14 +67,31 @@ export function shouldAutoOpenSplit(
   return attendanceHoursTotal > threshold && !splitAlreadyEnabled;
 }
 
+/** PURE — the download filename for a batch payroll export, mirroring the backend
+ *  attachment name (`payroll-<YYYYMMDD>-<YYYYMMDD>.<ext>`). `from`/`to` are ISO
+ *  datetimes; the compact tag is the date part with dashes stripped. Exported for
+ *  unit tests and reused by the two authed blob downloads. */
+export function payrollExportFilename(from: string, to: string, ext: 'pdf' | 'xlsx'): string {
+  const tag = (s: string): string => s.slice(0, 10).replace(/-/g, '');
+  return `payroll-${tag(from)}-${tag(to)}.${ext}`;
+}
+
 export function SalaryScreen() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const workers = useWorkersList();
   const range = useMemo(currentMonthRange, []);
   const [workerId, setWorkerId] = useState('');
   const [periodStart, setPeriodStart] = useState(range.from);
   const [periodEnd, setPeriodEnd] = useState(range.to);
   const [result, setResult] = useState<SalaryResult | null>(null);
+  // BATCH ("All workers") result — display-only table, mutually exclusive with the
+  // single-worker `result` (each Calculate clears the other). Only ever set on the
+  // sentinel path; the single-worker path never touches it.
+  const [batchResult, setBatchResult] = useState<SalaryBatchResult | null>(null);
+  // True only for the "All workers" sentinel — used to hide the split section and
+  // early-return the auto-open effect (both are single-worker only).
+  const isBatch = workerId === ALL_WORKERS;
   // Pin the worker/period the DISPLAYED result was computed for, so the
   // working-hours details always follow the computed salary — not the live
   // selector (which can change without recomputing). Mirrors the app.
@@ -90,6 +127,21 @@ export function SalaryScreen() {
   const [confirmChannel, setConfirmChannel] = useState<'email' | 'whatsapp' | null>(null);
   const shareMenuRef = useRef<HTMLDivElement>(null);
 
+  // ── BATCH ("All workers") EXPORT + SHARE ──────────────────────────────────
+  // Reverses the earlier display-only decision for the batch table (intended). PDF +
+  // real .xlsx download the WHOLE table; Share → Email (a manager-typed recipient,
+  // prefilled with the manager's own email) / WhatsApp (a manager-typed phone).
+  const [batchExporting, setBatchExporting] = useState<null | 'pdf' | 'xlsx'>(null);
+  const [batchShareMenuOpen, setBatchShareMenuOpen] = useState(false);
+  const batchShareMenuRef = useRef<HTMLDivElement>(null);
+  // Email modal: a manager-TYPED recipient, prefilled with the logged-in manager's
+  // own email (differs from the single payslip, which forces the worker's address).
+  const [batchEmailOpen, setBatchEmailOpen] = useState(false);
+  const [batchEmailTo, setBatchEmailTo] = useState('');
+  // WhatsApp modal: a manager-TYPED phone number (not a worker's stored phone).
+  const [batchWhatsappOpen, setBatchWhatsappOpen] = useState(false);
+  const [batchPhone, setBatchPhone] = useState('');
+
   const selectedWorker = workers.data?.items.find((w) => w.id === workerId);
   const workerName = selectedWorker
     ? `${selectedWorker.firstName} ${selectedWorker.lastName}`.trim()
@@ -114,6 +166,25 @@ export function SalaryScreen() {
       document.removeEventListener('keydown', onKey);
     };
   }, [shareMenuOpen]);
+
+  // Close the BATCH share menu on outside click / Escape (mirror of the above).
+  useEffect(() => {
+    if (!batchShareMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (batchShareMenuRef.current && !batchShareMenuRef.current.contains(e.target as Node)) {
+        setBatchShareMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setBatchShareMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [batchShareMenuOpen]);
 
   const share = useMutation({
     mutationFn: async (channel: 'email' | 'whatsapp') => {
@@ -213,6 +284,40 @@ export function SalaryScreen() {
     },
   });
 
+  // BATCH calc: flat/hourly + fixed roll-up for ALL active workers in the caller's
+  // company (scope resolved server-side). NO split — that stays single-worker. On
+  // success we set batchResult and CLEAR the single-worker result (mutually
+  // exclusive views); on error we mirror the single-calc error handling.
+  const batchCalc = useMutation({
+    mutationFn: () => salaryApi.calculateAll({ periodStart, periodEnd }),
+    onSuccess: (r) => {
+      setBatchResult(r);
+      setResult(null);
+      setResultWorkerId('');
+      setResultPeriod(null);
+      setError(null);
+      setSuccess(null);
+    },
+    onError: (e) => {
+      setError(e instanceof Error ? e.message : String(e));
+      setBatchResult(null);
+      setSuccess(null);
+    },
+  });
+
+  // Single Calculate button dispatch: the sentinel routes to the batch run (and
+  // clears any single result on its own onSuccess); every other value keeps the
+  // EXISTING single-worker `calc.mutate()` path byte-for-byte unchanged.
+  function runCalculate() {
+    if (isBatch) {
+      batchCalc.mutate();
+    } else {
+      // Leaving the batch view: a single-worker calc supersedes any prior table.
+      setBatchResult(null);
+      calc.mutate();
+    }
+  }
+
   // Per-day working-hours breakdown behind the salary total. Reuses the EXISTING
   // /working-hours aggregate at DAY grain over the SAME worker + period the salary
   // was computed for — so the summed hours reconcile with the salary calc (both
@@ -267,6 +372,9 @@ export function SalaryScreen() {
   // firing to the exact worker+period so it fires once per crossing and does not
   // re-enable if the manager toggles split back OFF on the same data.
   useEffect(() => {
+    // Split/auto-open is SINGLE-WORKER only — never run it for the "All workers"
+    // sentinel (the batch path has no split controls at all).
+    if (isBatch) return;
     // Need a pinned result whose working-hours have finished loading.
     if (!result || !resultWorkerId || !resultPeriod) return;
     if (workingHours.isLoading || !workingHours.data) return;
@@ -287,6 +395,7 @@ export function SalaryScreen() {
     workingHours.data,
     whRows,
     splitEnabled,
+    isBatch,
   ]);
 
   // Reconciliation: for a flat hourly calc sum(line totals) === gross; for a
@@ -330,6 +439,104 @@ export function SalaryScreen() {
     }
   }
 
+  // Download the WHOLE batch table as a PDF or .xlsx via an authed blob fetch (the
+  // same pattern as the payslip PDF: apiUrl + bearer → blob → object URL). The batch
+  // export uses the table's own period; scope is server-derived from the caller.
+  async function downloadBatch(kind: 'pdf' | 'xlsx') {
+    if (!batchResult) return;
+    setBatchExporting(kind);
+    setError(null);
+    try {
+      const path = kind === 'pdf' ? '/reports/payroll-batch.pdf' : '/reports/payroll-batch.xlsx';
+      const url = apiUrl(path, {
+        from: batchResult.periodStart,
+        to: batchResult.periodEnd,
+        lang: i18n.language,
+      });
+      const token = await bearerToken();
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      // Force a download with the mirrored backend filename (xlsx especially — a new
+      // tab can't render a spreadsheet).
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = payrollExportFilename(batchResult.periodStart, batchResult.periodEnd, kind);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBatchExporting(null);
+    }
+  }
+
+  // Share the batch: EMAIL (manager-typed recipient) or WHATSAPP (manager-typed phone).
+  const batchShare = useMutation({
+    mutationFn: async (channel: 'email' | 'whatsapp') => {
+      if (!batchResult) throw new Error('no-batch');
+      const period = { from: batchResult.periodStart, to: batchResult.periodEnd, lang };
+      if (channel === 'email') {
+        await payrollApi.email({ ...period, email: batchEmailTo.trim() });
+        return { channel } as const;
+      }
+      const link = await payrollApi.whatsappLink({ ...period, phone: batchPhone.trim() });
+      return { channel, link } as const;
+    },
+    onSuccess: (res) => {
+      setError(null);
+      if (res.channel === 'email') {
+        setBatchEmailOpen(false);
+        setSuccess(t('salary.batchSharedEmail', { email: batchEmailTo.trim() }));
+      } else {
+        setBatchWhatsappOpen(false);
+        const msg = t('salary.batchWhatsappMessage', { url: res.link.url });
+        window.open(
+          `https://wa.me/${res.link.phone}?text=${encodeURIComponent(msg)}`,
+          '_blank',
+        );
+        setSuccess(t('salary.batchSharedWhatsapp'));
+      }
+    },
+    onError: (e, channel) => {
+      setSuccess(null);
+      setError(batchShareErrorMessage(e, channel));
+    },
+  });
+
+  /** Batch-share error → localized copy. 503 = SMTP not configured; 400 = a bad
+   *  typed email/phone the server rejected. */
+  function batchShareErrorMessage(e: unknown, channel: 'email' | 'whatsapp'): string {
+    if (e instanceof ApiError) {
+      if (channel === 'email' && e.status === 503) return t('salary.shareNotConfigured');
+      if (e.status === 400) {
+        return channel === 'email' ? t('salary.batchBadEmail') : t('salary.batchBadPhone');
+      }
+    }
+    return t('salary.shareFailed');
+  }
+
+  function openBatchEmail() {
+    setBatchShareMenuOpen(false);
+    // Prefill with the logged-in manager's own email (they can edit/replace it).
+    setBatchEmailTo(user?.email ?? '');
+    setError(null);
+    setSuccess(null);
+    setBatchEmailOpen(true);
+  }
+  function openBatchWhatsapp() {
+    setBatchShareMenuOpen(false);
+    setBatchPhone('');
+    setError(null);
+    setSuccess(null);
+    setBatchWhatsappOpen(true);
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -344,6 +551,9 @@ export function SalaryScreen() {
             <label>{t('salary.worker')}</label>
             <select className="select" value={workerId} onChange={(e) => setWorkerId(e.target.value)}>
               <option value="">{t('salary.worker')}</option>
+              {/* "All workers" batch entry — sentinel value, sits at the top of the
+                  list just below the empty placeholder. */}
+              <option value={ALL_WORKERS}>{t('salary.allWorkers')}</option>
               {workers.data?.items.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.firstName} {w.lastName}
@@ -371,11 +581,18 @@ export function SalaryScreen() {
           </div>
           <button
             className="btn btn-primary"
-            disabled={!workerId || calc.isPending || contractorRateMissing}
-            aria-busy={calc.isPending}
-            onClick={() => calc.mutate()}
+            // Batch Calculate is NOT blocked by contractorRateMissing (split is
+            // single-worker only); the single-worker guard is unchanged.
+            disabled={
+              !workerId ||
+              calc.isPending ||
+              batchCalc.isPending ||
+              (!isBatch && contractorRateMissing)
+            }
+            aria-busy={calc.isPending || batchCalc.isPending}
+            onClick={runCalculate}
           >
-            {calc.isPending ? (
+            {calc.isPending || batchCalc.isPending ? (
               <>
                 <span
                   className="sl-spinner"
@@ -390,6 +607,11 @@ export function SalaryScreen() {
           </button>
         </div>
 
+        {/* HOURS-SPLIT controls — SINGLE-WORKER ONLY. Hidden entirely for the
+            "All workers" batch run (split never applies to the batch). The inner
+            markup below is byte-for-byte the pre-batch single-worker section. */}
+        {!isBatch ? (
+        <>
         {/* HOURS-SPLIT controls: a toggle (default OFF) that reveals a threshold
             (default 236) + a REQUIRED contractor rate. RTL-safe logical props;
             money/rate inputs align to the end. */}
@@ -430,10 +652,10 @@ export function SalaryScreen() {
                   onChange={(e) => setSplitThreshold(e.target.value)}
                 />
               </div>
-              {/* position:relative + an absolutely-positioned hint so the
-                  validation copy never grows the field and wraps the row.
-                  Logical props keep it RTL-safe (insetInlineStart/End: 0). */}
-              <div className="field" style={{ maxWidth: 180, position: 'relative' }}>
+              {/* The validation copy lives on its OWN full-width line below the row
+                  (see below) so the fields stay side-by-side and the hint text can
+                  stretch on one line instead of wrapping inside the narrow field. */}
+              <div className="field" style={{ maxWidth: 180 }}>
                 <label>{t('salary.splitContractorRate')}</label>
                 <input
                   className="input"
@@ -449,27 +671,26 @@ export function SalaryScreen() {
                   value={contractorRate}
                   onChange={(e) => setContractorRate(e.target.value)}
                 />
-                {contractorRateMissing ? (
-                  <span
-                    id="split-contractor-rate-hint"
-                    className="muted"
-                    style={{
-                      position: 'absolute',
-                      insetBlockStart: '100%',
-                      insetInlineStart: 0,
-                      insetInlineEnd: 0,
-                      color: 'var(--sl-color-danger)',
-                      fontSize: 'var(--sl-font-size-sm, 0.85em)',
-                      marginBlockStart: 'var(--sl-space-1)',
-                    }}
-                  >
-                    {t('salary.splitContractorRateRequired')}
-                  </span>
-                ) : null}
               </div>
             </>
           ) : null}
         </div>
+
+        {/* Contractor-rate required validation — full-width line so the copy
+            stretches on one line (RTL-safe; danger color mirrors the field). */}
+        {contractorRateMissing ? (
+          <p
+            id="split-contractor-rate-hint"
+            style={{
+              color: 'var(--sl-color-danger)',
+              fontSize: 'var(--sl-font-size-sm, 0.85em)',
+              marginBlockStart: 'var(--sl-space-1)',
+              marginBlockEnd: 0,
+            }}
+          >
+            {t('salary.splitContractorRateRequired')}
+          </p>
+        ) : null}
 
         {/* Auto-open hint (Option A): shown once when split was auto-enabled
             because the worker exceeded 236 ATTENDANCE hours. Muted-hint idiom,
@@ -486,6 +707,8 @@ export function SalaryScreen() {
             {t('salary.splitAutoOpened')}
           </p>
         ) : null}
+        </>
+        ) : null}
       </div>
 
       {error ? <div className="banner banner-danger">{error}</div> : null}
@@ -498,6 +721,185 @@ export function SalaryScreen() {
           }}
         >
           {success}
+        </div>
+      ) : null}
+
+      {/* BATCH ("All workers") table — display-only, shown in place of the
+          single-worker result card when a batch run exists. 7 columns:
+          Worker | Period (from–to) | Work hours | Hour price | Gross | Deductions | Net.
+          NO per-row payslip/share (that stays single-worker). Reuses the
+          .table-wrap/.data classes; money/number columns align to the end (RTL-safe
+          logical alignment). */}
+      {batchResult ? (
+        <div className="card sl-fade-in">
+          <div className="page-header" style={{ marginBlockEnd: 'var(--sl-space-3)' }}>
+            <h3 className="subsection-title" style={{ margin: 0 }}>
+              {t('salary.allWorkers')}
+            </h3>
+            <div className="header-spacer" />
+          </div>
+
+          {/* EXPORT + SHARE action bar — reverses the earlier display-only decision
+              for the batch (intended). PDF + real .xlsx download the whole table;
+              Share → Email / WhatsApp. Sits above the table; RTL-safe (logical gaps,
+              menu opens from the inline-start). */}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 'var(--sl-space-2)',
+              alignItems: 'center',
+              marginBlockEnd: 'var(--sl-space-3)',
+            }}
+          >
+            <button
+              className="btn"
+              disabled={batchExporting !== null || batchResult.rows.length === 0}
+              aria-busy={batchExporting === 'pdf'}
+              onClick={() => void downloadBatch('pdf')}
+            >
+              {batchExporting === 'pdf' ? t('workers.uploading') : t('salary.batchExportPdf')}
+            </button>
+            <button
+              className="btn"
+              disabled={batchExporting !== null || batchResult.rows.length === 0}
+              aria-busy={batchExporting === 'xlsx'}
+              onClick={() => void downloadBatch('xlsx')}
+            >
+              {batchExporting === 'xlsx' ? t('workers.uploading') : t('salary.batchExportExcel')}
+            </button>
+
+            <div ref={batchShareMenuRef} style={{ position: 'relative' }}>
+              <button
+                className="btn btn-primary"
+                disabled={batchShare.isPending || batchResult.rows.length === 0}
+                aria-haspopup="menu"
+                aria-expanded={batchShareMenuOpen}
+                onClick={() => setBatchShareMenuOpen((o) => !o)}
+              >
+                <span aria-hidden style={{ marginInlineEnd: 'var(--sl-space-1)' }}>
+                  ⤴
+                </span>
+                {batchShare.isPending ? t('salary.sending') : t('salary.share')}
+              </button>
+
+              {batchShareMenuOpen ? (
+                <div
+                  role="menu"
+                  style={{
+                    position: 'absolute',
+                    insetBlockStart: 'calc(100% + var(--sl-space-1))',
+                    insetInlineStart: 0,
+                    minWidth: 200,
+                    zIndex: 20,
+                    background: 'var(--sl-color-surface)',
+                    borderRadius: 'var(--sl-radius-neu-cardLg, var(--sl-radius-lg))',
+                    boxShadow: 'var(--sl-shadow-raised-lg, var(--sl-elevation-lg))',
+                    padding: 'var(--sl-space-2)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 'var(--sl-space-1)',
+                  }}
+                >
+                  <button
+                    className="btn btn-ghost"
+                    role="menuitem"
+                    style={{ justifyContent: 'flex-start', textAlign: 'start' }}
+                    onClick={openBatchEmail}
+                  >
+                    {t('salary.sendEmail')}
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    role="menuitem"
+                    style={{ justifyContent: 'flex-start', textAlign: 'start' }}
+                    onClick={openBatchWhatsapp}
+                  >
+                    {t('salary.sendWhatsapp')}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Truncation note — never hidden: some active workers may be omitted
+              (no configured wage). Count comes straight from the server. */}
+          {batchResult.skippedCount > 0 ? (
+            <p className="muted" style={{ marginBlockStart: 0, marginBlockEnd: 'var(--sl-space-2)' }}>
+              {t('salary.batchSkipped', { count: batchResult.skippedCount })}
+            </p>
+          ) : null}
+
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>{t('salary.batchWorker')}</th>
+                  <th>{t('salary.batchPeriod')}</th>
+                  <th style={{ textAlign: 'end' }}>{t('salary.batchHours')}</th>
+                  <th style={{ textAlign: 'end' }}>{t('salary.batchHourPrice')}</th>
+                  <th style={{ textAlign: 'end' }}>{t('salary.batchGross')}</th>
+                  <th style={{ textAlign: 'end' }}>{t('salary.batchDeductions')}</th>
+                  <th style={{ textAlign: 'end' }}>{t('salary.batchNet')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batchResult.rows.map((row, i) => {
+                  // Resolve the display name from the already-loaded workers list;
+                  // fall back to the raw id if the worker isn't in the current page.
+                  const w = workers.data?.items.find((x) => x.id === row.workerId);
+                  const name = w ? `${w.firstName} ${w.lastName}`.trim() : row.workerId;
+                  // Fixed-MONTHLY rows: mark the rate as informational (gross is the
+                  // fixed amount, NOT rate×hours) — never blank the cell.
+                  const isMonthly = row.mode === 'fixed';
+                  return (
+                    <tr key={`${row.workerId}-${i}`}>
+                      <td>{name}</td>
+                      <td>
+                        {formatDate(batchResult.periodStart)} – {formatDate(batchResult.periodEnd)}
+                      </td>
+                      <td style={{ textAlign: 'end' }}>{row.totalHours}</td>
+                      <td style={{ textAlign: 'end' }}>
+                        {formatCurrency(row.hourlyWage, row.currency)}
+                        {isMonthly ? (
+                          <sup
+                            style={{ marginInlineStart: '0.15em' }}
+                            title={t('salary.batchMonthlyMarker')}
+                            aria-label={t('salary.batchMonthlyMarker')}
+                          >
+                            *
+                          </sup>
+                        ) : null}
+                      </td>
+                      <td style={{ textAlign: 'end' }}>
+                        {formatCurrency(row.gross, row.currency)}
+                      </td>
+                      <td style={{ textAlign: 'end' }}>
+                        {formatCurrency(row.deductionsTotal, row.currency)}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'end',
+                          // Same negative-net danger treatment as the single-calc path.
+                          ...(row.net < 0 ? { color: 'var(--sl-color-danger)' } : {}),
+                        }}
+                      >
+                        {formatCurrency(row.net, row.currency)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Legend for the monthly marker — only when at least one fixed row is
+              present, so managers aren't misled that gross = rate × hours. */}
+          {batchResult.rows.some((r) => r.mode === 'fixed') ? (
+            <p className="muted" style={{ marginBlockStart: 'var(--sl-space-2)' }}>
+              {t('salary.batchMonthlyLegend')}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -884,6 +1286,105 @@ export function SalaryScreen() {
               </button>
               <button className="btn btn-primary" onClick={confirmSend}>
                 {t('salary.confirmSend')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* BATCH share — EMAIL modal. Recipient is manager-TYPED, prefilled with the
+          manager's own email. Submit is blocked until a non-empty value is entered
+          (the server still validates the address; a 400 surfaces as batchBadEmail). */}
+      {batchEmailOpen ? (
+        <div className="modal-overlay" onClick={() => setBatchEmailOpen(false)}>
+          <div
+            className="modal"
+            style={{ maxWidth: 460 }}
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 className="subsection-title" style={{ margin: 0 }}>
+                {t('salary.batchEmailTitle')}
+              </h3>
+            </div>
+            <p className="muted" style={{ marginBlockStart: 0 }}>
+              {t('salary.batchEmailHint')}
+            </p>
+            <div className="field">
+              <label htmlFor="batch-email-to">{t('salary.batchEmailLabel')}</label>
+              <input
+                id="batch-email-to"
+                className="input"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                placeholder="name@example.com"
+                value={batchEmailTo}
+                onChange={(e) => setBatchEmailTo(e.target.value)}
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setBatchEmailOpen(false)}>
+                {t('common.cancel')}
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={batchShare.isPending || batchEmailTo.trim() === ''}
+                aria-busy={batchShare.isPending}
+                onClick={() => batchShare.mutate('email')}
+              >
+                {batchShare.isPending ? t('salary.sending') : t('salary.confirmSend')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* BATCH share — WHATSAPP modal. Phone is manager-TYPED (not a worker's). The
+          server normalizes it and mints a signed link; the FE then opens WhatsApp. */}
+      {batchWhatsappOpen ? (
+        <div className="modal-overlay" onClick={() => setBatchWhatsappOpen(false)}>
+          <div
+            className="modal"
+            style={{ maxWidth: 460 }}
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 className="subsection-title" style={{ margin: 0 }}>
+                {t('salary.batchWhatsappTitle')}
+              </h3>
+            </div>
+            <p className="muted" style={{ marginBlockStart: 0 }}>
+              {t('salary.batchWhatsappHint')}
+            </p>
+            <div className="field">
+              <label htmlFor="batch-phone">{t('salary.batchWhatsappLabel')}</label>
+              <input
+                id="batch-phone"
+                className="input"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="+972 50 000 0000"
+                value={batchPhone}
+                onChange={(e) => setBatchPhone(e.target.value)}
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setBatchWhatsappOpen(false)}>
+                {t('common.cancel')}
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={batchShare.isPending || batchPhone.trim() === ''}
+                aria-busy={batchShare.isPending}
+                onClick={() => batchShare.mutate('whatsapp')}
+              >
+                {batchShare.isPending ? t('salary.sending') : t('salary.confirmSend')}
               </button>
             </div>
           </div>

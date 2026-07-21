@@ -22,6 +22,7 @@ import type {
   ProfitLoss,
   Site,
   SalaryResult,
+  SalaryBatchResult,
   UpdateAdvanceInput,
   UpdateAttendanceInput,
   UpdateLoanInput,
@@ -196,9 +197,17 @@ export interface MobilityTransferResult {
   attendance: AttendanceRecord;
   presenceCreated: boolean;
 }
+export interface MobilityUnassignResult {
+  workerId: string;
+  siteId: string;
+  removed: boolean;
+}
 export const mobilityApi = {
   transfer: (body: MobilityTransferBody) =>
     http.post<MobilityTransferResult>('/mobility/transfer', body),
+  // Remove a worker from a site (inverse of transfer's add). Idempotent.
+  unassign: (body: { workerId: string; siteId: string }) =>
+    http.post<MobilityUnassignResult>('/mobility/unassign', body),
 };
 
 /* ── Finance: loans, advances, P&L ────────────────────────────────────── */
@@ -267,6 +276,13 @@ export const salaryApi = {
     splitThreshold?: number;
     contractorRate?: number;
   }) => http.post<SalaryResult>('/salary/calculate', body),
+  // BATCH (display-only): flat/hourly + fixed calc for ALL active workers in the
+  // caller's company over one period. NO hours-split (that stays single-worker).
+  // Scope (active workers, company) is resolved server-side.
+  calculateAll: (body: {
+    periodStart: string;
+    periodEnd: string;
+  }) => http.post<SalaryBatchResult>('/salary/calculate-all', body),
 };
 
 /* ── Payslip sharing (MANAGER-only, worker-scoped) ────────────────────────
@@ -299,6 +315,42 @@ export const payslipApi = {
     http.post<PayslipEmailResult>('/reports/payslip/email', body),
   whatsappLink: (body: PayslipShareBody) =>
     http.post<PayslipWhatsappLink>('/reports/payslip/whatsapp-link', body),
+};
+
+/* ── Payroll batch ("All workers") export + share (MANAGER-only) ──────────────
+ * The whole batch salary TABLE as a downloadable PDF / real .xlsx, plus share to a
+ * MANAGER-TYPED email or WhatsApp phone. Company scope is derived server-side from
+ * the caller (a manager only ever exports their OWN company's workers). The PDF/xlsx
+ * are fetched as authed blobs in the screen (like the payslip PDF); only the two
+ * share POSTs go through the typed client here. */
+export interface PayrollBatchEmailBody {
+  from: string;
+  to: string;
+  /** MANAGER-typed recipient — an arbitrary, well-formed address (server validates). */
+  email: string;
+  lang?: 'he' | 'en' | 'tr';
+}
+export interface PayrollBatchEmailResult {
+  sent: boolean;
+  to: string;
+}
+export interface PayrollBatchWhatsappBody {
+  from: string;
+  to: string;
+  /** MANAGER-typed phone — normalized server-side (400 if implausible). */
+  phone: string;
+  lang?: 'he' | 'en' | 'tr';
+}
+export interface PayrollBatchWhatsappLink {
+  phone: string;
+  url: string;
+  expiresInSeconds: number;
+}
+export const payrollApi = {
+  email: (body: PayrollBatchEmailBody) =>
+    http.post<PayrollBatchEmailResult>('/reports/payroll-batch/email', body),
+  whatsappLink: (body: PayrollBatchWhatsappBody) =>
+    http.post<PayrollBatchWhatsappLink>('/reports/payroll-batch/whatsapp-link', body),
 };
 
 /* ── Personnel companies (FR-MGR-EMP-2): org-wide staffing companies ─────

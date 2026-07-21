@@ -18,18 +18,34 @@ import { FinanceService } from '../finance/service.js';
 import { AttendanceService } from '../attendance/service.js';
 import {
   AttendanceSummaryDocument,
+  PayrollBatchDocument,
   PayslipDocument,
   ProfitLossDocument,
   WorkingHoursDocument,
   type AttendanceSummaryRow,
+  type PayrollBatchRowView,
   type ReportHeaderMeta,
 } from './templates.js';
 import {
   attendanceSummaryHtml,
+  payrollBatchHtml,
   payslipHtml,
   profitLossHtml,
   workingHoursHtml,
 } from './html-templates.js';
+import type { AuthUser } from '../../plugins/types.js';
+
+/**
+ * Neutralize spreadsheet formula injection for a text cell (OWASP CSV-injection
+ * defense). If the value begins with a formula trigger (`= + - @`, tab or CR) a
+ * leading apostrophe forces the sheet app to treat it as a literal string, never
+ * evaluate it. Applied to the only attacker-influenceable text in the xlsx export
+ * (the worker name); numeric cells are pushed as numbers and are unaffected.
+ * Exported for unit testing.
+ */
+export function sanitizeCell(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
 
 export class ReportsService {
   /**
@@ -331,5 +347,139 @@ export class ReportsService {
       () => ProfitLossDocument(data),
       'profit-loss',
     );
+  }
+
+  /**
+   * PAYROLL BATCH ("All workers") — the report/export analogue of the manager salary
+   * batch TABLE. It reuses `SalaryService.calculateAll(period, caller)` verbatim, so
+   * every PDF/Excel/share row is byte-for-byte the same roll-up the on-screen table
+   * shows (same flat/hourly + fixed calc, same company scope resolved server-side from
+   * the CALLER — a MANAGER only ever sees their OWN company's workers; an ADMIN may
+   * narrow via period.companyId). Worker NAMES are joined here (SalaryBatchRow carries
+   * only workerId); the name lookup is HARD-scoped to the produced workerId set, so no
+   * cross-tenant name can leak in. Highest-sensitivity payroll data — the CALLER-derived
+   * scope is the single source of truth; no client-supplied company/site is trusted.
+   */
+  private async loadPayrollBatch(
+    period: { from: string; to: string; companyId?: string },
+    caller: AuthUser,
+  ): Promise<{ rows: PayrollBatchRowView[]; skippedCount: number }> {
+    const batch = await this.salary.calculateAll(
+      {
+        periodStart: period.from,
+        periodEnd: period.to,
+        companyId: period.companyId,
+      },
+      caller,
+    );
+
+    // Join names for ONLY the workerIds the (already company-scoped) batch produced.
+    const ids = batch.rows.map((r) => r.workerId);
+    const workers = ids.length
+      ? await prisma.worker.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, firstName: true, lastName: true },
+        })
+      : [];
+    const nameById = new Map(
+      workers.map((w) => [w.id, `${w.firstName} ${w.lastName}`.trim()]),
+    );
+
+    const rows: PayrollBatchRowView[] = batch.rows.map((r) => ({
+      workerName: nameById.get(r.workerId) ?? r.workerId,
+      totalHours: r.totalHours,
+      hourlyWage: r.hourlyWage,
+      gross: r.gross,
+      deductionsTotal: r.deductionsTotal,
+      net: r.net,
+      currency: r.currency,
+      isMonthly: r.mode === 'fixed',
+    }));
+
+    return { rows, skippedCount: batch.skippedCount };
+  }
+
+  async payrollBatchPdf(
+    period: { from: string; to: string; direction: 'ltr' | 'rtl'; lang?: 'he' | 'en' | 'tr'; companyId?: string },
+    caller: AuthUser,
+  ): Promise<Buffer> {
+    const { rows } = await this.loadPayrollBatch(period, caller);
+    const meta: ReportHeaderMeta = {
+      title: 'Payroll',
+      from: toDateOnly(new Date(period.from)),
+      to: toDateOnly(new Date(period.to)),
+      direction: period.direction,
+      lang: period.lang,
+    };
+    const data = { meta, rows };
+    return this.renderPdf(
+      () => payrollBatchHtml(data),
+      () => PayrollBatchDocument(data),
+      'payroll-batch',
+    );
+  }
+
+  /**
+   * PAYROLL BATCH as a real .xlsx (exceljs) — one sheet, the 7 columns in table order
+   * plus a header row; money columns number-formatted. Same rows as the PDF/table.
+   * Returns the workbook bytes as a Buffer for the route to stream as an attachment.
+   */
+  async payrollBatchXlsx(
+    period: { from: string; to: string; lang?: 'he' | 'en' | 'tr'; companyId?: string },
+    caller: AuthUser,
+  ): Promise<Buffer> {
+    const { rows } = await this.loadPayrollBatch(period, caller);
+    // Lazy import keeps exceljs out of the module graph until an export is requested.
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'SiteLink';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Payroll');
+
+    const periodLabel = `${toDateOnly(new Date(period.from))} → ${toDateOnly(new Date(period.to))}`;
+    ws.columns = [
+      { header: 'Worker', key: 'worker', width: 28 },
+      { header: 'Period', key: 'period', width: 24 },
+      { header: 'Work hours', key: 'hours', width: 12 },
+      { header: 'Hour price', key: 'hourPrice', width: 14 },
+      { header: 'Gross', key: 'gross', width: 14 },
+      { header: 'Deductions', key: 'deductions', width: 14 },
+      { header: 'Net', key: 'net', width: 14 },
+      { header: 'Currency', key: 'currency', width: 10 },
+    ];
+    ws.getRow(1).font = { bold: true };
+
+    const MONEY_FMT = '#,##0.00';
+    for (const r of rows) {
+      const row = ws.addRow({
+        // CSV/spreadsheet-formula-injection guard: a worker name is attacker-
+        // influenceable text; if it begins with a formula trigger (= + - @, tab,
+        // CR) prefix a single quote so the sheet treats it as a literal, never a
+        // formula. Money cells are pushed as numbers (not affected).
+        worker: sanitizeCell(r.workerName),
+        period: periodLabel,
+        hours: r.totalHours,
+        // Mark fixed-monthly rows so the informational rate is not misread as rate×hours.
+        hourPrice: r.hourlyWage,
+        gross: r.gross,
+        deductions: r.deductionsTotal,
+        net: r.net,
+        currency: r.currency,
+      });
+      row.getCell('hourPrice').numFmt = MONEY_FMT;
+      row.getCell('gross').numFmt = MONEY_FMT;
+      row.getCell('deductions').numFmt = MONEY_FMT;
+      row.getCell('net').numFmt = MONEY_FMT;
+      if (r.isMonthly) {
+        // A note on the informational monthly rate (Excel can't carry a superscript
+        // cheaply — a cell comment keeps the number clean while flagging the caveat).
+        row.getCell('hourPrice').note =
+          'Informational — monthly-salary worker (gross ≠ rate × hours)';
+      }
+    }
+
+    // exceljs types xlsx.writeBuffer() as ArrayBuffer-ish; normalise to a Node Buffer.
+    const out = await wb.xlsx.writeBuffer();
+    return Buffer.from(out as ArrayBuffer);
   }
 }

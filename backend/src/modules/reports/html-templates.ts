@@ -41,6 +41,11 @@ interface HoursLabels {
   loans: string;
   advances: string;
   net: string;
+  /** HOURS-SPLIT PAYMENT section labels. */
+  splitSection: string;
+  personnel: string;
+  contractor: string;
+  threshold: string;
 }
 
 const HOURS_LABELS: Record<HoursLang, HoursLabels> = {
@@ -61,6 +66,10 @@ const HOURS_LABELS: Record<HoursLang, HoursLabels> = {
     loans: 'הלוואות',
     advances: 'מקדמות',
     net: 'נטו',
+    splitSection: 'פיצול שעות',
+    personnel: 'עובד',
+    contractor: 'קבלן',
+    threshold: 'סף',
   },
   en: {
     section: 'Working hours details',
@@ -79,6 +88,10 @@ const HOURS_LABELS: Record<HoursLang, HoursLabels> = {
     loans: 'Loans',
     advances: 'Advances',
     net: 'Net',
+    splitSection: 'Hours split',
+    personnel: 'Personnel',
+    contractor: 'Contractor',
+    threshold: 'Threshold',
   },
   tr: {
     section: 'Çalışma saatleri ayrıntıları',
@@ -97,6 +110,10 @@ const HOURS_LABELS: Record<HoursLang, HoursLabels> = {
     loans: 'Krediler',
     advances: 'Avanslar',
     net: 'Net',
+    splitSection: 'Saat bölünmesi',
+    personnel: 'Personel',
+    contractor: 'Taşeron',
+    threshold: 'Eşik',
   },
 };
 
@@ -314,6 +331,47 @@ function deductionsSectionHtml(meta: ReportHeaderMeta, result: SalaryResult): st
 <div class="net${negative ? ' negative' : ''}"><span class="bold">${esc(L.net)}</span><span class="bold">${money(result.net)}</span></div>`;
 }
 
+/**
+ * HOURS-SPLIT PAYMENT section for the payslip. Renders a 3-column table
+ * (portion | hours × rate | amount) with a Personnel line + a Contractor line +
+ * a combined total, plus a threshold caption. Money-bearing → the caller only
+ * emits this when `includePrices` is true (HOURS-ONLY hides all money). Renders
+ * nothing when the calc did not enable split (`result.split?.enabled !== true`).
+ */
+function splitSectionHtml(meta: ReportHeaderMeta, result: SalaryResult): string {
+  const s = result.split;
+  if (!s?.enabled) return '';
+  const L = HOURS_LABELS[hoursLangFor(meta)];
+  const cur = esc(result.currency);
+  const money = (v: number): string => `${esc(v.toFixed(2))} ${cur}`;
+  const rateCell = (hrs: number, rate: number): string =>
+    `${esc(hrs.toFixed(1))} × ${esc(rate.toFixed(2))}`;
+  return `
+<h2 class="section-title">${esc(L.splitSection)}</h2>
+<p class="meta">${esc(L.threshold)}: ${esc(s.threshold)}</p>
+<table class="hours">
+  <tbody>
+    <tr>
+      <td>${esc(L.personnel)}</td>
+      <td class="num">${rateCell(s.personnelHours, s.personnelRate)}</td>
+      <td class="num">${money(s.personnelAmount)}</td>
+    </tr>
+    <tr>
+      <td>${esc(L.contractor)}</td>
+      <td class="num">${rateCell(s.contractorHours, s.contractorRate)}</td>
+      <td class="num">${money(s.contractorAmount)}</td>
+    </tr>
+  </tbody>
+  <tfoot>
+    <tr>
+      <td>${esc(L.total)}</td>
+      <td></td>
+      <td class="num">${money(s.personnelAmount + s.contractorAmount)}</td>
+    </tr>
+  </tfoot>
+</table>`;
+}
+
 /** Payslip HTML (mirror of PayslipDocument). */
 export function payslipHtml(props: {
   meta: ReportHeaderMeta;
@@ -355,9 +413,11 @@ export function payslipHtml(props: {
       .map((l) => rowHtml(esc(l.label), `${esc(l.amount.toFixed(2))} ${esc(result.currency)}`))
       .join('\n');
     const deductionsSection = deductionsSectionHtml(meta, result);
+    const splitSection = splitSectionHtml(meta, result);
     moneyBlocks = `
 <div>${lines}</div>
 ${hoursSection}
+${splitSection}
 <div class="total"><span class="bold">${esc(L.gross)}</span><span class="bold">${esc(result.gross.toFixed(2))} ${esc(result.currency)}</span></div>
 ${deductionsSection}`;
   } else {

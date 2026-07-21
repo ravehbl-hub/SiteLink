@@ -21,7 +21,7 @@ const FLAT_VERSION = 'flat-1.0.0';
 const ISRAELI_STUB_VERSION = 'israeli-labor-law-0.0.0-stub';
 
 /** Sum hours only for ATTENDANCE days (vacation/disease do not accrue worked hours). */
-function attendanceHours(input: SalaryInput): number {
+export function attendanceHours(input: SalaryInput): number {
   return input.hoursByDay
     .filter((d) => d.status === 'attendance')
     .reduce((sum, d) => sum + (Number.isFinite(d.hours) ? d.hours : 0), 0);

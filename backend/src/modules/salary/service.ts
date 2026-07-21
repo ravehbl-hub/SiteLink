@@ -23,7 +23,7 @@ import {
 import { prisma } from '../../db/client.js';
 import { AppError } from '../../lib/errors.js';
 import { toDateOnly } from '../../lib/dates.js';
-import { toNumber } from '../../lib/money.js';
+import { toNumber, round2 } from '../../lib/money.js';
 import {
   assertCompanyScopeMatch,
   resolveCompanyScope,
@@ -31,10 +31,13 @@ import {
 } from '../../lib/scope.js';
 import type { AuthUser } from '../../plugins/types.js';
 import { SalaryEngineFactory } from './factory.js';
-import { SALARY_WARNINGS } from './strategies.js';
+import { SALARY_WARNINGS, attendanceHours } from './strategies.js';
 import type { calculateSalarySchema } from './schemas.js';
 
-type CalcInput = z.infer<typeof calculateSalarySchema>;
+// INPUT type (defaults optional): both the route (passing the parsed OUTPUT) and
+// the reports service (passing a bare period object without split params) satisfy
+// this. Inside calculate() the split defaults are applied explicitly.
+type CalcInput = z.input<typeof calculateSalarySchema>;
 
 /** SalaryResult plus any engine warnings surfaced by the service. */
 export interface SalaryCalculation extends SalaryResult {
@@ -122,7 +125,45 @@ export class SalaryService {
     };
 
     const engine = this.factory.resolve(mode);
-    const result = engine.compute(salaryInput);
+    let result = engine.compute(salaryInput);
+
+    // HOURS-SPLIT PAYMENT (optional, request-driven, default OFF). When enabled,
+    // the worker's total ATTENDANCE hours are split at `splitThreshold`:
+    //   Personnel  = min(totalHours, threshold) × personnel (resolved) rate,
+    //   Contractor = max(0, totalHours − threshold) × contractorRate (request).
+    // GROSS becomes the combined split total (personnel + contractor) and the
+    // breakdown is replaced by the two split lines. When OFF, `result` is the
+    // UNCHANGED engine output. `contractorRate` is validated required-when-enabled
+    // at the schema layer, so it is a number here whenever splitEnabled is true.
+    if (input.splitEnabled) {
+      const threshold = input.splitThreshold ?? 236;
+      const contractorRate = input.contractorRate ?? 0;
+      const totalHours = attendanceHours(salaryInput);
+      const personnelHours = Math.min(totalHours, threshold);
+      const contractorHours = Math.max(0, totalHours - threshold);
+      const personnelAmount = round2(personnelHours * hourlyWage);
+      const contractorAmount = round2(contractorHours * contractorRate);
+      const gross = round2(personnelAmount + contractorAmount);
+
+      result = {
+        ...result,
+        gross,
+        breakdown: [
+          { label: `Personnel (${personnelHours}h × ${hourlyWage})`, amount: personnelAmount },
+          { label: `Contractor (${contractorHours}h × ${contractorRate})`, amount: contractorAmount },
+        ],
+        split: {
+          enabled: true,
+          threshold,
+          personnelHours,
+          personnelRate: hourlyWage,
+          personnelAmount,
+          contractorHours,
+          contractorRate,
+          contractorAmount,
+        },
+      };
+    }
 
     // NET WAGE (נטו): reconcile GROSS against the worker's OWN-company APPROVED
     // loan/advance requests that fall within THIS period. See computeDeductions.

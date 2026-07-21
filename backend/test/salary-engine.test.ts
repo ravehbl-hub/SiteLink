@@ -12,6 +12,10 @@ import {
   SALARY_WARNINGS,
 } from '../src/modules/salary/strategies.js';
 import { SalaryEngineFactory } from '../src/modules/salary/factory.js';
+import {
+  calculateSalarySchema,
+  DEFAULT_SPLIT_THRESHOLD,
+} from '../src/modules/salary/schemas.js';
 
 function baseInput(overrides: Partial<SalaryInput> = {}): SalaryInput {
   return {
@@ -105,6 +109,51 @@ describe('IsraeliLaborLawStrategy — STUB (FR-MGR-SRE-4, R-1 mitigation)', () =
   it('SALARY_WARNINGS.ISRAELI_STUB clearly warns it is not compliant pay', () => {
     expect(SALARY_WARNINGS.ISRAELI_STUB).toMatch(/STUB/);
     expect(SALARY_WARNINGS.ISRAELI_STUB).toMatch(/not.*compliant|Do not treat as compliant/i);
+  });
+});
+
+describe('calculateSalarySchema — HOURS-SPLIT PAYMENT validation (request-time, default OFF)', () => {
+  const base = {
+    workerId: 'w1',
+    periodStart: '2026-07-01T00:00:00.000Z',
+    periodEnd: '2026-07-31T00:00:00.000Z',
+  };
+
+  it('DEFAULT: splitEnabled=false, threshold defaults to 236, contractorRate optional', () => {
+    const parsed = calculateSalarySchema.parse(base);
+    expect(parsed.splitEnabled).toBe(false);
+    expect(parsed.splitThreshold).toBe(DEFAULT_SPLIT_THRESHOLD);
+    expect(parsed.splitThreshold).toBe(236);
+    expect(parsed.contractorRate).toBeUndefined();
+  });
+
+  it('splitEnabled WITHOUT contractorRate → validation error (→ 400)', () => {
+    const res = calculateSalarySchema.safeParse({ ...base, splitEnabled: true });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      expect(res.error.issues[0].path).toContain('contractorRate');
+    }
+  });
+
+  it('splitEnabled WITH contractorRate (>=0) → valid; threshold editable', () => {
+    const parsed = calculateSalarySchema.parse({
+      ...base,
+      splitEnabled: true,
+      splitThreshold: 200,
+      contractorRate: 80,
+    });
+    expect(parsed.splitEnabled).toBe(true);
+    expect(parsed.splitThreshold).toBe(200);
+    expect(parsed.contractorRate).toBe(80);
+  });
+
+  it('rejects a negative contractorRate', () => {
+    const res = calculateSalarySchema.safeParse({
+      ...base,
+      splitEnabled: true,
+      contractorRate: -5,
+    });
+    expect(res.success).toBe(false);
   });
 });
 

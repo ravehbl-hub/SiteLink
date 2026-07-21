@@ -198,6 +198,78 @@ describe('SalaryService.calculate — NET WAGE (נטו) deductions', () => {
     expect(r.net).toBeLessThan(0);
   });
 
+  // ── HOURS-SPLIT PAYMENT (optional, request-driven, default OFF) ──────────────
+  it('SPLIT enabled: 250h @ threshold 236, personnel 50, contractor 80 → 11800+1120 gross 12920', async () => {
+    // 25 days × 10h = 250 attendance hours; personnel rate 50.
+    const { companyId, workerId } = await seedWorker(50);
+    await seedAttendance(companyId, workerId, 25, 10); // 250h
+
+    const r = await service.calculate({
+      workerId,
+      periodStart: PERIOD_START,
+      periodEnd: PERIOD_END,
+      splitEnabled: true,
+      splitThreshold: 236,
+      contractorRate: 80,
+    });
+
+    expect(r.split).toBeDefined();
+    expect(r.split!.enabled).toBe(true);
+    expect(r.split!.threshold).toBe(236);
+    expect(r.split!.personnelHours).toBe(236);
+    expect(r.split!.personnelRate).toBe(50);
+    expect(r.split!.personnelAmount).toBe(11800); // 236 × 50
+    expect(r.split!.contractorHours).toBe(14); // 250 − 236
+    expect(r.split!.contractorRate).toBe(80);
+    expect(r.split!.contractorAmount).toBe(1120); // 14 × 80
+    // GROSS = personnel + contractor.
+    expect(r.gross).toBe(12920);
+    expect(r.gross).toBe(r.split!.personnelAmount + r.split!.contractorAmount);
+    // NET = combined gross − loans − advances (none here).
+    expect(r.net).toBe(12920);
+    // Two breakdown lines: Personnel + Contractor.
+    expect(r.breakdown).toHaveLength(2);
+    expect(r.breakdown[0].amount).toBe(11800);
+    expect(r.breakdown[1].amount).toBe(1120);
+  });
+
+  it('SPLIT enabled but totalHours (200) < threshold (236) → contractor 0, gross 200×50=10000', async () => {
+    const { companyId, workerId } = await seedWorker(50);
+    await seedAttendance(companyId, workerId, 20, 10); // 200h
+
+    const r = await service.calculate({
+      workerId,
+      periodStart: PERIOD_START,
+      periodEnd: PERIOD_END,
+      splitEnabled: true,
+      splitThreshold: 236,
+      contractorRate: 80,
+    });
+
+    expect(r.split!.personnelHours).toBe(200);
+    expect(r.split!.contractorHours).toBe(0);
+    expect(r.split!.contractorAmount).toBe(0);
+    expect(r.split!.personnelAmount).toBe(10000);
+    expect(r.gross).toBe(10000);
+  });
+
+  it('SPLIT DISABLED (default) → calc UNCHANGED (flat gross = hours × rate), no split object', async () => {
+    // Regression: 12 days × 9h × 50 = 5400 (identical to the existing flat calc).
+    const { companyId, workerId } = await seedWorker(50);
+    await seedAttendance(companyId, workerId, 12, 9);
+
+    const r = await service.calculate({
+      workerId,
+      periodStart: PERIOD_START,
+      periodEnd: PERIOD_END,
+      // splitEnabled omitted → default OFF
+    });
+
+    expect(r.split).toBeUndefined();
+    expect(r.gross).toBe(5400);
+    expect(r.net).toBe(5400);
+  });
+
   it('COMPANY-SCOPED: a same-worker-name approved loan in ANOTHER company is NEVER summed', async () => {
     // Worker in company A (the one we compute).
     const { companyId: companyA, workerId } = await seedWorker(50);

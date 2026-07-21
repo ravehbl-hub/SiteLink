@@ -126,6 +126,32 @@ export interface SalaryResult {
   loansTotal?: number;
   advancesTotal?: number;
   net?: number;
+  /**
+   * HOURS-SPLIT PAYMENT (optional, request-driven, Phase 2 company-scoped).
+   *
+   * When the manager ENABLES split mode for a single calc, the worker's total
+   * ATTENDANCE hours are split at `threshold`:
+   *   - Personnel portion = min(totalHours, threshold) × the resolved personnel
+   *     rate (the SAME per-worker/profession hourlyWage the calc already uses).
+   *   - Contractor portion = max(0, totalHours − threshold) × a separate
+   *     `contractorRate` supplied in the REQUEST (never persisted).
+   * GROSS then equals personnelAmount + contractorAmount (the split total).
+   *
+   * Present ONLY when split was enabled for the calc; absent otherwise (default
+   * OFF → the calc is byte-for-byte the existing flat/hourly behaviour). NET is
+   * unchanged: net = gross (= combined personnel+contractor) − loans − advances.
+   * The dashboard/batch (`calculateMany`) path never populates this.
+   */
+  split?: {
+    enabled: boolean;
+    threshold: number;
+    personnelHours: number;
+    personnelRate: number;
+    personnelAmount: number;
+    contractorHours: number;
+    contractorRate: number;
+    contractorAmount: number;
+  };
 }
 
 /**

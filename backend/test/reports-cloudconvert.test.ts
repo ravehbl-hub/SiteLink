@@ -337,6 +337,68 @@ describe('reports HTML templates (CloudConvert path, key-independent)', () => {
     expect(flag.parse(true)).toBe(true);
   });
 
+  // ── HOURS-SPLIT PAYMENT rendering ────────────────────────────────────────────
+  const splitResult = {
+    gross: 12920,
+    currency: 'ILS',
+    mode: 'fixed',
+    engineVersion: 'v1',
+    breakdown: [
+      { label: 'Personnel (236h × 50)', amount: 11800 },
+      { label: 'Contractor (14h × 80)', amount: 1120 },
+    ],
+    hourlyWage: 50,
+    loansTotal: 0,
+    advancesTotal: 0,
+    net: 12920,
+    split: {
+      enabled: true,
+      threshold: 236,
+      personnelHours: 236,
+      personnelRate: 50,
+      personnelAmount: 11800,
+      contractorHours: 14,
+      contractorRate: 80,
+      contractorAmount: 1120,
+    },
+    warnings: [],
+  } as never;
+
+  it('split enabled + includePrices=true → Personnel + Contractor lines + combined total (he/RTL)', () => {
+    const html = payslipHtml({
+      meta: rtlMeta,
+      workerName: 'Dimitar',
+      result: splitResult,
+      warnings: [],
+      includePrices: true,
+    });
+    // Hebrew split section + labels present.
+    expect(html).toContain('פיצול שעות'); // Hours split section
+    expect(html).toContain('עובד'); // Personnel
+    expect(html).toContain('קבלן'); // Contractor
+    expect(html).toContain('סף'); // Threshold caption
+    // Amounts: personnel 11800, contractor 1120, combined total = gross 12920.
+    expect(html).toContain('11800.00 ILS');
+    expect(html).toContain('1120.00 ILS');
+    expect(html).toContain('12920.00 ILS'); // combined split total == gross
+  });
+
+  it('split enabled + includePrices=false → money hidden (no split amounts, hours-only stays)', () => {
+    const html = payslipHtml({
+      meta: rtlMeta,
+      workerName: 'Dimitar',
+      result: splitResult,
+      warnings: [],
+      // includePrices omitted → hours-only
+    });
+    // Split money labels/amounts are HIDDEN (split lines are money).
+    expect(html).not.toContain('פיצול שעות'); // no split section
+    expect(html).not.toContain('11800.00 ILS');
+    expect(html).not.toContain('1120.00 ILS');
+    expect(html).not.toContain('12920.00 ILS');
+    expect(html).not.toContain('ברוטו'); // no gross
+  });
+
   it('profit-loss + working-hours producers render their totals', () => {
     const pl = profitLossHtml({
       meta: { ...ltrMeta, title: 'Profit & Loss' },

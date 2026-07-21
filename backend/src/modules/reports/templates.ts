@@ -111,6 +111,7 @@ export function PayslipDocument(props: {
       // Gross / Deductions / Net only when prices are included (HOURS-ONLY = none).
       ...(includePrices
         ? [
+            ...splitBlock(result),
             e(View, { key: 'g', style: styles.total }, [
               e(Text, { key: 'gl', style: styles.bold }, 'Gross'),
               e(Text, { key: 'gv', style: styles.bold }, `${result.gross.toFixed(2)} ${result.currency}`),
@@ -171,6 +172,36 @@ function hoursBreakdown(
       ...(includePrices ? [e(Text, { key: 'v', style: styles.bold }, money(totalMoney))] : []),
     ]),
   ]);
+}
+
+/**
+ * HOURS-SPLIT PAYMENT block for the react-pdf payslip fallback (parity with the
+ * HTML/CloudConvert template). Renders a Personnel line + a Contractor line
+ * (hrs × rate → amount) + a combined total, only when the calc enabled split
+ * (result.split?.enabled). Money-bearing → the caller only emits it when
+ * includePrices is true. English labels (the RTL/Hebrew path is HTML/CloudConvert).
+ */
+function splitBlock(result: SalaryResult): React.ReactElement[] {
+  const s = result.split;
+  if (!s?.enabled) return [];
+  const cur = result.currency;
+  const money = (v: number): string => `${v.toFixed(2)} ${cur}`;
+  const rate = (hrs: number, r: number): string => `${hrs.toFixed(1)}h × ${r.toFixed(2)}`;
+  return [
+    e(Text, { key: 'stitle', style: styles.sectionTitle }, `Hours split (threshold ${s.threshold})`),
+    e(View, { key: 'sper', style: styles.row }, [
+      e(Text, { key: 'l' }, `Personnel  ${rate(s.personnelHours, s.personnelRate)}`),
+      e(Text, { key: 'v' }, money(s.personnelAmount)),
+    ]),
+    e(View, { key: 'scon', style: styles.row }, [
+      e(Text, { key: 'l' }, `Contractor  ${rate(s.contractorHours, s.contractorRate)}`),
+      e(Text, { key: 'v' }, money(s.contractorAmount)),
+    ]),
+    e(View, { key: 'stot', style: styles.total }, [
+      e(Text, { key: 'l', style: styles.bold }, 'Split total'),
+      e(Text, { key: 'v', style: styles.bold }, money(s.personnelAmount + s.contractorAmount)),
+    ]),
+  ];
 }
 
 /**

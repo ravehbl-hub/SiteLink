@@ -21,7 +21,7 @@ import { Role, type CurrentUser } from '@sitelink/shared';
 type AuthUser = CurrentUser['user'];
 import { getSupabase } from '../lib/supabase/client';
 import { isApiConfigured, isSupabaseConfigured } from '../lib/env';
-import { authApi } from '../lib/api/endpoints';
+import { authApi, usersApi } from '../lib/api/endpoints';
 import { ApiError } from '../lib/api/client';
 
 type Status = 'loading' | 'signed-out' | 'signed-in' | 'forbidden';
@@ -29,11 +29,24 @@ type Status = 'loading' | 'signed-out' | 'signed-in' | 'forbidden';
 interface AuthContextValue {
   status: Status;
   user: AuthUser | null;
+  /** The caller's OWN company name (from /auth/me), read-only. Null if unset. */
+  companyName: string | null;
   supabaseConfigured: boolean;
   apiConfigured: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  /**
+   * Change the signed-in user's own password. Re-authenticates with the current
+   * password first (Supabase updateUser doesn't verify the old one), then updates.
+   * Throws 'old-password-invalid' when the current password is wrong.
+   */
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
+  /**
+   * Change the signed-in user's email. Updates the Supabase login identity (which may
+   * send a confirmation link) and the app-side display email, then refreshes profile.
+   */
+  changeEmail: (newEmail: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -43,6 +56,7 @@ const MANAGER_ROLES: Role[] = [Role.MANAGER, Role.ADMIN];
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading');
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);
 
   const loadProfile = useCallback(async () => {
     if (!isApiConfigured) {
@@ -50,7 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      const { user: appUser } = await authApi.me();
+      const { user: appUser, companyName: cn } = await authApi.me();
+      setCompanyName(cn ?? null);
       if (MANAGER_ROLES.includes(appUser.role)) {
         setUser(appUser);
         setStatus('signed-in');
@@ -112,20 +127,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const supabase = getSupabase();
     if (supabase) await supabase.auth.signOut();
     setUser(null);
+    setCompanyName(null);
     setStatus('signed-out');
   }, []);
+
+  const changePassword = useCallback(
+    async (oldPassword: string, newPassword: string) => {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('supabase-not-configured');
+      const email = user?.email;
+      if (!email) throw new Error('no-user');
+      const { error: reauthErr } = await supabase.auth.signInWithPassword({
+        email,
+        password: oldPassword,
+      });
+      if (reauthErr) throw new Error('old-password-invalid');
+      const { error: updErr } = await supabase.auth.updateUser({ password: newPassword });
+      if (updErr) throw updErr;
+    },
+    [user],
+  );
+
+  const changeEmail = useCallback(
+    async (newEmail: string) => {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('supabase-not-configured');
+      // Login identity email — Supabase may require confirmation of the new address.
+      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      if (error) throw error;
+      // Keep the app-side display email in sync (non-fatal if the API rejects it).
+      if (user) {
+        try {
+          await usersApi.update(user.id, { email: newEmail });
+        } catch {
+          /* app-email sync is best-effort; the login email change already applied */
+        }
+      }
+      await loadProfile();
+    },
+    [user, loadProfile],
+  );
 
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
       user,
+      companyName,
       supabaseConfigured: isSupabaseConfigured,
       apiConfigured: isApiConfigured,
       signIn,
       signOut,
       refreshProfile: loadProfile,
+      changePassword,
+      changeEmail,
     }),
-    [status, user, signIn, signOut, loadProfile],
+    [status, user, companyName, signIn, signOut, loadProfile, changePassword, changeEmail],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

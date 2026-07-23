@@ -120,8 +120,22 @@ export class UsersService {
       // Non-admin: own company, full stop. input.companyId is never read here.
       return scope.companyId;
     }
-    // ADMIN (allCompanies): must name a valid, live target company — a Manager must
-    // belong to a company, so the field is mandatory for an admin create.
+    // ADMIN caller (allCompanies).
+    // A NEW SYSTEM ADMIN (role === ADMIN) is a super-admin that manages EVERY company —
+    // it belongs to no single tenant, and companyId is IGNORED for an admin's authz
+    // (resolveCompanyScope → allCompanies). So we do NOT require a target company for an
+    // admin create; we stamp a harmless placeholder (the creating admin's own company)
+    // purely to satisfy the NOT-NULL column. An explicitly supplied, valid companyId is
+    // still honored.
+    if (input.role === Role.ADMIN) {
+      if (input.companyId) {
+        const c = await prisma.company.findUnique({ where: { id: input.companyId } });
+        if (c && !c.isArchived) return c.id;
+      }
+      return caller.companyId; // placeholder tenant — never used for an admin's scope
+    }
+    // Creating a NON-admin (Manager/Foreman/Worker/Partner) → a real, live target
+    // company is mandatory (they see only that company's data).
     if (!input.companyId) {
       throw AppError.validation('companyId is required when an admin creates a user');
     }

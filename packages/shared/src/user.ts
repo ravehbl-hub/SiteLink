@@ -112,4 +112,10 @@ export interface AuthSession {
  */
 export interface CurrentUser {
   user: Omit<User, 'authUserId'>;
+  /**
+   * Display name of the tenant company the user belongs to (self-scoped: always the
+   * caller's OWN company). Optional/nullable so older clients and any edge where the
+   * company row is missing degrade gracefully. Read-only — surfaced in Settings.
+   */
+  companyName?: string | null;
 }

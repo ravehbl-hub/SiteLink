@@ -17,12 +17,17 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: app.authenticate },
     async (req): Promise<CurrentUser> => {
       const appUser = req.appUser!;
-      const user = await prisma.user.findUnique({ where: { id: appUser.id } });
+      const user = await prisma.user.findUnique({
+        where: { id: appUser.id },
+        include: { company: { select: { name: true } } },
+      });
       if (!user) throw AppError.unauthorized();
       // Data minimization: strip authUserId (the Supabase identity FK) from the
       // /auth/me projection — the client never needs it (nexo LOW).
       const { authUserId: _authUserId, ...safe } = mapUser(user);
-      return { user: safe };
+      // Self-scoped: the joined company is the caller's OWN tenant (User.companyId,
+      // server-derived). Surfaced read-only in Settings. Null if the row is missing.
+      return { user: safe, companyName: user.company?.name ?? null };
     },
   );
 }

@@ -5,8 +5,8 @@
  * backgrounded we stop polling, and the AppState -> focusManager bridge
  * (useAppFocusManager) gives a single catch-up refetch on foreground instead.
  *
- * Worker self-data changes rarely, so only "My Requests" polls; Working Hours and
- * Salary are focus-only (no interval — they refetch on foreground via the bridge).
+ * Worker self-data changes rarely, so only "My Requests" polls; Working Hours is
+ * focus-only (no interval — it refetches on foreground via the bridge).
  * The global QueryClient staleTime is 30_000, so these per-screen values are
  * explicit overrides.
  */

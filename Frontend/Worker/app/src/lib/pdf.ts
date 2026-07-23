@@ -1,5 +1,5 @@
 /**
- * Native PDF fetch + open/share (FR-WRK-1 export, FR-WRK-2 payslip).
+ * Native PDF fetch + open/share (FR-WRK-1 working-hours export).
  *
  * The reports routes stream `application/pdf` behind the bearer token, so we can
  * not simply hand a URL to a viewer — we must download with the Authorization
@@ -47,14 +47,4 @@ export async function exportWorkingHoursPdf(params: {
 }): Promise<void> {
   const url = buildUrl('/reports/working-hours.pdf', params);
   await downloadAndShare(url, 'working-hours.pdf');
-}
-
-/** Payslip PDF (self-scoped): from,to,lang. */
-export async function exportPayslipPdf(params: {
-  from: string;
-  to: string;
-  lang: ReportLang;
-}): Promise<void> {
-  const url = buildUrl('/reports/payslip.pdf', params);
-  await downloadAndShare(url, 'payslip.pdf');
 }

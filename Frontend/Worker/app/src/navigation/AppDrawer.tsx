@@ -1,6 +1,6 @@
 /**
  * Primary navigation: a DRAWER (hamburger) navigator — the Worker app menu.
- * Items: Working Hours · Salary · New Request · My Requests · Settings.
+ * Items: Working Hours · New Request · My Requests · Settings.
  *
  * Header: the hamburger sits at the START; the SiteLink logo is pinned to the
  * header at the writing-direction START edge (right under RTL/Hebrew) via
@@ -48,7 +48,6 @@ function HamburgerButton() {
   );
 }
 import { WorkingHoursScreen } from '../features/hours/WorkingHoursScreen';
-import { SalaryScreen } from '../features/salary/SalaryScreen';
 import { NewRequestScreen } from '../features/requests/NewRequestScreen';
 import { MyRequestsScreen } from '../features/requests/MyRequestsScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
@@ -83,11 +82,6 @@ export function AppDrawer() {
         name="WorkingHours"
         component={WorkingHoursScreen}
         options={{ title: t('nav.workingHours') }}
-      />
-      <Drawer.Screen
-        name="Salary"
-        component={SalaryScreen}
-        options={{ title: t('nav.salary') }}
       />
       <Drawer.Screen
         name="NewRequest"

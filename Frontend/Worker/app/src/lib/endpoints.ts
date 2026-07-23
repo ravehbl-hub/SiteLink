@@ -11,7 +11,6 @@ import type {
   Paginated,
   RequestStatus,
   RequestType,
-  SalaryResult,
   WorkerRequest,
   WorkingHours,
 } from '@sitelink/shared';
@@ -50,11 +49,6 @@ export interface WorkingHoursParams {
   grain: WorkingHoursGrainParam;
 }
 
-export interface SalaryCalcParams {
-  periodStart: string;
-  periodEnd: string;
-}
-
 /**
  * Unified request-create body (FR-WRK-3/4/5). All three request kinds submit
  * through POST /requests. workerId + requestedById are server-derived; status
@@ -84,10 +78,6 @@ export const endpoints = {
       to: params.to,
       grain: GRAIN_WIRE[params.grain],
     }),
-
-  // Salary (self-forced) — FR-WRK-2
-  calculateSalary: (params: SalaryCalcParams) =>
-    api.post<SalaryResult>('/salary/calculate', params),
 
   // Requests — unified create + self list (FR-WRK-3/4/5, FR-WRK)
   createRequest: (body: CreateSelfRequestInput) => api.post<WorkerRequest>('/requests', body),

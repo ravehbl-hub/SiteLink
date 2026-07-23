@@ -6,17 +6,33 @@
  * user changes language and the direction actually flips, reload the app so the
  * drawer/header/titles pick up the new direction. See reloadForDirection().
  */
-import { I18nManager, DevSettings } from 'react-native';
+import { I18nManager, DevSettings, Platform } from 'react-native';
 import { Language } from '@sitelink/shared';
 import { isRtlLanguage } from './index';
 
 /**
- * Sync the native layout direction to the active language.
- * Returns true if the direction actually changed (caller must reload — see
- * reloadForDirection — for the change to take visual effect on native).
+ * Sync the layout direction to the active language.
+ * Returns true if the direction changed AND a reload is required for it to take
+ * visual effect (native only). On WEB it always returns false: direction is applied
+ * immediately via the DOM `dir` attribute (no app reload), so the boot path never
+ * enters a reload loop — I18nManager.forceRTL does NOT persist across a web reload,
+ * which would otherwise make this return true on every load and reload endlessly.
  */
 export function applyDirection(lang: Language): boolean {
   const shouldRtl = isRtlLanguage(lang);
+  if (Platform.OS === 'web') {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('dir', shouldRtl ? 'rtl' : 'ltr');
+    }
+    // Best-effort keep react-native-web layout in sync; never trigger a reload.
+    try {
+      I18nManager.allowRTL(shouldRtl);
+      I18nManager.forceRTL(shouldRtl);
+    } catch {
+      /* no-op on web */
+    }
+    return false;
+  }
   if (I18nManager.isRTL === shouldRtl) return false;
   I18nManager.allowRTL(shouldRtl);
   I18nManager.forceRTL(shouldRtl);

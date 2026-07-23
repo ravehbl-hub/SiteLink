@@ -1,9 +1,9 @@
 /**
  * LogoBadge — the SiteLink logo (crane + teal wordmark) presented on a white,
- * rounded "chip". The source PNG has an OPAQUE WHITE background, so on the dark
- * Operations-Deck theme a bare logo would read as a raw white rectangle. The
- * chip makes that white intentional: a white ground, subtle padding, rounded
- * corners and a hairline border so it stays defined in light mode too.
+ * rounded "chip". The source PNG is TRANSPARENT, so the chip supplies a white
+ * ground behind it: on the dark Operations-Deck theme the full-colour artwork
+ * needs a light backing to stay legible. Subtle padding, rounded corners and a
+ * hairline border keep it defined in light mode too.
  *
  * NOTE: never apply `tintColor` to this logo — the artwork is full-colour, and
  * tinting recolours every opaque pixel into one flat block (the "green square"

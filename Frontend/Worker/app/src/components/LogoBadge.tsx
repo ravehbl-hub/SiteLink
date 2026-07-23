@@ -33,15 +33,9 @@ export function LogoBadge({ variant = 'header' }: { variant?: Variant }) {
   return (
     <View
       style={{
-        backgroundColor: '#FFFFFF',
-        paddingHorizontal: s.padding,
-        paddingVertical: s.padding,
-        borderRadius: s.radius,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
         alignItems: 'center',
         justifyContent: 'center',
-        // Keep the chip off the header END edge; logical prop preserves RTL.
+        // Keep the logo off the header END edge; logical prop preserves RTL.
         marginEnd: variant === 'header' ? Number(theme.tokens.spacing['3']) : 0,
       }}
     >

@@ -1,9 +1,7 @@
 /**
- * LogoBadge — the SiteLink logo (crane + teal wordmark) presented on a white,
- * rounded "chip". The source PNG is TRANSPARENT, so the chip supplies a white
- * ground behind it: on the dark Operations-Deck theme the full-colour artwork
- * needs a light backing to stay legible. Subtle padding, rounded corners and a
- * hairline border keep it defined in light mode too.
+ * LogoBadge — the SiteLink logo (crane + teal wordmark). The source PNG is
+ * TRANSPARENT and is rendered bare (no white plate / border) so it sits directly on
+ * the surface.
  *
  * NOTE: never apply `tintColor` to this logo — the artwork is full-colour, and
  * tinting recolours every opaque pixel into one flat block (the "green square"
@@ -33,15 +31,9 @@ export function LogoBadge({ variant = 'header' }: { variant?: Variant }) {
   return (
     <View
       style={{
-        backgroundColor: '#FFFFFF',
-        paddingHorizontal: s.padding,
-        paddingVertical: s.padding,
-        borderRadius: s.radius,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
         alignItems: 'center',
         justifyContent: 'center',
-        // Keep the chip off the header END edge; logical prop preserves RTL.
+        // Keep the logo off the header END edge; logical prop preserves RTL.
         marginEnd: variant === 'header' ? Number(theme.tokens.spacing['3']) : 0,
       }}
     >

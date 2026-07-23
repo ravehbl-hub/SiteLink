@@ -6,6 +6,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -367,6 +368,118 @@ export function ErrorState({ label, onRetry }: { label: string; onRetry?: () => 
 }
 
 /** Simple segmented chooser used for enum selection + filters. */
+/**
+ * Single-choice combobox: a compact pill trigger showing the current selection that,
+ * on tap, opens a modal, SCROLLABLE list of options (active one checked). Use in place
+ * of Segmented when there are many options (e.g. a long worker roster) so they don't
+ * overflow the screen as a giant button grid. Cross-platform (native + web), RTL-safe.
+ */
+export function Select<T extends string>({
+  value,
+  options,
+  onChange,
+  placeholder,
+}: {
+  value: T | null;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  placeholder?: string;
+}) {
+  const { theme } = useTheme();
+  const [open, setOpen] = React.useState(false);
+  const selected = options.find((o) => o.value === value) ?? null;
+  const triggerLabel = selected?.label ?? placeholder ?? '';
+  const wellRadius = Number(theme.neumorphic?.radii.well ?? theme.tokens.radii.md);
+  const panelRadius = Number(theme.neumorphic?.radii.card ?? theme.tokens.radii.xl ?? 16);
+
+  return (
+    <View style={{ marginBottom: Number(theme.tokens.spacing['2']) }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={triggerLabel}
+        onPress={() => setOpen(true)}
+        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          alignSelf: 'flex-start',
+          minWidth: 220,
+          backgroundColor: theme.colors.surfaceAlt,
+          borderColor: theme.colors.border,
+          borderWidth: Number(theme.tokens.borderWidth.hairline ?? 1),
+          borderRadius: wellRadius,
+          paddingVertical: Number(theme.tokens.spacing['2']),
+          paddingHorizontal: Number(theme.tokens.spacing['3']),
+        }}
+      >
+        <Text
+          style={{ color: selected ? theme.colors.textPrimary : theme.colors.textSecondary, textAlign: 'auto' }}
+          numberOfLines={1}
+        >
+          {triggerLabel}
+        </Text>
+        <Text style={{ color: theme.colors.textSecondary, marginStart: Number(theme.tokens.spacing['2']) }}>
+          ▾
+        </Text>
+      </Pressable>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: Number(theme.tokens.spacing['4']) }}>
+          <Pressable
+            onPress={() => setOpen(false)}
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: theme.colors.textPrimary,
+              opacity: 0.4,
+            }}
+          />
+          <View
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderRadius: panelRadius,
+              padding: Number(theme.tokens.spacing['3']),
+              maxHeight: '70%',
+            }}
+          >
+            <ScrollView>
+              {options.map((opt) => {
+                const active = opt.value === value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      onChange(opt.value);
+                      setOpen(false);
+                    }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingVertical: Number(theme.tokens.spacing['3']),
+                      paddingHorizontal: Number(theme.tokens.spacing['2']),
+                    }}
+                  >
+                    <Text style={{ color: active ? theme.colors.accent : theme.colors.textPrimary, flex: 1, textAlign: 'auto' }}>
+                      {opt.label}
+                    </Text>
+                    {active ? <Text style={{ color: theme.colors.accent }}>✓</Text> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
 export function Segmented<T extends string>({
   options,
   value,

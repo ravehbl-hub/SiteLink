@@ -29,6 +29,7 @@ import {
   Screen,
   SectionHeading,
   Segmented,
+  Select,
   StatusPill,
   Title,
 } from '../../components/ui';
@@ -156,7 +157,12 @@ export function AttendanceScreen() {
         ) : workerOptions.length === 0 ? (
           <EmptyState label={t('attendance.noWorkers')} />
         ) : (
-          <Segmented options={workerOptions} value={workerId} onChange={(v) => setWorkerId(v)} />
+          <Select
+            options={workerOptions}
+            value={workerId}
+            onChange={(v) => setWorkerId(v)}
+            placeholder={t('attendance.worker')}
+          />
         )}
 
         <SectionHeading>{t('attendance.type')}</SectionHeading>

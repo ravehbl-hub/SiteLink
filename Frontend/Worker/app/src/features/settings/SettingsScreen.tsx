@@ -4,7 +4,7 @@
  * applies RTL for Hebrew and prompts a restart note when direction flips.
  */
 import React from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, Platform, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Language, Theme } from '@sitelink/shared';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -31,8 +31,13 @@ export function SettingsScreen() {
   function onLanguage(lang: Language) {
     if (lang === language) return;
     const directionWillFlip = isRtlLanguage(lang) !== isRtlLanguage(language);
-    if (directionWillFlip) {
-      // Direction flips (LTR ↔ RTL): warn the user the app will restart, then
+    // On WEB, react-native-web's Alert.alert does NOT render custom buttons or fire
+    // their onPress — so an Alert-gated switch means the OK callback never runs and
+    // the language never changes (the "Hebrew not working" bug). Web also needs no
+    // restart: applyDirection flips the DOM `dir` attribute live with no reload.
+    // So on web we switch immediately; the confirm-and-reload prompt is native-only.
+    if (directionWillFlip && Platform.OS !== 'web') {
+      // Native direction flip (LTR ↔ RTL): warn the user the app will restart, then
       // let setLanguage persist the choice and reload so RTL/LTR takes effect.
       Alert.alert(t('settings.language'), t('settings.rtlRestartNote'), [
         { text: t('common.cancel'), style: 'cancel' },
@@ -40,7 +45,7 @@ export function SettingsScreen() {
       ]);
       return;
     }
-    // Same direction (en ↔ tr): no reload needed.
+    // Same-direction change (en ↔ tr), or any change on web: apply immediately.
     void setLanguage(lang);
   }
 

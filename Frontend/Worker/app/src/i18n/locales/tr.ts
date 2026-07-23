@@ -30,6 +30,7 @@ export const tr: TranslationSchema = {
       '.env dosyanızda EXPO_PUBLIC_API_BASE_URL, EXPO_PUBLIC_SUPABASE_URL ve EXPO_PUBLIC_SUPABASE_ANON_KEY değerlerini ayarlayın.',
   },
   workingHours: {
+    mySites: 'Şantiyelerim',
     title: 'Çalışma Saatleri',
     grain: 'Ayrıntı düzeyi',
     grainDay: 'Gün',

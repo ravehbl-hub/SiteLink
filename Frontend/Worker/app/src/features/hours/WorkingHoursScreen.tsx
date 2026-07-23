@@ -5,7 +5,7 @@
  * Export PDF button → GET /reports/working-hours.pdf?from&to&grain&lang.
  */
 import React, { useMemo, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { WorkingHours } from '@sitelink/shared';
@@ -13,13 +13,9 @@ import { endpoints, type WorkingHoursGrainParam } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
 import { focusOnly, STALE } from '../../lib/polling';
 import { currentMonthRange, shortDate, shortTime } from '../../lib/format';
-import { exportWorkingHoursPdf } from '../../lib/pdf';
-import { ApiError } from '../../lib/api';
-import { toLocale } from '../../i18n';
-import { useTheme } from '../../theme/ThemeProvider';
+import { useAuth } from '../../auth/AuthProvider';
 import {
   Body,
-  Button,
   Card,
   EmptyState,
   ErrorState,
@@ -29,15 +25,15 @@ import {
   Screen,
   SectionHeading,
   Segmented,
+  StatusPill,
   Title,
 } from '../../components/ui';
 import { BarChart } from '../../components/charts';
 
 export function WorkingHoursScreen() {
   const { t } = useTranslation();
-  const { language } = useTheme();
+  const { sites } = useAuth();
   const [grain, setGrain] = useState<WorkingHoursGrainParam>('week');
-  const [exporting, setExporting] = useState(false);
   const range = useMemo(currentMonthRange, []);
 
   const params = { from: range.from, to: range.to, grain };
@@ -55,25 +51,22 @@ export function WorkingHoursScreen() {
     value: Math.round(r.totalHours),
   }));
 
-  async function onExport() {
-    setExporting(true);
-    try {
-      await exportWorkingHoursPdf({
-        from: range.from,
-        to: range.to,
-        grain,
-        lang: toLocale(language),
-      });
-    } catch (e) {
-      Alert.alert(t('common.error'), e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setExporting(false);
-    }
-  }
-
   return (
     <Screen>
       <Title>{t('workingHours.title')}</Title>
+
+      {sites.length > 0 ? (
+        <Card>
+          <SectionHeading>{t('workingHours.mySites')}</SectionHeading>
+          <Row style={{ flexWrap: 'wrap' }}>
+            {sites.map((s) => (
+              <View key={s.id} style={{ marginEnd: 6, marginBottom: 6 }}>
+                <StatusPill label={s.name} tone="info" />
+              </View>
+            ))}
+          </Row>
+        </Card>
+      ) : null}
 
       <Card>
         <SectionHeading>{t('workingHours.grain')}</SectionHeading>
@@ -90,12 +83,6 @@ export function WorkingHoursScreen() {
           <Metric label={t('workingHours.totalHours')} value={Math.round(totalHours)} />
           <Metric label={t('workingHours.buckets')} value={rows.length} />
         </Row>
-        <Button
-          title={exporting ? t('common.loading') : t('workingHours.exportPdf')}
-          variant="secondary"
-          onPress={onExport}
-          loading={exporting}
-        />
       </Card>
 
       {q.isLoading ? (

@@ -35,9 +35,21 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       // Data minimization: strip authUserId (the Supabase identity FK) from the
       // /auth/me projection — the client never needs it (nexo LOW).
       const { authUserId: _authUserId, ...safe } = mapUser(user);
+      // Sites the caller works at (self-scoped). For a WORKER these are their own active
+      // site assignments (User→Worker via the unique userId link); empty otherwise.
+      const worker = await prisma.worker.findUnique({
+        where: { userId: user.id },
+        select: {
+          assignments: {
+            where: { unassignedAt: null },
+            select: { site: { select: { id: true, name: true } } },
+          },
+        },
+      });
+      const sites = worker?.assignments.map((a) => a.site) ?? [];
       // Self-scoped: the joined company is the caller's OWN tenant (User.companyId,
       // server-derived). Surfaced read-only in Settings. Null if the row is missing.
-      return { user: safe, companyName: user.company?.name ?? null };
+      return { user: safe, companyName: user.company?.name ?? null, sites };
     },
   );
 }

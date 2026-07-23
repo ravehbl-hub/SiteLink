@@ -100,19 +100,36 @@ export function AttendanceScreen() {
     ...live(POLL.attendance, STALE.live),
   });
 
+  // One attendance record per worker/day (server @@unique). Find today's record for
+  // the picked worker so a second save/clock UPDATES it instead of 409-conflicting.
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const existingToday =
+    workerId != null
+      ? attQ.data?.items.find(
+          (r) => r.workerId === workerId && String(r.date).slice(0, 10) === todayISO,
+        )
+      : undefined;
+
   const createMut = useMutation({
     mutationFn: () => {
       if (!workerId) throw new ApiError(0, 'NO_WORKER', 'Select a worker');
-      return endpoints.createAttendance({
-        workerId,
-        // Server forces the Foreman's own site; passed for consistency.
-        siteId,
-        date: new Date().toISOString(),
+      const body = {
         type,
         hours: type === AttendanceType.ATTENDANCE ? Number(hours) : null,
         // Clock in/out only for a present (ATTENDANCE) entry; blank → null.
         checkIn: type === AttendanceType.ATTENDANCE ? timeToISO(checkIn) : null,
         checkOut: type === AttendanceType.ATTENDANCE ? timeToISO(checkOut) : null,
+      };
+      // UPSERT: update today's existing record, else create a new one.
+      if (existingToday) {
+        return endpoints.updateAttendance(existingToday.id, body);
+      }
+      return endpoints.createAttendance({
+        workerId,
+        // Server forces the Foreman's own site; passed for consistency.
+        siteId,
+        date: new Date().toISOString(),
+        ...body,
       });
     },
     // Attendance feeds the dashboard rollup — invalidate both so KPIs refresh.

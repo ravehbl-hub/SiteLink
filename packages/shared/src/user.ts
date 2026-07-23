@@ -120,4 +120,10 @@ export interface CurrentUser {
    * company row is missing degrade gracefully. Read-only — surfaced in Settings.
    */
   companyName?: string | null;
+  /**
+   * The sites the caller works at (self-scoped). For a WORKER these are their active
+   * site assignments; empty when the user has no site links. Optional so older clients
+   * degrade gracefully.
+   */
+  sites?: { id: string; name: string }[];
 }

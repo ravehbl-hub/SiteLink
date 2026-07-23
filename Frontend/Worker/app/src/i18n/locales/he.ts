@@ -30,6 +30,7 @@ export const he: TranslationSchema = {
       'הגדירו את EXPO_PUBLIC_API_BASE_URL, EXPO_PUBLIC_SUPABASE_URL ו-EXPO_PUBLIC_SUPABASE_ANON_KEY בקובץ ה-.env.',
   },
   workingHours: {
+    mySites: 'האתרים שלי',
     title: 'שעות עבודה',
     grain: 'רזולוציה',
     grainDay: 'יום',

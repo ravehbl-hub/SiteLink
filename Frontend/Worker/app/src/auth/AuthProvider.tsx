@@ -21,6 +21,8 @@ type Status = 'loading' | 'signedOut' | 'signedIn' | 'unauthorized' | 'unconfigu
 interface AuthContextValue {
   status: Status;
   user: AuthUser | null;
+  /** The sites the worker works at (from /auth/me). Empty when none. */
+  sites: { id: string; name: string }[];
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshMe: () => Promise<void>;
@@ -33,16 +35,19 @@ const WORKER_ROLES: Role[] = [Role.WORKER];
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<Status>(config.isConfigured ? 'loading' : 'unconfigured');
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [sites, setSites] = useState<{ id: string; name: string }[]>([]);
 
   async function resolveMe(): Promise<void> {
     try {
-      const { user: me } = await endpoints.me();
+      const { user: me, sites: mySites } = await endpoints.me();
       if (!WORKER_ROLES.includes(me.role)) {
         setUser(null);
+        setSites([]);
         setStatus('unauthorized');
         return;
       }
       setUser(me);
+      setSites(mySites ?? []);
       setStatus('signedIn');
     } catch (e) {
       // A verified session that /auth/me rejects → treat as unauthorized, not a crash.
@@ -89,13 +94,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signOut(): Promise<void> {
     if (supabase) await supabase.auth.signOut();
     setUser(null);
+    setSites([]);
     setStatus('signedOut');
   }
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, signIn, signOut, refreshMe: resolveMe }),
+    () => ({ status, user, sites, signIn, signOut, refreshMe: resolveMe }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [status, user],
+    [status, user, sites],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -28,6 +28,7 @@ export const en = {
       'Set EXPO_PUBLIC_API_BASE_URL, EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file.',
   },
   workingHours: {
+    mySites: 'My sites',
     title: 'Working Hours',
     grain: 'Granularity',
     grainDay: 'Day',

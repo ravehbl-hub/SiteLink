@@ -8,27 +8,24 @@
  */
 import 'react-native-url-polyfill/auto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
 import { config } from './config';
+import { kvGet, kvSet, kvDelete } from './kvStore';
 
 /**
- * SecureStore-backed storage adapter for the Supabase session. SecureStore keys
- * cannot contain '.', so we sanitize the key the SDK passes in.
+ * Platform-aware storage adapter for the Supabase session: SecureStore on native,
+ * localStorage on web (SecureStore is native-only — on web its promises never settle
+ * and would hang the session load on an infinite spinner). See kvStore.
  */
-const secureStorage = {
-  getItem: (key: string) => SecureStore.getItemAsync(sanitize(key)),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(sanitize(key), value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(sanitize(key)),
+const authStorage = {
+  getItem: (key: string) => kvGet(key),
+  setItem: (key: string, value: string) => kvSet(key, value),
+  removeItem: (key: string) => kvDelete(key),
 };
-
-function sanitize(key: string): string {
-  return key.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\./g, '_');
-}
 
 export const supabase: SupabaseClient | null = config.isConfigured
   ? createClient(config.supabaseUrl, config.supabaseAnonKey, {
       auth: {
-        storage: secureStorage,
+        storage: authStorage,
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: false,

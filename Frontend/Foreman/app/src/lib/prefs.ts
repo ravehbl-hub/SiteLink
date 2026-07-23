@@ -4,7 +4,7 @@
  * User.theme/language remain the source of truth; these are the fast local cache
  * seeded from /auth/me and updated on toggle.
  */
-import * as SecureStore from 'expo-secure-store';
+import { kvGet, kvSet, kvDelete } from './kvStore';
 import { Language, Theme } from '@sitelink/shared';
 
 const THEME_KEY = 'sitelink_theme';
@@ -12,21 +12,21 @@ const LANG_KEY = 'sitelink_language';
 const ACTIVE_SITE_KEY = 'sitelink_foreman_active_site';
 
 export async function loadThemePref(): Promise<Theme | null> {
-  const v = await SecureStore.getItemAsync(THEME_KEY);
+  const v = await kvGet(THEME_KEY);
   return v === Theme.DARK || v === Theme.LIGHT ? (v as Theme) : null;
 }
 
 export async function saveThemePref(theme: Theme): Promise<void> {
-  await SecureStore.setItemAsync(THEME_KEY, theme);
+  await kvSet(THEME_KEY, theme);
 }
 
 export async function loadLanguagePref(): Promise<Language | null> {
-  const v = await SecureStore.getItemAsync(LANG_KEY);
+  const v = await kvGet(LANG_KEY);
   return v === Language.HE || v === Language.EN || v === Language.TR ? (v as Language) : null;
 }
 
 export async function saveLanguagePref(lang: Language): Promise<void> {
-  await SecureStore.setItemAsync(LANG_KEY, lang);
+  await kvSet(LANG_KEY, lang);
 }
 
 /**
@@ -37,14 +37,14 @@ export async function saveLanguagePref(lang: Language): Promise<void> {
  * primary/first available (see ActiveSiteProvider).
  */
 export async function loadActiveSitePref(): Promise<string | null> {
-  const v = await SecureStore.getItemAsync(ACTIVE_SITE_KEY);
+  const v = await kvGet(ACTIVE_SITE_KEY);
   return v && v.length > 0 ? v : null;
 }
 
 export async function saveActiveSitePref(siteId: string): Promise<void> {
-  await SecureStore.setItemAsync(ACTIVE_SITE_KEY, siteId);
+  await kvSet(ACTIVE_SITE_KEY, siteId);
 }
 
 export async function clearActiveSitePref(): Promise<void> {
-  await SecureStore.deleteItemAsync(ACTIVE_SITE_KEY);
+  await kvDelete(ACTIVE_SITE_KEY);
 }

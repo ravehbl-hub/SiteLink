@@ -108,9 +108,6 @@ export function AttendanceScreen() {
   // today's date into an ISO timestamp on save. Optional (blank = not recorded).
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
-  // Session status per worker: 'in' after a check-in click, 'out' after check-out —
-  // used to color the worker in the picker (color 1 = checked in, color 2 = checked out).
-  const [statusByWorker, setStatusByWorker] = useState<Record<string, 'in' | 'out'>>({});
 
   const siteId = activeSiteId ?? undefined;
 
@@ -129,14 +126,33 @@ export function AttendanceScreen() {
     ...live(POLL.attendance, STALE.live),
   });
 
-  // One attendance record per worker/day (server @@unique). Find today's record for
-  // the picked worker so a second save/clock UPDATES it instead of 409-conflicting.
+  // Today's attendance for ALL site workers — the SOURCE OF TRUTH for the combobox
+  // status color, so it persists ("remembers") across reloads instead of a session map.
   const todayISO = new Date().toISOString().slice(0, 10);
+  const todayParams = {
+    siteId,
+    from: `${todayISO}T00:00:00.000Z`,
+    to: `${todayISO}T23:59:59.999Z`,
+  };
+  const todayAttQ = useQuery({
+    queryKey: qk.attendance(todayParams),
+    queryFn: () => endpoints.listAttendance(todayParams),
+    enabled: Boolean(activeSiteId),
+    ...live(POLL.attendance, STALE.live),
+  });
+
+  // Per-worker status from today's SAVED records: check-in only → 'in' (color 1);
+  // check-in + check-out → 'out' (color 2).
+  const statusByWorker: Record<string, 'in' | 'out'> = {};
+  for (const r of todayAttQ.data?.items ?? []) {
+    if (r.checkIn && r.checkOut) statusByWorker[r.workerId] = 'out';
+    else if (r.checkIn) statusByWorker[r.workerId] = 'in';
+  }
+
+  // The picked worker's TODAY record — update-on-save so a re-save UPDATES it (no 409).
   const existingToday =
     workerId != null
-      ? attQ.data?.items.find(
-          (r) => r.workerId === workerId && String(r.date).slice(0, 10) === todayISO,
-        )
+      ? todayAttQ.data?.items.find((r) => r.workerId === workerId)
       : undefined;
 
   // When a worker is picked, PRE-FILL the form from their TODAY record (check-in/out +
@@ -146,19 +162,18 @@ export function AttendanceScreen() {
     if (existingToday) {
       setCheckIn(isoToHHMM(existingToday.checkIn));
       setCheckOut(isoToHHMM(existingToday.checkOut));
-      setHours(existingToday.hours != null ? String(existingToday.hours) : '8');
     } else if (workerId) {
       setCheckIn('');
       setCheckOut('');
-      setHours('8');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workerId, existingToday?.id]);
 
-  // Hours = check-out − check-in whenever BOTH are valid times.
+  // Hours = check-out − check-in ONLY when BOTH are set; otherwise 0 (no full clock:
+  // no check-in, or check-in without check-out → 0).
   React.useEffect(() => {
     const d = diffHours(checkIn, checkOut);
-    if (d != null) setHours(String(d));
+    setHours(d != null ? String(d) : '0');
   }, [checkIn, checkOut]);
 
   const createMut = useMutation({
@@ -279,7 +294,6 @@ export function AttendanceScreen() {
               onPress={() => {
                 if (!workerId) return;
                 setCheckIn(nowHHMM());
-                setStatusByWorker((m) => ({ ...m, [workerId]: 'in' }));
               }}
               disabled={!workerId}
             />
@@ -294,7 +308,6 @@ export function AttendanceScreen() {
               onPress={() => {
                 if (!workerId) return;
                 setCheckOut(nowHHMM());
-                setStatusByWorker((m) => ({ ...m, [workerId]: 'out' }));
               }}
               // Cannot check out before checking in.
               disabled={!workerId || !checkIn}

@@ -53,6 +53,35 @@ function nowHHMM(): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+/** ISO timestamp → local "HH:MM" (or '' when null/invalid). */
+function isoToHHMM(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** Parse "HH:MM" → minutes since midnight, or null if invalid. */
+function hhmmToMinutes(s: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
+/** Hours between check-in and check-out ("HH:MM"), rounded to 2dp. Null if either is
+ *  invalid or the span is ≤ 0 (e.g. only one is set). */
+function diffHours(inHHMM: string, outHHMM: string): number | null {
+  const a = hhmmToMinutes(inHHMM);
+  const b = hhmmToMinutes(outHHMM);
+  if (a == null || b == null) return null;
+  const mins = b - a;
+  if (mins <= 0) return null;
+  return Math.round((mins / 60) * 100) / 100;
+}
+
 /** "HH:MM" + today's date → ISO timestamp. Blank/invalid → null (not recorded). */
 function timeToISO(hhmm: string): string | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
@@ -109,6 +138,28 @@ export function AttendanceScreen() {
           (r) => r.workerId === workerId && String(r.date).slice(0, 10) === todayISO,
         )
       : undefined;
+
+  // When a worker is picked, PRE-FILL the form from their TODAY record (check-in/out +
+  // hours) if one exists; otherwise start a fresh entry. Keyed on worker + record id so
+  // it re-syncs when the picked worker (or their loaded record) changes.
+  React.useEffect(() => {
+    if (existingToday) {
+      setCheckIn(isoToHHMM(existingToday.checkIn));
+      setCheckOut(isoToHHMM(existingToday.checkOut));
+      setHours(existingToday.hours != null ? String(existingToday.hours) : '8');
+    } else if (workerId) {
+      setCheckIn('');
+      setCheckOut('');
+      setHours('8');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workerId, existingToday?.id]);
+
+  // Hours = check-out − check-in whenever BOTH are valid times.
+  React.useEffect(() => {
+    const d = diffHours(checkIn, checkOut);
+    if (d != null) setHours(String(d));
+  }, [checkIn, checkOut]);
 
   const createMut = useMutation({
     mutationFn: () => {
@@ -194,12 +245,7 @@ export function AttendanceScreen() {
           <Select
             options={workerOptions}
             value={workerId}
-            onChange={(v) => {
-              setWorkerId(v);
-              // Fresh entry for the newly picked worker.
-              setCheckIn('');
-              setCheckOut('');
-            }}
+            onChange={(v) => setWorkerId(v)}
             placeholder={t('attendance.worker')}
           />
         )}

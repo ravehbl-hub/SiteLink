@@ -5,7 +5,7 @@
  * there is no company-scoped read here because ADMIN is cross-company by definition).
  *
  *   GET   /companies                 list (?includeArchived) Paginated
- *   POST  /companies                 create (name, optional customerId 1:1 link)
+ *   POST  /companies                 create (name + billing contact/lifecycle)
  *   GET   /companies/:id             get one
  *   PATCH /companies/:id             update
  *   POST  /companies/:id/archive     soft-delete (retire tenant)

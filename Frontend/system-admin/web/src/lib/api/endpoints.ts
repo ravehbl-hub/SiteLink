@@ -9,16 +9,13 @@ import type {
   Company,
   CreateBillingInput,
   CreateCompanyInput,
-  CreateCustomerInput,
   CreateUsageInput,
   CreateUserInput,
   CurrentUser,
-  Customer,
   Paginated,
   ProfitLoss,
   Role,
   UpdateCompanyInput,
-  UpdateCustomerInput,
   UpdateUserInput,
   Usage,
   User,
@@ -106,28 +103,11 @@ export const usersApi = {
   remove: (id: string) => http.del<void>(`/users/${id}`),
 };
 
-/* ── Customers (SaaS tenants, FR-BO-1/2, ADMIN-only) ──────────────────────
- * All list endpoints return a Paginated<T> envelope — consume `.items`. */
-export interface ListCustomersParams {
-  includeArchived?: boolean;
-}
-export const customersApi = {
-  list: (params?: ListCustomersParams) =>
-    http.get<Paginated<Customer>>('/backoffice/customers', params as Query),
-  get: (id: string) => http.get<Customer>(`/backoffice/customers/${id}`),
-  create: (body: CreateCustomerInput) =>
-    http.post<Customer>('/backoffice/customers', body),
-  update: (id: string, body: UpdateCustomerInput) =>
-    http.patch<Customer>(`/backoffice/customers/${id}`, body),
-  archive: (id: string) => http.post<Customer>(`/backoffice/customers/${id}/archive`),
-  unarchive: (id: string) =>
-    http.post<Customer>(`/backoffice/customers/${id}/unarchive`),
-};
-
-/* ── Companies (multi-tenancy Phase 1, ADMIN-only) ────────────────────────
- * The tenant boundary. List returns a Paginated<T> envelope — consume `.items`.
- * A MANAGER is created INTO a company via POST /users with an ADMIN-supplied
- * companyId (usersApi.create), NOT a companies sub-route. */
+/* ── Companies (multi-tenancy + billing subject, ADMIN-only) ──────────────
+ * The tenant boundary AND the billing subject (Customer merged into Company).
+ * List returns a Paginated<T> envelope — consume `.items`. A MANAGER is created
+ * INTO a company via POST /users with an ADMIN-supplied companyId
+ * (usersApi.create), NOT a companies sub-route. */
 export interface ListCompaniesParams {
   includeArchived?: boolean;
 }
@@ -144,7 +124,7 @@ export const companiesApi = {
 
 /* ── Billing (FR-BO-2, ADMIN-only) ────────────────────────────────────── */
 export interface ListBillingParams {
-  customerId?: string;
+  companyId?: string;
 }
 export const billingApi = {
   list: (params?: ListBillingParams) =>
@@ -154,7 +134,7 @@ export const billingApi = {
 
 /* ── Usage (FR-BO-2/3, ADMIN-only) ────────────────────────────────────── */
 export interface ListUsageParams {
-  customerId?: string;
+  companyId?: string;
   metric?: string;
 }
 export const usageApi = {

@@ -1,9 +1,10 @@
 /**
  * Billing (FR-BO-2, ADMIN-only).
  *
- * Filter billing records by customer (GET /backoffice/billing?customerId) and
+ * Filter billing records by company (GET /backoffice/billing?companyId) and
  * create new ones. Both list endpoints return a Paginated<T> envelope — we
- * consume `.items`, never the bare response. BillingStatus is surfaced as a
+ * consume `.items`, never the bare response. The billing subject is the tenant
+ * Company (Customer merged into Company). BillingStatus is surfaced as a
  * semantically-toned chip (TRIALING/ACTIVE/PAST_DUE/CANCELED).
  */
 import { useState } from 'react';
@@ -14,7 +15,7 @@ import {
   type Billing,
   type CreateBillingInput,
 } from '@sitelink/shared';
-import { billingApi, customersApi } from '../../lib/api/endpoints';
+import { billingApi, companiesApi } from '../../lib/api/endpoints';
 import { qk } from '../../lib/api/queryKeys';
 import { Chip, DataState, Field, Modal } from '../../components/ui';
 import { formatCurrency, formatDate, dateInputToISO } from '../../lib/format';
@@ -31,19 +32,19 @@ const STATUS_TONE: Record<
 
 export function BillingScreen() {
   const { t } = useTranslation();
-  const [customerId, setCustomerId] = useState('');
+  const [companyId, setCompanyId] = useState('');
   const [creating, setCreating] = useState(false);
 
-  // Customers picker is reference data reused across admin screens — long
-  // staleTime, no poll (shares cache with the Customers screen list).
-  const customers = useQuery({
-    queryKey: qk.customers({ includeArchived: true }),
-    queryFn: () => customersApi.list({ includeArchived: true }),
+  // Company picker is reference data reused across admin screens — long
+  // staleTime, no poll (shares cache with the Companies screen list).
+  const companies = useQuery({
+    queryKey: qk.companies({ includeArchived: true }),
+    queryFn: () => companiesApi.list({ includeArchived: true }),
     staleTime: 5 * 60_000,
   });
-  const customerItems = customers.data?.items ?? [];
+  const companyItems = companies.data?.items ?? [];
 
-  const params = customerId ? { customerId } : {};
+  const params = companyId ? { companyId } : {};
   // Billing records aren't real-time — focus refetch + invalidation, 60s stale.
   const list = useQuery({
     queryKey: qk.billing(params),
@@ -54,7 +55,7 @@ export function BillingScreen() {
   const items = list.data?.items ?? [];
 
   const nameOf = (id: string) =>
-    customerItems.find((c) => c.id === id)?.name ?? id.slice(0, 8);
+    companyItems.find((c) => c.id === id)?.name ?? id.slice(0, 8);
 
   return (
     <div>
@@ -65,7 +66,7 @@ export function BillingScreen() {
         <div className="header-spacer" />
         <button
           className="btn btn-primary"
-          disabled={customerItems.length === 0}
+          disabled={companyItems.length === 0}
           onClick={() => setCreating(true)}
         >
           {t('billing.newRecord')}
@@ -74,14 +75,14 @@ export function BillingScreen() {
 
       <div className="card">
         <div className="field" style={{ maxWidth: 360, marginBlockEnd: 'var(--sl-space-4)' }}>
-          <label>{t('billing.filterCustomer')}</label>
+          <label>{t('billing.filterCompany')}</label>
           <select
             className="select"
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
           >
-            <option value="">{t('billing.allCustomers')}</option>
-            {customerItems.map((c) => (
+            <option value="">{t('billing.allCompanies')}</option>
+            {companyItems.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -98,7 +99,7 @@ export function BillingScreen() {
             <table className="data data-compact">
               <thead>
                 <tr>
-                  <th>{t('billing.customer')}</th>
+                  <th>{t('billing.company')}</th>
                   <th>{t('billing.plan')}</th>
                   <th>{t('billing.amount')}</th>
                   <th>{t('billing.status')}</th>
@@ -108,7 +109,7 @@ export function BillingScreen() {
               <tbody>
                 {items.map((b) => (
                   <tr key={b.id}>
-                    <td>{nameOf(b.customerId)}</td>
+                    <td>{nameOf(b.companyId)}</td>
                     <td>{b.plan}</td>
                     <td>{formatCurrency(b.amount, b.currency)}</td>
                     <td>
@@ -129,8 +130,8 @@ export function BillingScreen() {
 
       {creating ? (
         <BillingForm
-          customers={customerItems.map((c) => ({ id: c.id, name: c.name }))}
-          defaultCustomerId={customerId}
+          companies={companyItems.map((c) => ({ id: c.id, name: c.name }))}
+          defaultCompanyId={companyId}
           onClose={() => setCreating(false)}
         />
       ) : null}
@@ -139,18 +140,18 @@ export function BillingScreen() {
 }
 
 function BillingForm({
-  customers,
-  defaultCustomerId,
+  companies,
+  defaultCompanyId,
   onClose,
 }: {
-  customers: { id: string; name: string }[];
-  defaultCustomerId: string;
+  companies: { id: string; name: string }[];
+  defaultCompanyId: string;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [customerId, setCustomerId] = useState(
-    defaultCustomerId || customers[0]?.id || '',
+  const [companyId, setCompanyId] = useState(
+    defaultCompanyId || companies[0]?.id || '',
   );
   const [plan, setPlan] = useState('');
   const [amount, setAmount] = useState('');
@@ -161,12 +162,12 @@ function BillingForm({
   const [error, setError] = useState<string | null>(null);
 
   const valid =
-    customerId && plan && amount !== '' && currency && periodStart && periodEnd;
+    companyId && plan && amount !== '' && currency && periodStart && periodEnd;
 
   const mut = useMutation({
     mutationFn: async () => {
       const body: CreateBillingInput = {
-        customerId,
+        companyId,
         plan,
         amount: Number(amount),
         currency,
@@ -203,13 +204,13 @@ function BillingForm({
       }
     >
       {error ? <div className="banner banner-danger">{error}</div> : null}
-      <Field label={t('billing.customer')}>
+      <Field label={t('billing.company')}>
         <select
           className="select"
-          value={customerId}
-          onChange={(e) => setCustomerId(e.target.value)}
+          value={companyId}
+          onChange={(e) => setCompanyId(e.target.value)}
         >
-          {customers.map((c) => (
+          {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>

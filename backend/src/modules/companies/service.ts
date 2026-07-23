@@ -1,15 +1,16 @@
 /**
- * SiteLink back end — System-Admin Company service (multi-tenancy Phase 1).
+ * SiteLink back end — System-Admin Company service (multi-tenancy).
  *
- * ADMIN-only. CRUD + soft-archive for the tenant Company model (the app's primary
- * security boundary). Creating a MANAGER INTO a company is NOT here — that is the
+ * ADMIN-only. CRUD + soft-archive for the tenant Company model — the app's primary
+ * security boundary AND billing subject (the former standalone `Customer` model was
+ * MERGED into Company). Creating a MANAGER INTO a company is NOT here — that is the
  * users create path with an ADMIN supplying companyId (modules/users). This module
  * owns the company lifecycle only.
  *
- * The 1:1 (at-most-one) Company↔Customer link is enforced here up-front (the DB has
- * a @unique on Company.customerId; we pre-check to return a friendly CONFLICT rather
- * than a raw unique-violation). A company is retired by SOFT-ARCHIVE, never deleted
- * (deleting would orphan its users — User.companyId is onDelete: Restrict).
+ * A company is retired by SOFT-ARCHIVE, never deleted (deleting would orphan its
+ * users — User.companyId is onDelete: Restrict). Company create/edit now accepts the
+ * billing contact/lifecycle fields (contactEmail/contactPhone/registeredAt/leftAt)
+ * directly; there is no separate Customer entity to link.
  */
 import type { z } from 'zod';
 import type {
@@ -43,56 +44,32 @@ export class CompaniesService {
     return mapCompany(row);
   }
 
-  /** Verify a billing Customer exists and is free (not already linked 1:1). */
-  private async assertCustomerLinkable(customerId: string, exceptCompanyId?: string): Promise<void> {
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customer) throw AppError.validation('Linked customer does not exist');
-    const existing = await prisma.company.findUnique({
-      where: { customerId },
-      select: { id: true },
-    });
-    if (existing && existing.id !== exceptCompanyId) {
-      // @unique guards this at the DB too; pre-check for a friendly 409.
-      throw AppError.conflict('That customer is already linked to another company');
-    }
-  }
-
   async create(input: CreateCompanyInput): Promise<Company> {
-    if (input.customerId) {
-      await this.assertCustomerLinkable(input.customerId);
-    }
-    // Inline-create the billing Customer + link it atomically (one System-Admin step).
-    // A freshly-created customer is always linkable, so no assertCustomerLinkable needed.
-    // customerId and newCustomer are mutually exclusive (enforced by the shared schema).
-    const row = await prisma.$transaction(async (tx) => {
-      let customerId = input.customerId ?? null;
-      if (input.newCustomer) {
-        const customer = await tx.customer.create({
-          data: {
-            name: input.newCustomer.name,
-            contactEmail: input.newCustomer.contactEmail ?? null,
-            contactPhone: input.newCustomer.contactPhone ?? null,
-          },
-        });
-        customerId = customer.id;
-      }
-      return tx.company.create({
-        data: { name: input.name, customerId },
-      });
+    const row = await prisma.company.create({
+      data: {
+        name: input.name,
+        contactEmail: input.contactEmail ?? null,
+        contactPhone: input.contactPhone ?? null,
+        ...(input.registeredAt ? { registeredAt: new Date(input.registeredAt) } : {}),
+      },
     });
     return mapCompany(row);
   }
 
   async update(id: string, input: UpdateCompanyInput): Promise<Company> {
     await this.get(id); // 404 if missing.
-    if (input.customerId) {
-      await this.assertCustomerLinkable(input.customerId, id);
-    }
     const row = await prisma.company.update({
       where: { id },
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
-        ...(input.customerId !== undefined ? { customerId: input.customerId } : {}),
+        ...(input.contactEmail !== undefined ? { contactEmail: input.contactEmail } : {}),
+        ...(input.contactPhone !== undefined ? { contactPhone: input.contactPhone } : {}),
+        ...(input.registeredAt !== undefined
+          ? { registeredAt: new Date(input.registeredAt) }
+          : {}),
+        ...(input.leftAt !== undefined
+          ? { leftAt: input.leftAt ? new Date(input.leftAt) : null }
+          : {}),
       },
     });
     return mapCompany(row);

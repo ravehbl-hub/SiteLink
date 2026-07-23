@@ -9,8 +9,8 @@ import type {
   AdvancePayment as PAdvance,
   AttendanceRecord as PAttendance,
   Billing as PBilling,
+  BusinessProfitLoss as PBusinessProfitLoss,
   Company as PCompany,
-  Customer as PCustomer,
   Loan as PLoan,
   ProfessionWageRate as PWageRate,
   ProfitLoss as PProfitLoss,
@@ -28,7 +28,7 @@ import type {
   AttendanceRecord,
   AttendanceType,
   Billing,
-  Customer,
+  BusinessProfitLoss,
   FileRef,
   Language,
   Loan,
@@ -80,7 +80,10 @@ export function mapCompany(c: PCompany): Company {
   return {
     id: c.id,
     name: c.name,
-    customerId: c.customerId ?? null,
+    contactEmail: c.contactEmail ?? null,
+    contactPhone: c.contactPhone ?? null,
+    registeredAt: toISORequired(c.registeredAt),
+    leftAt: toISO(c.leftAt),
     isArchived: c.isArchived,
     archivedAt: toISO(c.archivedAt),
     createdAt: toISORequired(c.createdAt),
@@ -265,26 +268,12 @@ export function mapRating(r: PRating): WorkerRating {
 }
 
 // ─── SaaS business layer (Back Office, ADMIN-only) ──────────────────────────
-
-export function mapCustomer(c: PCustomer): Customer {
-  return {
-    id: c.id,
-    name: c.name,
-    contactEmail: c.contactEmail ?? null,
-    contactPhone: c.contactPhone ?? null,
-    registeredAt: toISORequired(c.registeredAt),
-    leftAt: toISO(c.leftAt),
-    isArchived: c.isArchived,
-    archivedAt: toISO(c.archivedAt),
-    createdAt: toISORequired(c.createdAt),
-    updatedAt: toISORequired(c.updatedAt),
-  };
-}
+// Billing subject is the Company (Customer merged into Company — Option C).
 
 export function mapBilling(b: PBilling): Billing {
   return {
     id: b.id,
-    customerId: b.customerId,
+    companyId: b.companyId,
     status: b.status as BillingStatus,
     plan: b.plan,
     amount: toNumber(b.amount),
@@ -299,13 +288,28 @@ export function mapBilling(b: PBilling): Billing {
 export function mapUsage(u: PUsage): Usage {
   return {
     id: u.id,
-    customerId: u.customerId,
+    companyId: u.companyId,
     metric: u.metric,
     value: toNumber(u.value),
     periodStart: toISORequired(u.periodStart),
     periodEnd: toISORequired(u.periodEnd),
     createdAt: toISORequired(u.createdAt),
     updatedAt: toISORequired(u.updatedAt),
+  };
+}
+
+export function mapBusinessProfitLoss(p: PBusinessProfitLoss): BusinessProfitLoss {
+  return {
+    id: p.id,
+    companyId: p.companyId,
+    periodStart: toISORequired(p.periodStart),
+    periodEnd: toISORequired(p.periodEnd),
+    currency: p.currency,
+    revenue: toNumber(p.revenue),
+    cost: toNumber(p.cost),
+    netProfit: toNumber(p.netProfit),
+    createdAt: toISORequired(p.createdAt),
+    updatedAt: toISORequired(p.updatedAt),
   };
 }
 

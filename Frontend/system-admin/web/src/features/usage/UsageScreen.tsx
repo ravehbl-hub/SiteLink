@@ -1,36 +1,37 @@
 /**
  * Usage (FR-BO-2/3, ADMIN-only).
  *
- * Filter usage rows by customer (+ optional metric) via GET /backoffice/usage
+ * Filter usage rows by company (+ optional metric) via GET /backoffice/usage
  * and create new ones. The list endpoint returns a Paginated<Usage> envelope —
- * we consume `.items`, never the bare response.
+ * we consume `.items`, never the bare response. The billing subject is the
+ * tenant Company (Customer merged into Company).
  */
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { CreateUsageInput } from '@sitelink/shared';
-import { customersApi, usageApi } from '../../lib/api/endpoints';
+import { companiesApi, usageApi } from '../../lib/api/endpoints';
 import { qk } from '../../lib/api/queryKeys';
 import { DataState, Field, Modal } from '../../components/ui';
 import { formatNumber, formatDate, dateInputToISO } from '../../lib/format';
 
 export function UsageScreen() {
   const { t } = useTranslation();
-  const [customerId, setCustomerId] = useState('');
+  const [companyId, setCompanyId] = useState('');
   const [metric, setMetric] = useState('');
   const [creating, setCreating] = useState(false);
 
-  // Customers picker is reference data reused across admin screens — long
-  // staleTime, no poll (shares cache with the Customers screen list).
-  const customers = useQuery({
-    queryKey: qk.customers({ includeArchived: true }),
-    queryFn: () => customersApi.list({ includeArchived: true }),
+  // Company picker is reference data reused across admin screens — long
+  // staleTime, no poll (shares cache with the Companies screen list).
+  const companies = useQuery({
+    queryKey: qk.companies({ includeArchived: true }),
+    queryFn: () => companiesApi.list({ includeArchived: true }),
     staleTime: 5 * 60_000,
   });
-  const customerItems = customers.data?.items ?? [];
+  const companyItems = companies.data?.items ?? [];
 
   const params = {
-    ...(customerId ? { customerId } : {}),
+    ...(companyId ? { companyId } : {}),
     ...(metric.trim() ? { metric: metric.trim() } : {}),
   };
   // Usage records aren't real-time — focus refetch + invalidation, 60s stale.
@@ -43,7 +44,7 @@ export function UsageScreen() {
   const items = list.data?.items ?? [];
 
   const nameOf = (id: string) =>
-    customerItems.find((c) => c.id === id)?.name ?? id.slice(0, 8);
+    companyItems.find((c) => c.id === id)?.name ?? id.slice(0, 8);
 
   return (
     <div>
@@ -54,7 +55,7 @@ export function UsageScreen() {
         <div className="header-spacer" />
         <button
           className="btn btn-primary"
-          disabled={customerItems.length === 0}
+          disabled={companyItems.length === 0}
           onClick={() => setCreating(true)}
         >
           {t('usage.newRecord')}
@@ -64,14 +65,14 @@ export function UsageScreen() {
       <div className="card">
         <div className="inline" style={{ marginBlockEnd: 'var(--sl-space-4)' }}>
           <div className="field" style={{ maxWidth: 280, marginBlockEnd: 0 }}>
-            <label>{t('usage.filterCustomer')}</label>
+            <label>{t('usage.filterCompany')}</label>
             <select
               className="select"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
             >
-              <option value="">{t('usage.allCustomers')}</option>
-              {customerItems.map((c) => (
+              <option value="">{t('usage.allCompanies')}</option>
+              {companyItems.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -99,7 +100,7 @@ export function UsageScreen() {
             <table className="data data-compact">
               <thead>
                 <tr>
-                  <th>{t('usage.customer')}</th>
+                  <th>{t('usage.company')}</th>
                   <th>{t('usage.metric')}</th>
                   <th>{t('usage.value')}</th>
                   <th>{t('usage.period')}</th>
@@ -108,7 +109,7 @@ export function UsageScreen() {
               <tbody>
                 {items.map((u) => (
                   <tr key={u.id}>
-                    <td>{nameOf(u.customerId)}</td>
+                    <td>{nameOf(u.companyId)}</td>
                     <td className="mono">{u.metric}</td>
                     <td>{formatNumber(u.value)}</td>
                     <td>
@@ -124,8 +125,8 @@ export function UsageScreen() {
 
       {creating ? (
         <UsageForm
-          customers={customerItems.map((c) => ({ id: c.id, name: c.name }))}
-          defaultCustomerId={customerId}
+          companies={companyItems.map((c) => ({ id: c.id, name: c.name }))}
+          defaultCompanyId={companyId}
           onClose={() => setCreating(false)}
         />
       ) : null}
@@ -134,18 +135,18 @@ export function UsageScreen() {
 }
 
 function UsageForm({
-  customers,
-  defaultCustomerId,
+  companies,
+  defaultCompanyId,
   onClose,
 }: {
-  customers: { id: string; name: string }[];
-  defaultCustomerId: string;
+  companies: { id: string; name: string }[];
+  defaultCompanyId: string;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [customerId, setCustomerId] = useState(
-    defaultCustomerId || customers[0]?.id || '',
+  const [companyId, setCompanyId] = useState(
+    defaultCompanyId || companies[0]?.id || '',
   );
   const [metric, setMetric] = useState('');
   const [value, setValue] = useState('');
@@ -153,12 +154,12 @@ function UsageForm({
   const [periodEnd, setPeriodEnd] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const valid = customerId && metric && value !== '' && periodStart && periodEnd;
+  const valid = companyId && metric && value !== '' && periodStart && periodEnd;
 
   const mut = useMutation({
     mutationFn: async () => {
       const body: CreateUsageInput = {
-        customerId,
+        companyId,
         metric,
         value: Number(value),
         periodStart: dateInputToISO(periodStart),
@@ -193,13 +194,13 @@ function UsageForm({
       }
     >
       {error ? <div className="banner banner-danger">{error}</div> : null}
-      <Field label={t('usage.customer')}>
+      <Field label={t('usage.company')}>
         <select
           className="select"
-          value={customerId}
-          onChange={(e) => setCustomerId(e.target.value)}
+          value={companyId}
+          onChange={(e) => setCompanyId(e.target.value)}
         >
-          {customers.map((c) => (
+          {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>

@@ -1,18 +1,18 @@
 /**
- * Companies (multi-tenancy Phase 1, ADMIN-only).
+ * Companies (multi-tenancy + billing subject, ADMIN-only).
  *
- * The tenant boundary. Lists companies via GET /companies (Paginated envelope —
- * consume `.items`, never the bare response), with an includeArchived toggle.
- * Create/edit a company (name + optional 1:1 billing-Customer link via a picker
- * drawn from GET /backoffice/customers), and reversible archive/unarchive.
+ * The tenant boundary AND the billing subject (the former standalone `Customer`
+ * model was MERGED into Company — Option C). Lists companies via GET /companies
+ * (Paginated envelope — consume `.items`, never the bare response), with an
+ * includeArchived toggle. Create/edit a company (name + billing contact/lifecycle
+ * fields: email, phone, registeredAt) and reversible archive/unarchive.
  *
  * "Add manager" creates a User with role=MANAGER and the row's companyId via the
  * EXISTING POST /users endpoint (usersApi.create) — a Manager is created INTO a
- * company, there is no companies sub-route for it. 409 (company↔customer already
- * linked / dup) and 400 (target company archived/missing) surface inline.
+ * company, there is no companies sub-route for it. 409 (dup email) and 400 (target
+ * company archived/missing) surface inline.
  *
- * Neumorphic classes + logical props (RTL-safe) mirror the customers/adminUsers
- * feature pattern. Phase 2 (worker/site company-scoping UI) is NOT built here.
+ * Neumorphic classes + logical props (RTL-safe) mirror the adminUsers feature pattern.
  */
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -24,11 +24,11 @@ import {
   type CreateUserInput,
   type UpdateCompanyInput,
 } from '@sitelink/shared';
-import { companiesApi, customersApi, usersApi } from '../../lib/api/endpoints';
+import { companiesApi, usersApi } from '../../lib/api/endpoints';
 import { ApiError } from '../../lib/api/client';
 import { qk } from '../../lib/api/queryKeys';
 import { Chip, DataState, Field, Modal } from '../../components/ui';
-import { formatDate } from '../../lib/format';
+import { formatDate, dateInputToISO, toDateInput } from '../../lib/format';
 
 export function CompaniesScreen() {
   const { t } = useTranslation();
@@ -46,16 +46,6 @@ export function CompaniesScreen() {
     queryFn: () => companiesApi.list(params),
     staleTime: 60_000,
   });
-
-  // Customer roster for the picker + the linked-customer name column. Archived
-  // included so an already-linked (possibly archived) customer still resolves.
-  const customers = useQuery({
-    queryKey: qk.customers({ includeArchived: true }),
-    queryFn: () => customersApi.list({ includeArchived: true }),
-    staleTime: 60_000,
-  });
-  const customerName = (id?: string | null) =>
-    id ? (customers.data?.items.find((c) => c.id === id)?.name ?? id) : null;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['companies'] });
   const archiveMut = useMutation({
@@ -98,9 +88,10 @@ export function CompaniesScreen() {
               <thead>
                 <tr>
                   <th>{t('companies.name')}</th>
-                  <th>{t('companies.linkedCustomer')}</th>
+                  <th>{t('companies.contactEmail')}</th>
+                  <th>{t('companies.contactPhone')}</th>
                   <th>{t('companies.status')}</th>
-                  <th>{t('companies.createdAt')}</th>
+                  <th>{t('companies.registeredAt')}</th>
                   <th />
                 </tr>
               </thead>
@@ -108,7 +99,8 @@ export function CompaniesScreen() {
                 {items.map((c) => (
                   <tr key={c.id}>
                     <td>{c.name}</td>
-                    <td>{customerName(c.customerId) ?? '—'}</td>
+                    <td>{c.contactEmail || '—'}</td>
+                    <td>{c.contactPhone || '—'}</td>
                     <td>
                       {c.isArchived ? (
                         <Chip tone="neutral">{t('companies.archived')}</Chip>
@@ -116,7 +108,7 @@ export function CompaniesScreen() {
                         <Chip tone="success">{t('companies.active')}</Chip>
                       )}
                     </td>
-                    <td>{formatDate(c.createdAt)}</td>
+                    <td>{formatDate(c.registeredAt)}</td>
                     <td>
                       <div className="row-actions">
                         <button
@@ -173,55 +165,37 @@ function CompanyForm({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [name, setName] = useState(company?.name ?? '');
-  // Customer link. The picker carries a sentinel `__new__` value that switches into
-  // inline-create mode (create flow only) — provisioning the tenant Company and its
-  // billing Customer in ONE step. Existing companies edit the link to an existing
-  // customer only (no inline create on edit).
-  const NEW_CUSTOMER = '__new__';
-  const [customerId, setCustomerId] = useState(company?.customerId ?? '');
-  const [newCustomerName, setNewCustomerName] = useState('');
-  const [newCustomerEmail, setNewCustomerEmail] = useState('');
-  const [newCustomerPhone, setNewCustomerPhone] = useState('');
-  const isNewCustomer = !company && customerId === NEW_CUSTOMER;
+  const [contactEmail, setContactEmail] = useState(company?.contactEmail ?? '');
+  const [contactPhone, setContactPhone] = useState(company?.contactPhone ?? '');
+  const [registeredAt, setRegisteredAt] = useState(
+    toDateInput(company?.registeredAt),
+  );
   const [error, setError] = useState<string | null>(null);
-
-  // Picker options: only non-archived customers (a live billing link).
-  const customers = useQuery({
-    queryKey: qk.customers({ includeArchived: false }),
-    queryFn: () => customersApi.list({ includeArchived: false }),
-    staleTime: 60_000,
-  });
-  const options = customers.data?.items ?? [];
 
   const mut = useMutation({
     mutationFn: async () => {
       if (company) {
         const body: UpdateCompanyInput = {
           name,
-          customerId: customerId || null,
+          contactEmail: contactEmail || null,
+          contactPhone: contactPhone || null,
+          ...(registeredAt ? { registeredAt: dateInputToISO(registeredAt) } : {}),
         };
         return companiesApi.update(company.id, body);
       }
-      const body: CreateCompanyInput = isNewCustomer
-        ? {
-            name,
-            newCustomer: {
-              name: newCustomerName,
-              contactEmail: newCustomerEmail || null,
-              contactPhone: newCustomerPhone || null,
-            },
-          }
-        : {
-            name,
-            customerId: customerId || null,
-          };
+      const body: CreateCompanyInput = {
+        name,
+        contactEmail: contactEmail || null,
+        contactPhone: contactPhone || null,
+        ...(registeredAt ? { registeredAt: dateInputToISO(registeredAt) } : {}),
+      };
       return companiesApi.create(body);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['companies'] });
       onClose();
     },
-    onError: (e) => setError(mapCompanyError(e, t)),
+    onError: (e) => setError(e instanceof Error ? e.message : String(e)),
   });
 
   return (
@@ -235,7 +209,7 @@ function CompanyForm({
           </button>
           <button
             className="btn btn-primary"
-            disabled={!name || (isNewCustomer && !newCustomerName) || mut.isPending}
+            disabled={!name || mut.isPending}
             onClick={() => mut.mutate()}
           >
             {t('companies.save')}
@@ -251,52 +225,29 @@ function CompanyForm({
           onChange={(e) => setName(e.target.value)}
         />
       </Field>
-      <Field label={`${t('companies.linkedCustomer')} (${t('companies.optional')})`}>
-        <select
-          className="select"
-          value={customerId ?? ''}
-          onChange={(e) => setCustomerId(e.target.value)}
-        >
-          <option value="">{t('companies.noCustomer')}</option>
-          {/* Inline-create is a create-flow affordance only. */}
-          {!company ? (
-            <option value={NEW_CUSTOMER}>{t('companies.createNewCustomer')}</option>
-          ) : null}
-          {options.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <span className="muted">{t('companies.linkHint')}</span>
+      <Field label={`${t('companies.contactEmail')} (${t('companies.optional')})`}>
+        <input
+          className="input"
+          type="email"
+          value={contactEmail}
+          onChange={(e) => setContactEmail(e.target.value)}
+        />
       </Field>
-      {isNewCustomer ? (
-        <>
-          <Field label={t('companies.newCustomerName')}>
-            <input
-              className="input"
-              value={newCustomerName}
-              onChange={(e) => setNewCustomerName(e.target.value)}
-            />
-          </Field>
-          <Field label={`${t('companies.newCustomerEmail')} (${t('companies.optional')})`}>
-            <input
-              className="input"
-              type="email"
-              value={newCustomerEmail}
-              onChange={(e) => setNewCustomerEmail(e.target.value)}
-            />
-          </Field>
-          <Field label={`${t('companies.newCustomerPhone')} (${t('companies.optional')})`}>
-            <input
-              className="input"
-              value={newCustomerPhone}
-              onChange={(e) => setNewCustomerPhone(e.target.value)}
-            />
-          </Field>
-          <span className="muted">{t('companies.newCustomerHint')}</span>
-        </>
-      ) : null}
+      <Field label={`${t('companies.contactPhone')} (${t('companies.optional')})`}>
+        <input
+          className="input"
+          value={contactPhone}
+          onChange={(e) => setContactPhone(e.target.value)}
+        />
+      </Field>
+      <Field label={t('companies.registeredAt')}>
+        <input
+          className="input"
+          type="date"
+          value={registeredAt}
+          onChange={(e) => setRegisteredAt(e.target.value)}
+        />
+      </Field>
     </Modal>
   );
 }
@@ -382,16 +333,6 @@ function AddManagerForm({
       </Field>
     </Modal>
   );
-}
-
-/** Company create/update errors → friendly copy. 409 = customer already linked
- *  (or dup company); 400 = validation (e.g. linked customer does not exist). */
-function mapCompanyError(e: unknown, t: (k: string) => string): string {
-  if (e instanceof ApiError) {
-    if (e.status === 409) return t('companies.customerLinked');
-    if (e.status === 400) return t('companies.invalidLink');
-  }
-  return e instanceof Error ? e.message : String(e);
 }
 
 /** Add-manager errors → friendly copy. 409/USER_EMAIL_EXISTS = dup email;

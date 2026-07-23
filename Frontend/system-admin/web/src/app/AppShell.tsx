@@ -23,7 +23,6 @@ const NAV: NavItem[] = [
   { to: '/users-activity', key: 'nav.usersActivity' },
   { to: '/bookkeeping', key: 'nav.bookkeeping' },
   { to: '/companies', key: 'nav.companies' },
-  { to: '/customers', key: 'nav.customers' },
   { to: '/billing', key: 'nav.billing' },
   { to: '/usage', key: 'nav.usage' },
   { to: '/settings', key: 'nav.settings' },

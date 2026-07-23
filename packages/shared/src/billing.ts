@@ -1,31 +1,19 @@
 /**
- * @sitelink/shared — SaaS business layer: Customers, Billing, Usage, P&L
- * (PRD §10 FR-BO). A "Customer" here is SiteLink's own SaaS customer (the
- * operating business's tenant/account), NOT a construction-site worker.
+ * @sitelink/shared — SaaS business layer: Billing, Usage, P&L (PRD §10 FR-BO).
  *
- * These are the wire contracts for the ADMIN-only Back Office endpoints
- * (/backoffice/customers, /backoffice/billing, /backoffice/usage). Interfaces
- * align field-for-field with the Prisma models (Decimal → number, Date → ISO).
+ * The billing SUBJECT is the tenant Company (the former standalone `Customer` model
+ * was MERGED into Company — Option C). These are the wire contracts for the ADMIN-only
+ * Back Office endpoints (/backoffice/billing, /backoffice/usage), keyed by companyId.
+ * Interfaces align field-for-field with the Prisma models (Decimal → number, Date → ISO).
  */
 import { z } from 'zod';
-import type { Archivable, ID, ISODate, Timestamped } from './common';
+import type { ID, ISODate, Timestamped } from './common';
 import { BillingStatus } from './enums';
 
-/** A SaaS customer / tenant account (FR-BO-1/2). Soft-deletable (Archivable). */
-export interface Customer extends Timestamped, Archivable {
-  id: ID;
-  name: string;
-  contactEmail?: string | null;
-  contactPhone?: string | null;
-  /** When the customer registered / left (FR-BO-1). */
-  registeredAt: ISODate;
-  leftAt?: ISODate | null;
-}
-
-/** Billing record for a customer (FR-BO-2). No real payment provider in v1. */
+/** Billing record for a company (FR-BO-2). No real payment provider in v1. */
 export interface Billing extends Timestamped {
   id: ID;
-  customerId: ID;
+  companyId: ID;
   status: BillingStatus;
   plan: string;
   amount: number;
@@ -34,10 +22,10 @@ export interface Billing extends Timestamped {
   periodEnd: ISODate;
 }
 
-/** Usage metering per customer (FR-BO-2 / FR-BO-3). */
+/** Usage metering per company (FR-BO-2 / FR-BO-3). */
 export interface Usage extends Timestamped {
   id: ID;
-  customerId: ID;
+  companyId: ID;
   /** Metric key, e.g. "active_workers", "api_calls". */
   metric: string;
   value: number;
@@ -51,7 +39,7 @@ export interface Usage extends Timestamped {
  */
 export interface BusinessProfitLoss extends Timestamped {
   id: ID;
-  customerId?: ID | null;
+  companyId: ID;
   periodStart: ISODate;
   periodEnd: ISODate;
   currency: string;
@@ -65,28 +53,9 @@ export interface BusinessProfitLoss extends Timestamped {
 // ISO date-time strings on the wire; the back end normalises to Date columns.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** POST /backoffice/customers */
-export const createCustomerSchema = z.object({
-  name: z.string().min(1),
-  contactEmail: z.string().email().nullish(),
-  contactPhone: z.string().min(1).nullish(),
-  registeredAt: z.string().datetime().nullish(),
-});
-export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
-
-/** PATCH /backoffice/customers/:id */
-export const updateCustomerSchema = z.object({
-  name: z.string().min(1).optional(),
-  contactEmail: z.string().email().nullish(),
-  contactPhone: z.string().min(1).nullish(),
-  registeredAt: z.string().datetime().optional(),
-  leftAt: z.string().datetime().nullish(),
-});
-export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;
-
 /** POST /backoffice/billing */
 export const createBillingSchema = z.object({
-  customerId: z.string().min(1),
+  companyId: z.string().min(1),
   status: z.nativeEnum(BillingStatus).default(BillingStatus.TRIALING),
   plan: z.string().min(1),
   amount: z.number().nonnegative(),
@@ -98,7 +67,7 @@ export type CreateBillingInput = z.infer<typeof createBillingSchema>;
 
 /** POST /backoffice/usage */
 export const createUsageSchema = z.object({
-  customerId: z.string().min(1),
+  companyId: z.string().min(1),
   metric: z.string().min(1),
   value: z.number(),
   periodStart: z.string().datetime(),

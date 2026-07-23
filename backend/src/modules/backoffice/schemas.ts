@@ -7,20 +7,14 @@ import { z } from 'zod';
 
 export const idParam = z.object({ id: z.string().min(1) });
 
-export const listCustomersQuery = z.object({
-  includeArchived: z.preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean()).default(false),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(200).default(50),
-});
-
 export const listBillingQuery = z.object({
-  customerId: z.string().min(1).optional(),
+  companyId: z.string().min(1).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });
 
 export const listUsageQuery = z.object({
-  customerId: z.string().min(1).optional(),
+  companyId: z.string().min(1).optional(),
   metric: z.string().min(1).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),

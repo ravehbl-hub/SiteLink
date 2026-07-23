@@ -9,7 +9,6 @@ import { AdminUsersScreen } from '../features/adminUsers/AdminUsersScreen';
 import { UsersActivityScreen } from '../features/usersActivity/UsersActivityScreen';
 import { BookkeepingScreen } from '../features/bookkeeping/BookkeepingScreen';
 import { CompaniesScreen } from '../features/companies/CompaniesScreen';
-import { CustomersScreen } from '../features/customers/CustomersScreen';
 import { BillingScreen } from '../features/billing/BillingScreen';
 import { UsageScreen } from '../features/usage/UsageScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
@@ -46,7 +45,6 @@ export function Root() {
           <Route path="users-activity" element={<UsersActivityScreen />} />
           <Route path="bookkeeping" element={<BookkeepingScreen />} />
           <Route path="companies" element={<CompaniesScreen />} />
-          <Route path="customers" element={<CustomersScreen />} />
           <Route path="billing" element={<BillingScreen />} />
           <Route path="usage" element={<UsageScreen />} />
           <Route path="settings" element={<SettingsScreen />} />

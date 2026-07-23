@@ -666,57 +666,26 @@ model WorkerRating {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SaaS business layer  [future / modeled]  (PRD §10 FR-BO)
-// No Back Office UI in v1; modeled to avoid future migration.
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Customer {
-  id           String    @id @default(cuid())
-  name         String
-  contactEmail String?
-  contactPhone String?
-  registeredAt DateTime  @default(now())
-  leftAt       DateTime?
-  isArchived   Boolean   @default(false)
-  archivedAt   DateTime?
-
-  billings Billing[]
-  usages   Usage[]
-  pnl      BusinessProfitLoss[]
-
-  // ── Multi-tenancy (Phase 1) — inverse of the Company↔Customer 1:1 link.
-  // A billing Customer MAY be linked to at most one tenant Company (the @unique on
-  // Company.customerId enforces at-most-1:1). Optional: a Customer can exist without a
-  // Company and vice-versa (the authz boundary is DECOUPLED from the optional billing model).
-  company Company?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([isArchived])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Multi-tenancy — Company (the TENANT)  [v1]  (docs/MULTI-TENANCY-DECISIONS.md)
-// The app's primary security boundary. Company → Manager/Foreman/Worker users.
-// A Manager sees ONLY same-company data; System Admin (ADMIN) is a super-admin
-// above all companies. Every tenant-owned row carries a DIRECT companyId (Phase 1:
-// only User; Worker/Site/etc. are Phase 2). This is a NEW model linked 1:1 to the
-// billing Customer — NOT a rename — so the authz boundary stays decoupled from the
-// nullable/optional billing model (DECISION 1). Follows Site/Customer conventions.
+// The app's primary security boundary AND the billing subject. Company → Manager/
+// Foreman/Worker users. A Manager sees ONLY same-company data; System Admin (ADMIN)
+// is a super-admin above all companies. Every tenant-owned row carries a DIRECT
+// companyId. The former separate billing `Customer` model was MERGED into Company
+// (Option C): its contact/lifecycle fields moved here and Billing/Usage/PnL now key
+// off companyId. There is a SINGLE entity — Company is both tenant AND billing root.
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Company {
   id   String @id @default(cuid())
   name String
 
-  // Optional 1:1 link to the billing Customer (DECISION 5: enforce 1:1). NULLABLE +
-  // @unique makes it AT-MOST-1:1 — a Company MAY link to a Customer; @unique forbids two
-  // Companies sharing one Customer. onDelete: SetNull — deleting a billing Customer UNLINKS
-  // the tenant (never nukes the Company); a Company is retired only via isArchived
-  // soft-archive, never cascade. The Default Company (backfill) leaves customerId NULL.
-  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  customerId String?   @unique
+  // Billing contact + lifecycle (MERGED from the former Customer model). NULLABLE —
+  // not every tenant has billing contact details captured. `registeredAt` = when the
+  // tenant/account registered; `leftAt` = when it churned (null = still active).
+  contactEmail String?
+  contactPhone String?
+  registeredAt DateTime  @default(now())
+  leftAt       DateTime?
 
   // Tenant lifecycle: retire by SOFT-ARCHIVE, never cascade-delete (users would orphan).
   isArchived Boolean   @default(false)
@@ -724,7 +693,7 @@ model Company {
 
   // Back-relations: all tenant-owned rows belonging to this Company. Every FK is
   // onDelete: Restrict — a Company with any of these can never be hard-deleted (tenants
-  // are retired via isArchived soft-archive). Phase 1 added `users`; Phase 2 adds the rest.
+  // are retired via isArchived soft-archive).
   users               User[]
   workers             Worker[]
   sites               Site[]
@@ -735,6 +704,10 @@ model Company {
   professionWageRates ProfessionWageRate[]
   personnelCompanies  PersonnelCompany[]
   profitLoss          ProfitLoss[]
+  // Billing subject (MERGED from Customer): the SaaS billing/usage/PnL ledgers.
+  billings            Billing[]
+  usages              Usage[]
+  businessProfitLoss  BusinessProfitLoss[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -744,8 +717,11 @@ model Company {
 
 model Billing {
   id          String        @id @default(cuid())
-  customer    Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  customerId  String
+  // Billing subject is now the Company directly (Customer merged into Company).
+  // onDelete: Restrict — a Company with billing history is retired via isArchived
+  // soft-archive, never hard-deleted (a Cascade would silently erase billing ledgers).
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId   String
   status      BillingStatus @default(TRIALING)
   plan        String
   amount      Decimal       @db.Decimal(12, 2)
@@ -756,14 +732,15 @@ model Billing {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([customerId])
+  @@index([companyId])
   @@index([status])
 }
 
 model Usage {
   id          String   @id @default(cuid())
-  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  customerId  String
+  // onDelete: Restrict (tenant-owned convention) — retire the Company via soft-archive.
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId   String
   metric      String
   value       Decimal  @db.Decimal(18, 4)
   periodStart DateTime @db.Date
@@ -772,22 +749,23 @@ model Usage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([customerId, metric])
+  @@index([companyId, metric])
 }
 
 model BusinessProfitLoss {
-  id          String    @id @default(cuid())
-  customer    Customer? @relation(fields: [customerId], references: [id])
-  customerId  String?
-  periodStart DateTime  @db.Date
-  periodEnd   DateTime  @db.Date
-  currency    String    @default("ILS")
-  revenue     Decimal   @db.Decimal(14, 2) @default(0)
-  cost        Decimal   @db.Decimal(14, 2) @default(0)
-  netProfit   Decimal   @db.Decimal(14, 2) @default(0)
+  id          String   @id @default(cuid())
+  // NOT NULL final state (every existing PnL row has a non-null customerId → companyId).
+  company     Company  @relation(fields: [companyId], references: [id])
+  companyId   String
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  currency    String   @default("ILS")
+  revenue     Decimal  @db.Decimal(14, 2) @default(0)
+  cost        Decimal  @db.Decimal(14, 2) @default(0)
+  netProfit   Decimal  @db.Decimal(14, 2) @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([customerId, periodStart, periodEnd])
+  @@index([companyId, periodStart, periodEnd])
 }

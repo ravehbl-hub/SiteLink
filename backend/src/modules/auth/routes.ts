@@ -22,6 +22,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         include: { company: { select: { name: true } } },
       });
       if (!user) throw AppError.unauthorized();
+      // LAST ENTRANCE: /auth/me is the first authenticated call after a Supabase sign-in,
+      // so stamp lastLoginAt here. Throttled to a 10-minute window so in-session page
+      // reloads (which also hit /auth/me) don't re-stamp it on every request — it marks
+      // the start of an entrance, not raw activity. Populates the admin list's "Last login".
+      const THROTTLE_MS = 10 * 60_000;
+      if (!user.lastLoginAt || Date.now() - user.lastLoginAt.getTime() > THROTTLE_MS) {
+        const now = new Date();
+        await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: now } });
+        user.lastLoginAt = now; // reflect in this response's projection
+      }
       // Data minimization: strip authUserId (the Supabase identity FK) from the
       // /auth/me projection — the client never needs it (nexo LOW).
       const { authUserId: _authUserId, ...safe } = mapUser(user);

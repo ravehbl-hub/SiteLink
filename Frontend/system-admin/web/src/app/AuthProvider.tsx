@@ -35,6 +35,13 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  /**
+   * Change the signed-in admin's own password. Verifies the CURRENT password first by
+   * re-authenticating (Supabase updateUser alone does not check the old one), then
+   * sets the new password. Throws 'old-password-invalid' when the current password is
+   * wrong, 'no-user' when not signed in.
+   */
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -117,6 +124,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signed-out');
   }, []);
 
+  const changePassword = useCallback(
+    async (oldPassword: string, newPassword: string) => {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('supabase-not-configured');
+      const email = user?.email;
+      if (!email) throw new Error('no-user');
+      // Verify the CURRENT password by re-authenticating (keeps the same session).
+      const { error: reauthErr } = await supabase.auth.signInWithPassword({
+        email,
+        password: oldPassword,
+      });
+      if (reauthErr) throw new Error('old-password-invalid');
+      // Apply the new password on the now-verified session.
+      const { error: updErr } = await supabase.auth.updateUser({ password: newPassword });
+      if (updErr) throw updErr;
+    },
+    [user],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
@@ -126,8 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       refreshProfile: loadProfile,
+      changePassword,
     }),
-    [status, user, signIn, signOut, loadProfile],
+    [status, user, signIn, signOut, loadProfile, changePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

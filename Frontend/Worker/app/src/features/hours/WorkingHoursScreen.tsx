@@ -12,7 +12,7 @@ import type { WorkingHours } from '@sitelink/shared';
 import { endpoints, type WorkingHoursGrainParam } from '../../lib/endpoints';
 import { qk } from '../../lib/queryKeys';
 import { focusOnly, STALE } from '../../lib/polling';
-import { currentMonthRange, shortDate } from '../../lib/format';
+import { currentMonthRange, shortDate, shortTime } from '../../lib/format';
 import { exportWorkingHoursPdf } from '../../lib/pdf';
 import { ApiError } from '../../lib/api';
 import { toLocale } from '../../i18n';
@@ -135,6 +135,19 @@ export function WorkingHoursScreen() {
                 <Body muted>{t('workingHours.diseaseDays')}</Body>
                 <Body muted numeric>{r.diseaseDays}</Body>
               </Row>
+              {/* Clock in/out — display only; present only for single-record (day) buckets. */}
+              {r.checkIn != null || r.checkOut != null ? (
+                <>
+                  <Row style={{ justifyContent: 'space-between', paddingVertical: 2 }}>
+                    <Body muted>{t('workingHours.checkIn')}</Body>
+                    <Body muted numeric>{shortTime(r.checkIn)}</Body>
+                  </Row>
+                  <Row style={{ justifyContent: 'space-between', paddingVertical: 2 }}>
+                    <Body muted>{t('workingHours.checkOut')}</Body>
+                    <Body muted numeric>{shortTime(r.checkOut)}</Body>
+                  </Row>
+                </>
+              ) : null}
             </Card>
           ))}
         </>

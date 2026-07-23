@@ -13,6 +13,15 @@ export function shortDate(iso?: string | null): string {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
 }
 
+/** HH:MM in the device locale; '—' for null/invalid (display-only clock in/out). */
+export function shortTime(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
 export function isoDate(d: Date): string {
   return d.toISOString();
 }

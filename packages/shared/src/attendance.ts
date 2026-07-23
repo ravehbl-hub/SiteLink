@@ -53,6 +53,14 @@ export interface WorkingHours {
   attendanceDays: number;
   vacationDays: number;
   diseaseDays: number;
+  /**
+   * Clock-in / clock-out for this bucket, display-only (FR-WRK-1 in/out). Populated ONLY
+   * when the bucket derives from a SINGLE attendance record — i.e. DAY grain, one record
+   * per worker/site/day. For WEEK/MONTH grain (multiple records per bucket) these stay
+   * null: there is no single meaningful check-in/out across a multi-day span.
+   */
+  checkIn?: ISODate | null;
+  checkOut?: ISODate | null;
 }
 
 export interface CreateAttendanceInput {

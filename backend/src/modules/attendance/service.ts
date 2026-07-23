@@ -345,6 +345,14 @@ export class AttendanceService {
         diseaseDays: number;
         minDate: Date;
         maxDate: Date;
+        /**
+         * Clock-in/out carried through for DISPLAY only (FR-WRK-1 in/out). We keep them
+         * plus a record count so we can emit them ONLY for single-record buckets (DAY
+         * grain). A bucket built from >1 record has no single check-in/out → left null.
+         */
+        recordCount: number;
+        checkIn: Date | null;
+        checkOut: Date | null;
       }
     >();
 
@@ -362,6 +370,9 @@ export class AttendanceService {
           diseaseDays: 0,
           minDate: r.date,
           maxDate: r.date,
+          recordCount: 0,
+          checkIn: null,
+          checkOut: null,
         };
       if (r.type === AttendanceType.ATTENDANCE) {
         b.attendanceDays += 1;
@@ -371,21 +382,32 @@ export class AttendanceService {
       } else {
         b.diseaseDays += 1;
       }
+      // Track clock-in/out from THIS record; only meaningful for single-record buckets.
+      b.recordCount += 1;
+      b.checkIn = r.checkIn ?? null;
+      b.checkOut = r.checkOut ?? null;
       if (r.date < b.minDate) b.minDate = r.date;
       if (r.date > b.maxDate) b.maxDate = r.date;
       buckets.set(key, b);
     }
 
-    return [...buckets.values()].map((b) => ({
-      workerId: b.workerId,
-      siteId: b.siteId,
-      grain,
-      periodStart: toISORequired(b.minDate),
-      periodEnd: toISORequired(b.maxDate),
-      totalHours: b.totalHours,
-      attendanceDays: b.attendanceDays,
-      vacationDays: b.vacationDays,
-      diseaseDays: b.diseaseDays,
-    }));
+    return [...buckets.values()].map((b) => {
+      // Emit check-in/out ONLY when the bucket is exactly one record (DAY grain). A
+      // multi-record bucket (WEEK/MONTH, or >1 record) has no single check-in/out.
+      const single = b.recordCount === 1;
+      return {
+        workerId: b.workerId,
+        siteId: b.siteId,
+        grain,
+        periodStart: toISORequired(b.minDate),
+        periodEnd: toISORequired(b.maxDate),
+        totalHours: b.totalHours,
+        attendanceDays: b.attendanceDays,
+        vacationDays: b.vacationDays,
+        diseaseDays: b.diseaseDays,
+        checkIn: single && b.checkIn ? toISORequired(b.checkIn) : null,
+        checkOut: single && b.checkOut ? toISORequired(b.checkOut) : null,
+      };
+    });
   }
 }

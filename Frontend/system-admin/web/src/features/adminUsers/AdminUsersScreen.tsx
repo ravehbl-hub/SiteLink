@@ -18,7 +18,6 @@ import { ApiError } from '../../lib/api/client';
 import { qk } from '../../lib/api/queryKeys';
 import { Chip, DataState, Field, Modal } from '../../components/ui';
 import { formatDateTime } from '../../lib/format';
-import { useAuth } from '../../app/AuthProvider';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -36,7 +35,6 @@ export function AdminUsersScreen() {
   });
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
-  const [changingPw, setChangingPw] = useState(false);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['users'] });
   const lockMut = useMutation({
@@ -58,9 +56,6 @@ export function AdminUsersScreen() {
           {t('adminUsers.title')}
         </h1>
         <div className="header-spacer" />
-        <button className="btn" onClick={() => setChangingPw(true)}>
-          {t('adminUsers.changePassword')}
-        </button>
         <button className="btn btn-primary" onClick={() => setCreating(true)}>
           {t('adminUsers.newAdmin')}
         </button>
@@ -127,104 +122,7 @@ export function AdminUsersScreen() {
 
       {creating ? <AdminUserForm onClose={() => setCreating(false)} /> : null}
       {editing ? <AdminUserForm user={editing} onClose={() => setEditing(null)} /> : null}
-      {changingPw ? <ChangePasswordForm onClose={() => setChangingPw(false)} /> : null}
     </div>
-  );
-}
-
-/** Change the signed-in admin's own password: current + new + repeat (min 8, must match). */
-function ChangePasswordForm({ onClose }: { onClose: () => void }) {
-  const { t } = useTranslation();
-  const { changePassword } = useAuth();
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [repeat, setRepeat] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-
-  const tooShort = newPassword.length > 0 && newPassword.length < MIN_PASSWORD_LENGTH;
-  const mismatch = repeat.length > 0 && newPassword !== repeat;
-  const canSubmit =
-    oldPassword.length > 0 &&
-    newPassword.length >= MIN_PASSWORD_LENGTH &&
-    newPassword === repeat;
-
-  const mut = useMutation({
-    mutationFn: () => changePassword(oldPassword, newPassword),
-    onSuccess: () => {
-      setError(null);
-      setDone(true);
-    },
-    onError: (e) => {
-      const msg =
-        e instanceof Error && e.message === 'old-password-invalid'
-          ? t('adminUsers.oldPasswordWrong')
-          : e instanceof Error
-            ? e.message
-            : String(e);
-      setError(msg);
-    },
-  });
-
-  return (
-    <Modal
-      title={t('adminUsers.changePassword')}
-      onClose={onClose}
-      footer={
-        done ? (
-          <button className="btn btn-primary" onClick={onClose}>
-            {t('adminUsers.close')}
-          </button>
-        ) : (
-          <>
-            <button className="btn" onClick={onClose}>
-              {t('adminUsers.cancel')}
-            </button>
-            <button
-              className="btn btn-primary"
-              disabled={!canSubmit || mut.isPending}
-              onClick={() => mut.mutate()}
-            >
-              {t('adminUsers.save')}
-            </button>
-          </>
-        )
-      }
-    >
-      {done ? (
-        <div className="banner banner-info">{t('adminUsers.passwordChanged')}</div>
-      ) : (
-        <>
-          {error ? <div className="banner banner-danger">{error}</div> : null}
-          <Field label={t('adminUsers.oldPassword')}>
-            <input
-              className="input"
-              type="password"
-              value={oldPassword}
-              onChange={(e) => setOldPassword(e.target.value)}
-            />
-          </Field>
-          <Field label={t('adminUsers.newPassword')}>
-            <input
-              className="input"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-            {tooShort ? <span className="muted">{t('adminUsers.passwordTooShort')}</span> : null}
-          </Field>
-          <Field label={t('adminUsers.repeatPassword')}>
-            <input
-              className="input"
-              type="password"
-              value={repeat}
-              onChange={(e) => setRepeat(e.target.value)}
-            />
-            {mismatch ? <span className="muted">{t('adminUsers.passwordMismatch')}</span> : null}
-          </Field>
-        </>
-      )}
-    </Modal>
   );
 }
 
@@ -234,7 +132,15 @@ function AdminUserForm({ user, onClose }: { user?: User; onClose: () => void }) 
   const [fullName, setFullName] = useState(user?.fullName ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [password, setPassword] = useState('');
+  const [repeat, setRepeat] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Password is optional (blank = keep/invite). When set: min 8 and must match repeat.
+  const pwTooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
+  const pwMismatch = repeat.length > 0 && password !== repeat;
+  const pwValid =
+    password.length === 0 ||
+    (password.length >= MIN_PASSWORD_LENGTH && password === repeat);
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -278,7 +184,7 @@ function AdminUserForm({ user, onClose }: { user?: User; onClose: () => void }) 
           </button>
           <button
             className="btn btn-primary"
-            disabled={!fullName || !email || mut.isPending}
+            disabled={!fullName || !email || !pwValid || mut.isPending}
             onClick={() => mut.mutate()}
           >
             {t('adminUsers.save')}
@@ -307,10 +213,25 @@ function AdminUserForm({ user, onClose }: { user?: User; onClose: () => void }) 
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <span className="muted">
-          {user ? t('adminUsers.keepPasswordHint') : t('adminUsers.passwordHint')}
-        </span>
+        {pwTooShort ? (
+          <span className="muted">{t('adminUsers.passwordTooShort')}</span>
+        ) : (
+          <span className="muted">
+            {user ? t('adminUsers.keepPasswordHint') : t('adminUsers.passwordHint')}
+          </span>
+        )}
       </Field>
+      {password.length > 0 ? (
+        <Field label={t('adminUsers.repeatPassword')}>
+          <input
+            className="input"
+            type="password"
+            value={repeat}
+            onChange={(e) => setRepeat(e.target.value)}
+          />
+          {pwMismatch ? <span className="muted">{t('adminUsers.passwordMismatch')}</span> : null}
+        </Field>
+      ) : null}
     </Modal>
   );
 }

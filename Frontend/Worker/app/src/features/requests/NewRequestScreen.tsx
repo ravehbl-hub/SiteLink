@@ -23,7 +23,7 @@ import {
   Row,
   Screen,
   SectionHeading,
-  Segmented,
+  Select,
   StatusPill,
   Title,
 } from '../../components/ui';
@@ -84,7 +84,7 @@ export function NewRequestScreen() {
 
       <Card>
         <SectionHeading>{t('newRequest.type')}</SectionHeading>
-        <Segmented
+        <Select
           options={[
             { value: RequestType.VACATION, label: t('requestType.VACATION') },
             { value: RequestType.LOAN, label: t('requestType.LOAN') },

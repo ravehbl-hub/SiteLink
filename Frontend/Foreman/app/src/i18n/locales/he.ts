@@ -59,6 +59,8 @@ export const he: TranslationResources = {
     worker: 'עובד',
     type: 'סוג',
     hours: 'שעות',
+    checkIn: 'כניסה',
+    checkOut: 'יציאה',
     present: 'נוכח',
     vacation: 'חופשה',
     disease: 'מחלה',

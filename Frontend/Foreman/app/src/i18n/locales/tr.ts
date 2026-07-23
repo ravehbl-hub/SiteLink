@@ -59,6 +59,8 @@ export const tr: TranslationResources = {
     worker: 'İşçi',
     type: 'Tür',
     hours: 'Saat',
+    checkIn: 'Giriş',
+    checkOut: 'Çıkış',
     present: 'Mevcut',
     vacation: 'İzin',
     disease: 'Hasta',

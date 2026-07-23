@@ -57,6 +57,8 @@ export const en = {
     worker: 'Worker',
     type: 'Type',
     hours: 'Hours',
+    checkIn: 'Check-in',
+    checkOut: 'Check-out',
     present: 'Present',
     vacation: 'Vacation',
     disease: 'Sick',

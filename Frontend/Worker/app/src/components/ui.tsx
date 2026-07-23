@@ -6,6 +6,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -405,6 +406,112 @@ export function Segmented<T extends string>({
           </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+/**
+ * Single-choice combobox: a compact pill trigger showing the current selection that,
+ * on tap, opens a modal list of options (the active one checked). Cross-platform
+ * (native + web). Use in place of a multi-button Segmented when one dropdown is
+ * preferred. RTL-safe (logical props; label aligns to start, chevron/check to end).
+ */
+export function Select<T extends string>({
+  value,
+  options,
+  onChange,
+  placeholder,
+}: {
+  value: T | null;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  placeholder?: string;
+}) {
+  const { theme } = useTheme();
+  const [open, setOpen] = React.useState(false);
+  const selected = options.find((o) => o.value === value) ?? null;
+  const triggerLabel = selected?.label ?? placeholder ?? '';
+
+  return (
+    <View style={{ marginBottom: Number(theme.tokens.spacingCompact['2']) }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={triggerLabel}
+        onPress={() => setOpen(true)}
+        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          alignSelf: 'flex-start',
+          minWidth: 200,
+          backgroundColor: theme.colors.surfaceAlt,
+          borderRadius: neuRadius(theme, 'well', Number(theme.tokens.radii.sm)),
+          paddingVertical: Number(theme.tokens.spacingCompact['2']),
+          paddingHorizontal: Number(theme.tokens.spacingCompact['3']),
+          ...raisedSm(theme),
+        }}
+      >
+        <Text
+          style={{ color: selected ? theme.colors.textPrimary : theme.colors.textSecondary, textAlign: 'auto' }}
+          numberOfLines={1}
+        >
+          {triggerLabel}
+        </Text>
+        <Text style={{ color: theme.colors.textSecondary, marginStart: Number(theme.tokens.spacingCompact['2']) }}>
+          ▾
+        </Text>
+      </Pressable>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: Number(theme.tokens.spacing['4']) }}>
+          <Pressable
+            onPress={() => setOpen(false)}
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: theme.colors.textPrimary,
+              opacity: 0.4,
+            }}
+          />
+          <View
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderRadius: neuRadius(theme, 'card', Number(theme.tokens.radii.md)),
+              padding: Number(theme.tokens.spacing['3']),
+            }}
+          >
+            {options.map((opt) => {
+              const active = opt.value === value;
+              return (
+                <Pressable
+                  key={opt.value}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingVertical: Number(theme.tokens.spacing['3']),
+                    paddingHorizontal: Number(theme.tokens.spacing['2']),
+                  }}
+                >
+                  <Text style={{ color: active ? theme.colors.accent : theme.colors.textPrimary, flex: 1, textAlign: 'auto' }}>
+                    {opt.label}
+                  </Text>
+                  {active ? <Text style={{ color: theme.colors.accent }}>✓</Text> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

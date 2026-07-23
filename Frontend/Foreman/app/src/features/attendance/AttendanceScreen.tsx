@@ -45,6 +45,18 @@ const TYPE_LABEL_KEY: Record<AttendanceType, string> = {
   [AttendanceType.DISEASE]: 'attendance.disease',
 };
 
+/** "HH:MM" + today's date → ISO timestamp. Blank/invalid → null (not recorded). */
+function timeToISO(hhmm: string): string | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  const d = new Date();
+  d.setHours(h, min, 0, 0);
+  return d.toISOString();
+}
+
 export function AttendanceScreen() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -54,6 +66,10 @@ export function AttendanceScreen() {
   const [workerId, setWorkerId] = useState<string | null>(null);
   const [type, setType] = useState<AttendanceType>(AttendanceType.ATTENDANCE);
   const [hours, setHours] = useState('8');
+  // Clock in/out — entered as "HH:MM"; combined with today's date into an ISO
+  // timestamp on save. Optional (blank = not recorded). Display/presence only.
+  const [checkIn, setCheckIn] = useState('');
+  const [checkOut, setCheckOut] = useState('');
 
   const siteId = activeSiteId ?? undefined;
 
@@ -82,6 +98,9 @@ export function AttendanceScreen() {
         date: new Date().toISOString(),
         type,
         hours: type === AttendanceType.ATTENDANCE ? Number(hours) : null,
+        // Clock in/out only for a present (ATTENDANCE) entry; blank → null.
+        checkIn: type === AttendanceType.ATTENDANCE ? timeToISO(checkIn) : null,
+        checkOut: type === AttendanceType.ATTENDANCE ? timeToISO(checkOut) : null,
       });
     },
     // Attendance feeds the dashboard rollup — invalidate both so KPIs refresh.
@@ -151,12 +170,26 @@ export function AttendanceScreen() {
           onChange={(v) => setType(v)}
         />
         {type === AttendanceType.ATTENDANCE ? (
-          <Field
-            label={t('attendance.hours')}
-            value={hours}
-            onChangeText={setHours}
-            keyboardType="numeric"
-          />
+          <>
+            <Field
+              label={t('attendance.hours')}
+              value={hours}
+              onChangeText={setHours}
+              keyboardType="numeric"
+            />
+            <Field
+              label={t('attendance.checkIn')}
+              value={checkIn}
+              onChangeText={setCheckIn}
+              placeholder="07:00"
+            />
+            <Field
+              label={t('attendance.checkOut')}
+              value={checkOut}
+              onChangeText={setCheckOut}
+              placeholder="16:00"
+            />
+          </>
         ) : null}
         <Button
           title={t('common.save')}

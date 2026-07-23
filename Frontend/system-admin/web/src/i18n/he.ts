@@ -100,6 +100,7 @@ export const he: Resources = {
     passwordMismatch: 'הסיסמאות אינן תואמות',
     oldPasswordWrong: 'הסיסמה הנוכחית שגויה',
     passwordChanged: 'הסיסמה שונתה בהצלחה.',
+    keepPasswordHint: 'השאר ריק כדי לשמור את הסיסמה הנוכחית.',
     close: 'סגור',
   },
   usersActivity: {

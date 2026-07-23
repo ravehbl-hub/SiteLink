@@ -98,6 +98,7 @@ export const en = {
     passwordMismatch: 'Passwords do not match',
     oldPasswordWrong: 'Your current password is incorrect',
     passwordChanged: 'Password changed successfully.',
+    keepPasswordHint: 'Leave blank to keep the current password.',
     close: 'Close',
   },
   usersActivity: {

@@ -137,6 +137,16 @@ export class SupabaseService {
     if (error) throw AppError.internal('Failed to update auth lockout state');
   }
 
+  /**
+   * ADMIN-set a user's password (Supabase owns credentials). Used when an admin
+   * resets/sets another user's password from the management UI. The caller must have
+   * already passed the app-level manageable-role guard.
+   */
+  async setUserPassword(authUserId: string, password: string): Promise<void> {
+    const { error } = await this.client.auth.admin.updateUserById(authUserId, { password });
+    if (error) throw AppError.internal('Failed to set user password');
+  }
+
   // ── Storage (worker docs/images, §7a) ────────────────────────────────────
 
   private bucketFor(kind: 'doc' | 'image'): string {

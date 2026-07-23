@@ -48,6 +48,9 @@ export const updateUserSchema = z.object({
   isLockedOut: z.boolean().optional(),
   language: z.nativeEnum(Language).optional(),
   theme: z.nativeEnum(Theme).optional(),
+  // Optional: when present, ADMIN-set the target's Supabase password (min 8). Not
+  // persisted in the app DB — Supabase owns credentials.
+  password: z.string().min(8).optional(),
 });
 
 export const lockoutSchema = z.object({

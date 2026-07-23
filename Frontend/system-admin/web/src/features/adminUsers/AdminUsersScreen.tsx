@@ -239,7 +239,11 @@ function AdminUserForm({ user, onClose }: { user?: User; onClose: () => void }) 
   const mut = useMutation({
     mutationFn: async () => {
       if (user) {
-        return usersApi.update(user.id, { fullName, email });
+        return usersApi.update(user.id, {
+          fullName,
+          email,
+          ...(password ? { password } : {}),
+        });
       }
       const body: CreateUserInput = {
         role: Role.ADMIN,
@@ -294,17 +298,19 @@ function AdminUserForm({ user, onClose }: { user?: User; onClose: () => void }) 
           onChange={(e) => setEmail(e.target.value)}
         />
       </Field>
-      {!user ? (
-        <Field label={`${t('adminUsers.password')} (${t('adminUsers.optional')})`}>
-          <input
-            className="input"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <span className="muted">{t('adminUsers.passwordHint')}</span>
-        </Field>
-      ) : null}
+      <Field
+        label={`${user ? t('adminUsers.newPassword') : t('adminUsers.password')} (${t('adminUsers.optional')})`}
+      >
+        <input
+          className="input"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <span className="muted">
+          {user ? t('adminUsers.keepPasswordHint') : t('adminUsers.passwordHint')}
+        </span>
+      </Field>
     </Modal>
   );
 }

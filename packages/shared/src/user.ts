@@ -77,6 +77,8 @@ export interface UpdateUserInput {
   isLockedOut?: boolean;
   language?: Language;
   theme?: Theme;
+  /** ADMIN-set the target's password (min 8). Not stored app-side; Supabase owns it. */
+  password?: string;
 }
 
 /**

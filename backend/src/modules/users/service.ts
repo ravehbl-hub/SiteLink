@@ -212,6 +212,12 @@ export class UsersService {
       await this.supabase.setUserLockout(current.authUserId, input.isLockedOut);
     }
 
+    // ADMIN-set the target's password on Supabase (credentials live there, not app DB).
+    // The manageable-role guard above already authorized the caller for this target.
+    if (input.password) {
+      await this.supabase.setUserPassword(current.authUserId, input.password);
+    }
+
     const row = await prisma.user.update({
       where: { id },
       data: {

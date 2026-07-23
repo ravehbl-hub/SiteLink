@@ -100,6 +100,7 @@ export const tr: Resources = {
     passwordMismatch: 'Şifreler eşleşmiyor',
     oldPasswordWrong: 'Mevcut şifreniz yanlış',
     passwordChanged: 'Şifre başarıyla değiştirildi.',
+    keepPasswordHint: 'Mevcut şifreyi korumak için boş bırakın.',
     close: 'Kapat',
   },
   usersActivity: {

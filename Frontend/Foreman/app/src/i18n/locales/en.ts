@@ -59,6 +59,8 @@ export const en = {
     hours: 'Hours',
     checkIn: 'Check-in',
     checkOut: 'Check-out',
+    checkInNow: 'Check in',
+    checkOutNow: 'Check out',
     present: 'Present',
     vacation: 'Vacation',
     disease: 'Sick',

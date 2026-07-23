@@ -381,7 +381,8 @@ export function Select<T extends string>({
   placeholder,
 }: {
   value: T | null;
-  options: { value: T; label: string }[];
+  /** `color`, when set, tints the option (and the trigger when selected). */
+  options: { value: T; label: string; color?: string }[];
   onChange: (v: T) => void;
   placeholder?: string;
 }) {
@@ -414,7 +415,10 @@ export function Select<T extends string>({
         }}
       >
         <Text
-          style={{ color: selected ? theme.colors.textPrimary : theme.colors.textSecondary, textAlign: 'auto' }}
+          style={{
+            color: selected?.color ?? (selected ? theme.colors.textPrimary : theme.colors.textSecondary),
+            textAlign: 'auto',
+          }}
           numberOfLines={1}
         >
           {triggerLabel}
@@ -465,7 +469,7 @@ export function Select<T extends string>({
                       paddingHorizontal: Number(theme.tokens.spacing['2']),
                     }}
                   >
-                    <Text style={{ color: active ? theme.colors.accent : theme.colors.textPrimary, flex: 1, textAlign: 'auto' }}>
+                    <Text style={{ color: opt.color ?? (active ? theme.colors.accent : theme.colors.textPrimary), flex: 1, textAlign: 'auto' }}>
                       {opt.label}
                     </Text>
                     {active ? <Text style={{ color: theme.colors.accent }}>✓</Text> : null}

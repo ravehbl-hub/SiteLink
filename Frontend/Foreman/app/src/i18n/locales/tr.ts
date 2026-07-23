@@ -61,6 +61,8 @@ export const tr: TranslationResources = {
     hours: 'Saat',
     checkIn: 'Giriş',
     checkOut: 'Çıkış',
+    checkInNow: 'Giriş yap',
+    checkOutNow: 'Çıkış yap',
     present: 'Mevcut',
     vacation: 'İzin',
     disease: 'Hasta',

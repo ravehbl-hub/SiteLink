@@ -18,6 +18,7 @@ import { currentMonthRange, shortDate } from '../../lib/format';
 import { ApiError } from '../../lib/api';
 import { useActiveSite } from '../../site/ActiveSiteProvider';
 import { SitePicker } from '../../site/SitePicker';
+import { useTheme } from '../../theme/ThemeProvider';
 import {
   Body,
   Button,
@@ -46,6 +47,12 @@ const TYPE_LABEL_KEY: Record<AttendanceType, string> = {
   [AttendanceType.DISEASE]: 'attendance.disease',
 };
 
+/** Current local time as "HH:MM" (zero-padded). */
+function nowHHMM(): string {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 /** "HH:MM" + today's date → ISO timestamp. Blank/invalid → null (not recorded). */
 function timeToISO(hhmm: string): string | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
@@ -64,13 +71,17 @@ export function AttendanceScreen() {
   const { activeSiteId, ready } = useActiveSite();
   const range = React.useMemo(currentMonthRange, []);
 
+  const { theme } = useTheme();
   const [workerId, setWorkerId] = useState<string | null>(null);
   const [type, setType] = useState<AttendanceType>(AttendanceType.ATTENDANCE);
   const [hours, setHours] = useState('8');
-  // Clock in/out — entered as "HH:MM"; combined with today's date into an ISO
-  // timestamp on save. Optional (blank = not recorded). Display/presence only.
+  // Clock in/out — entered as "HH:MM" (or stamped via the buttons); combined with
+  // today's date into an ISO timestamp on save. Optional (blank = not recorded).
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
+  // Session status per worker: 'in' after a check-in click, 'out' after check-out —
+  // used to color the worker in the picker (color 1 = checked in, color 2 = checked out).
+  const [statusByWorker, setStatusByWorker] = useState<Record<string, 'in' | 'out'>>({});
 
   const siteId = activeSiteId ?? undefined;
 
@@ -139,10 +150,16 @@ export function AttendanceScreen() {
     );
   }
 
-  const workerOptions = ((workersQ.data?.items ?? []) as Worker[]).map((w) => ({
-    value: w.id,
-    label: `${w.firstName} ${w.lastName}`,
-  }));
+  const workerOptions = ((workersQ.data?.items ?? []) as Worker[]).map((w) => {
+    const st = statusByWorker[w.id];
+    return {
+      value: w.id,
+      label: `${w.firstName} ${w.lastName}`,
+      // color 1 = checked in (warning/amber), color 2 = checked out (success/green).
+      color:
+        st === 'in' ? theme.colors.warning : st === 'out' ? theme.colors.success : undefined,
+    };
+  });
 
   return (
     <Screen>
@@ -160,7 +177,12 @@ export function AttendanceScreen() {
           <Select
             options={workerOptions}
             value={workerId}
-            onChange={(v) => setWorkerId(v)}
+            onChange={(v) => {
+              setWorkerId(v);
+              // Fresh entry for the newly picked worker.
+              setCheckIn('');
+              setCheckOut('');
+            }}
             placeholder={t('attendance.worker')}
           />
         )}
@@ -189,11 +211,30 @@ export function AttendanceScreen() {
               onChangeText={setCheckIn}
               placeholder="07:00"
             />
+            <Button
+              title={t('attendance.checkInNow')}
+              onPress={() => {
+                if (!workerId) return;
+                setCheckIn(nowHHMM());
+                setStatusByWorker((m) => ({ ...m, [workerId]: 'in' }));
+              }}
+              disabled={!workerId}
+            />
             <Field
               label={t('attendance.checkOut')}
               value={checkOut}
               onChangeText={setCheckOut}
               placeholder="16:00"
+            />
+            <Button
+              title={t('attendance.checkOutNow')}
+              onPress={() => {
+                if (!workerId) return;
+                setCheckOut(nowHHMM());
+                setStatusByWorker((m) => ({ ...m, [workerId]: 'out' }));
+              }}
+              // Cannot check out before checking in.
+              disabled={!workerId || !checkIn}
             />
           </>
         ) : null}

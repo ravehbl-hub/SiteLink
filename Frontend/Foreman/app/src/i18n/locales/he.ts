@@ -61,6 +61,8 @@ export const he: TranslationResources = {
     hours: 'שעות',
     checkIn: 'כניסה',
     checkOut: 'יציאה',
+    checkInNow: 'רישום כניסה',
+    checkOutNow: 'רישום יציאה',
     present: 'נוכח',
     vacation: 'חופשה',
     disease: 'מחלה',
